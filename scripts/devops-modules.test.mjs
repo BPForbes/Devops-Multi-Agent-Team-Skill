@@ -311,3 +311,10 @@ test('Lean 4 is a language entry and an optional formal check with a review-roun
   assert.match(fs.readFileSync(path.join(dir, '.devops/project.md'), 'utf8'), /Lean 4/)
   assert.ok(fs.existsSync(path.join(dir, '.claude/skills/devops-multi-agent-team/references/formal-check.md')))
 })
+
+test('research fixes the scope and cites online resources in the brief', () => {
+  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+  const doc = fs.readFileSync(path.join(root, 'skills/devops-multi-agent-team/references/research-and-reuse.md'), 'utf8')
+  for (const part of ['## 0. Scope', '## Scope (', '## Online resources (', 'online resources']) assert.ok(doc.includes(part), part)
+  assert.match(fs.readFileSync(path.join(root, 'agents/devops-researcher.md'), 'utf8'), /Fix the scope/)
+})

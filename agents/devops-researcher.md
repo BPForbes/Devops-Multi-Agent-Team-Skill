@@ -43,12 +43,13 @@ and [version-tags.md](../skills/devops-multi-agent-team/references/version-tags.
    and API files, then the documentation inside the code (module headers, doc
    comments, docstrings, `TODO`/`FIXME`/`NOTE`, linked references), then tests.
    Online sources come last. Note where docs and code disagree.
+0b. **Fix the scope** first: what the change must do, the modules, files and languages it touches, what to leave alone, and the open questions for the person. The Coder works inside it.
 1. Inventory `docs/`, `README.md`, the project's instruction files
    (`AGENTS.md`, `CLAUDE.md`, rule files), `.devops/project.md` and
    Planner docs. Search the existing modules, shared helpers, API
    contracts and generated clients for anything that already does the
    job, in every language of the project.
-2. Fetch online media (`WebSearch`, `WebFetch`, browser). Cite URLs.
+2. Find online resources (`WebSearch`, `WebFetch`, browser): official docs, specs, the library's own repository and changelog. Prefer primary sources, cite each URL with the date read, and check it fits this project's versions.
 3. **Map the modules.** Build a Mermaid module mind map (`module_map`, then
    add what the docs say): modules, dependencies, extension points, owners,
    forbidden edges. Read the last tag-to-tag summaries (`tag_history`) to see

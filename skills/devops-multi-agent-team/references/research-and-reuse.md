@@ -4,6 +4,12 @@ Research exists to answer one question before any Coder starts: **can the
 need be met by extending code that already exists?** Reviewers block a
 change that re-implements something the project has.
 
+## 0. Scope
+
+Before anything else the Researcher fixes the **scope**: what the change must do, the modules, files and
+languages it will touch, what it must leave alone, and what is unclear (those go to the person as open
+questions). The Coder works inside that scope; a need to leave it goes back to the Researcher.
+
 ## 1. Documentation first
 
 The Researcher reads, in this order, before searching for code:
@@ -19,7 +25,10 @@ The Researcher reads, in this order, before searching for code:
    markers, and comments that link to external references. The profile's
    "Comments and documentation" section names the doc format per language.
 4. **Tests**, which document intended behaviour.
-5. Only then **online sources** (cite every URL with its date).
+5. Only then **online resources**: official documentation, specifications and RFCs, the library's own
+   repository and changelog, and well-regarded write-ups. Prefer primary sources, cite every URL with its date and
+   say what it contributed. Check that an online answer fits this project's versions and rules before it is
+   recommended. Online findings never replace what the project says about itself.
 
 Prefer what the project already says about itself over what the web says
 about the technology. Where docs and code disagree, say so in the brief; that
@@ -91,11 +100,13 @@ is written, and a counterexample can reject a design. Basic logic stays plain En
 
 ```markdown
 # Research: <topic>   Seat: <researcher-id>   Department: <dept>
+## Scope (what it must do; modules, files and languages touched; what to leave alone)
 ## Docs read (path, what it says, any disagreement with the code)
 ## Module mind map (Mermaid) + extension points
 ## Reuse map (term | searched where | found | reuse / extend / new because)
 ## Comment-worthy code (path:line, why) and comments to delete (path:line, why)
 ## Formal targets (only when Lean is on): claim, path:line, basic or advanced, result
+## Online resources (URL, date read, what it contributed)
 ## Options and recommendation (cited)
 ## Open questions for the human
 ```
