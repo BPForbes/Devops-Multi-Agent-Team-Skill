@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { install } from './devops-setup.mjs'
+import { connectClients, hostFolders, initProject, install } from './devops-setup.mjs'
 import { ghasPlan } from './devops-ghas.mjs'
 import { moduleMap, moduleOf, reuseSearch } from './devops-research.mjs'
 import { parseSemver, tagCreate, tagHistory, tagPlan } from './devops-tags.mjs'
@@ -191,3 +191,58 @@ test('install creates the story catalog with a project code, committed rather th
 function execFileSyncGit(dir, args) {
   assert.equal(spawnSync('git', args, { cwd: dir }).status, 0)
 }
+
+test('auto picks the host folders a project already has, and falls back to both', () => {
+  const onlyCursor = project({ 'a.py': '', '.cursor/rules/x.mdc': 'x' })
+  install({ dest: onlyCursor })
+  assert.ok(fs.existsSync(path.join(onlyCursor, '.cursor/skills/devops-multi-agent-team/SKILL.md')))
+  assert.ok(!fs.existsSync(path.join(onlyCursor, '.claude')))
+  const neither = project({ 'a.py': '' })
+  install({ dest: neither })
+  assert.ok(fs.existsSync(path.join(neither, '.cursor')) && fs.existsSync(path.join(neither, '.claude')))
+  const both = project({ 'a.py': '', '.claude/x': '', '.cursor/y': '' })
+  assert.deepEqual(hostFolders(fs.realpathSync(both), 'auto'), ['.cursor', '.claude'])
+})
+
+test('init installs and connects the MCP server, keeping other servers, and connect is idempotent', () => {
+  const dir = fs.realpathSync(project({ 'a.py': '', '.cursor/mcp.json': JSON.stringify({ mcpServers: { other: { command: 'x' } } }) }))
+  const first = initProject({ dest: dir })
+  assert.deepEqual(first.connected.written, [path.join(dir, '.cursor/mcp.json')])
+  const config = JSON.parse(fs.readFileSync(path.join(dir, '.cursor/mcp.json'), 'utf8'))
+  assert.equal(config.mcpServers.other.command, 'x')
+  assert.equal(config.mcpServers['devops-multi-agent-team'].env.DEVOPS_MCP_ROOTS, dir)
+  assert.ok(config.mcpServers['devops-multi-agent-team'].args[0].endsWith('mcp/server.mjs'))
+  assert.ok(!fs.existsSync(path.join(dir, '.mcp.json')), 'only the clients the project uses')
+
+  const again = connectClients({ dest: dir, clients: 'cursor' })
+  assert.deepEqual(again.written, [])
+  const several = connectClients({ dest: dir, clients: 'claude,vscode', npx: true })
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, '.vscode/mcp.json'), 'utf8')).servers['devops-multi-agent-team'].type, 'stdio')
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, '.mcp.json'), 'utf8')).mcpServers['devops-multi-agent-team'].command, 'npx')
+  assert.ok(several.commands[0].includes('claude mcp add'))
+  assert.throws(() => connectClients({ dest: dir, clients: 'emacs' }), /unknown client/)
+
+  fs.writeFileSync(path.join(dir, '.mcp.json'), '{ not json')
+  assert.throws(() => connectClients({ dest: dir, clients: 'claude' }), /not valid JSON/)
+  assert.equal(fs.readFileSync(path.join(dir, '.mcp.json'), 'utf8'), '{ not json', 'a broken file is left alone')
+})
+
+test('connect never writes through a symlink out of the project', () => {
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dmat-out-'))
+  const dir = fs.realpathSync(project({ 'a.py': '' }))
+  fs.symlinkSync(outside, path.join(dir, '.cursor'))
+  assert.throws(() => connectClients({ dest: dir, clients: 'cursor' }), /symbolic link|outside the project/)
+  assert.deepEqual(fs.readdirSync(outside), [])
+})
+
+test('install ships every skill, including cleanup, with its agent and command', () => {
+  const dir = project({ 'a.py': '' })
+  install({ dest: dir, target: 'both' })
+  for (const host of ['.cursor', '.claude']) {
+    assert.ok(fs.existsSync(path.join(dir, host, 'skills/devops-cleanup/SKILL.md')))
+    assert.ok(fs.existsSync(path.join(dir, host, 'skills/devops-cleanup/references/cleanup-rules.md')))
+    assert.ok(fs.existsSync(path.join(dir, host, 'agents/devops-cleaner.md')))
+    assert.ok(fs.existsSync(path.join(dir, host, 'commands/cleanup.md')))
+  }
+  assert.match(fs.readFileSync(path.join(dir, '.devops/project.md'), 'utf8'), /Cleanup thresholds/)
+})

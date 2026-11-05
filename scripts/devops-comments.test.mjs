@@ -54,6 +54,17 @@ test('the audit flags restating, commented-out code, questions, process notes, b
   assert.match(result.findings.find(f => f.line === 1).remark, /^issue \(blocking\): /)
 })
 
+test('prose that ends in a semicolon is not commented-out code', () => {
+  const dir = repo({ 'a.ts': '// It runs only fixed lists (no shell, bare environment;\n// the second line of the same sentence goes on.\nconst x = 1\n// y = compute(x);\n' })
+  const result = commentAudit(dir, { staged: true })
+  assert.deepEqual(result.findings.filter(f => f.rule === 'commented-out-code').map(f => f.line), [4])
+})
+
+test('a directory named .claude is not a mention of an AI tool', () => {
+  const dir = repo({ 'a.ts': '// Writes only to .claude/ and .cursor/ because the host reads them.\nconst x = 1\n' })
+  assert.deepEqual(commentAudit(dir, { staged: true }).findings.map(f => f.rule), [])
+})
+
 test('directives, shebangs, preprocessor lines and license headers are not comments', () => {
   const dir = repo({
     'run.sh': '#!/usr/bin/env bash\n# shellcheck disable=SC2086\necho hi\n',

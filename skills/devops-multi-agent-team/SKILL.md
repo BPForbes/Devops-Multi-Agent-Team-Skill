@@ -13,7 +13,7 @@ description: >-
   monitoring, runbooks, infra hardening, build-time or cost work, pre-merge
   quality/security gates, SOC 2 review, multi-agent or multi-team work, or
   explicitly invokes /devops-multi-agent-team, /goal, /create-subagent,
-  /code-review, /repro, /triage or /story. Also use it to cut a large change into
+  /code-review, /repro, /triage, /story or /cleanup. Also use it to cut a large change into
   linked stories (OLD and NEW proposals with a catalog, dependency order and
   guidance), within one project or across two.
 ---
@@ -166,6 +166,7 @@ multi-branch merge rule: [virtual-git.md](references/virtual-git.md).
 | Releases: tags as project history | [version-tags.md](references/version-tags.md) |
 | GitHub Advanced Security setup | [github-advanced-security.md](references/github-advanced-security.md) |
 | Containers, cloud, AI, VMs, sandbox | [services-and-sandbox.md](references/services-and-sandbox.md) |
+| **Cleanup**: behavior-preserving cleanup from a plain-English statement (fewer comments, duplicates replaced by calls, big functions split into helpers) | the `devops-cleanup` skill, `/cleanup` |
 | **Stories**: OLD and NEW change proposals tied together (research organizes, Coders OLD then NEW, Reviewers the concepts, QA then Security approve) | [stories.md](references/stories.md), `/story` |
 
 ## When to use

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// The server's own sandbox: it touches only the folders it is allowed (DEVOPS_MCP_ROOTS, else the
-// client's MCP roots, else its working directory), writes only what the tool names, plans before it
-// writes, runs only fixed `<tool> --version` and read-only `git` argument lists (no shell, bare
-// environment, DEVOPS_MCP_NO_GIT=1 turns the git tools off), makes no network request and never
-// returns a secret.
+// The server's own sandbox: it touches only folders it is allowed
+// (DEVOPS_MCP_ROOTS, else the client's roots, else its working directory),
+// writes only what a tool names and only after a plan, runs only fixed
+// `<tool> --version` and read-only `git` lists (no shell, bare environment;
+// DEVOPS_MCP_NO_GIT=1 disables git), makes no network request, returns no
+// secret.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -13,6 +14,7 @@ import {
   loadLanguages, loadServices, renderProfile, resolveDest, sandboxArgv, status,
 } from '../scripts/devops-setup.mjs'
 import { commentAudit } from '../scripts/devops-comments.mjs'
+import { parseStatement, scanProject, snapshot } from '../scripts/devops-cleanup.mjs'
 import { ghasPlan } from '../scripts/devops-ghas.mjs'
 import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, parseStory } from '../scripts/devops-stories.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
@@ -23,13 +25,15 @@ const SUPPORTED = ['2025-06-18', '2025-03-26', '2024-11-05']
 const MAX_LINE = 2 * 1024 * 1024
 const ID = /^[a-z][a-z0-9-]*$/
 
+const SETUP_SCRIPT = fs.readFileSync(path.join(PACKAGE_ROOT, 'mcp', 'setup-script.md'), 'utf8').trim()
+
 const INSTRUCTIONS = [
   'Sets up the DevOps multi-agent team (skill, agents, commands, per-language profile, services, sandbox) in a project.',
   'Flow: detect_project, then install_devops_team with apply=false and show the plan, then apply=true only after the user agrees.',
   'Any language can be used for any purpose; layers are only sorting tags. Use list_languages / get_language / add_language for languages not yet defined.',
-  'The server only writes .cursor/, .claude/, .devops/, .gitignore and (ghas_plan with apply) the .github security files and SECURITY.md inside the project, and never runs project commands; sandbox_plan only prints a container command; tag tools never push, move or delete a tag.',
+  'The server only writes .cursor/, .claude/, .devops/, devops-skill/ (thought files and cleanup snapshots), .gitignore and (ghas_plan with apply) the .github security files and SECURITY.md inside the project, and never runs project commands; sandbox_plan only prints a container command; tag tools never push, move or delete a tag.',
   'Researchers: read documentation first, then module_map and reuse_search before any code is written.',
-].join(' ')
+].join(' ') + '\n\n' + SETUP_SCRIPT
 
 let clientRoots = []
 
@@ -129,7 +133,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         dest,
-        target: { type: 'string', enum: ['cursor', 'claude', 'both'], description: 'Which host folders to install into. Default both.' },
+        target: { type: 'string', enum: ['auto', 'cursor', 'claude', 'both'], description: 'Which host folders to install into. Default auto: the ones the project already has, else both.' },
         languages: langs,
         services: svcs,
         sandbox: { type: 'boolean', description: 'Write .devops/sandbox.md (default true).' },
@@ -142,7 +146,7 @@ const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     run: args => install({
       dest: projectDir(args), roots: allowedRoots(),
-      target: ['cursor', 'claude', 'both'].includes(args.target) ? args.target : 'both',
+      target: ['auto', 'cursor', 'claude', 'both'].includes(args.target) ? args.target : 'auto',
       lang: idList(args.languages, 'languages'),
       services: idList(args.services, 'services', { allow: ['auto', 'none'] }),
       sandbox: optionalBool(args, 'sandbox', true), skipRules: idList(args.skipRules ?? [], 'skipRules', { allow: [] }), force: optionalBool(args, 'force', false), dryRun: !optionalBool(args, 'apply', false),
@@ -282,6 +286,42 @@ const TOOLS = [
     },
   },
   {
+    name: 'cleanup_brief',
+    description: 'Turn a plain-English cleanup statement (for example "reduce the comments in src/api, call one function instead of the repeated code, split functions over 40 lines, do not touch vendor") into a brief: goals (comments, duplicates, split, dead code, naming), scope (paths named that exist, and exclusions), thresholds, constraints (the standing ones plus your own sentences) and any sentence not understood. Show it to the person and ask about `unrecognized` before scanning. Read-only.',
+    inputSchema: { type: 'object', properties: { dest, statement: { type: 'string', maxLength: 2000 } }, required: ['statement'], additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => parseStatement(args.statement, projectDir(args), allowedRoots()),
+  },
+  {
+    name: 'cleanup_scan',
+    description: 'Find cleanup candidates in the project: duplicated blocks (with every location and the number of lines), functions over the length, nesting or parameter limits, and noisy or commented-out code, ranked by payoff, with a suggested refactor for each. Give `statement` to scan what a plain-English statement asks for, or `goals`/`paths`/`exclude`/`thresholds` directly. `save` stores the summary under a name in devops-skill/thoughts/non-final/; `compare` shows the change against a saved one (use it after the cleanup to prove the numbers improved and nothing got worse). Heuristic and read-only apart from `save`; it runs no program.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, statement: { type: 'string', maxLength: 2000 },
+        goals: { type: 'array', items: { type: 'string', enum: ['comments', 'duplicates', 'split', 'dead'] } },
+        paths: { type: 'array', items: { type: 'string' }, maxItems: 40 }, exclude: { type: 'array', items: { type: 'string' }, maxItems: 40 },
+        thresholds: { type: 'object', properties: { maxFunctionLines: { type: 'integer' }, maxNesting: { type: 'integer' }, maxParams: { type: 'integer' }, minDuplicateLines: { type: 'integer' } }, additionalProperties: false },
+        limit: { type: 'integer', minimum: 1, maximum: 200 }, save: { type: 'string', description: 'Snapshot name to save (lower-case letters, digits, hyphens).' }, compare: { type: 'string', description: 'Snapshot name to compare with.' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    run: args => {
+      const dest = projectDir(args)
+      const brief = typeof args.statement === 'string' ? parseStatement(args.statement, dest, allowedRoots()) : undefined
+      const safePaths = list => (Array.isArray(list) ? list : []).filter(p => typeof p === 'string' && /^[A-Za-z0-9._\/-]+$/.test(p) && !p.includes('..') && !p.startsWith('/'))
+      const result = scanProject(dest, {
+        goals: args.goals ?? brief?.goals ?? ['comments', 'duplicates', 'split'],
+        paths: [...(brief?.scope.paths ?? []), ...safePaths(args.paths)], exclude: [...(brief?.scope.exclude ?? []), ...safePaths(args.exclude)],
+        thresholds: { ...(brief?.thresholds ?? {}), ...(args.thresholds ?? {}) }, limit: Number.isInteger(args.limit) ? args.limit : 40, roots: allowedRoots(),
+      })
+      if (typeof args.save === 'string') result.snapshot = snapshot(dest, args.save, result, { save: true })
+      if (typeof args.compare === 'string') result.compare = snapshot(dest, args.compare, result)
+      return result
+    },
+  },
+  {
     name: 'story_parse',
     description: 'Parse a story written in the catalog format (a GitHub issue body or a story file) into structure: catalog id, project, baseline sha, status, depends on, needed by, files, OLD blocks (path, lines, text) and NEW blocks (compiled or not), and which sections are present. Pass the text you read from the issue. Pure; reads nothing from the project.',
     inputSchema: { type: 'object', properties: { text: { type: 'string', maxLength: 300000 }, title: { type: 'string', maxLength: 300 } }, required: ['text'], additionalProperties: false },
@@ -369,6 +409,7 @@ const RESOURCES = [
   { uri: 'devops://languages.md', name: 'LANGUAGES.md', mimeType: 'text/markdown', file: 'LANGUAGES.md' },
   { uri: 'devops://services', name: 'services.json', mimeType: 'application/json', file: 'services.json' },
   { uri: 'devops://services.md', name: 'SERVICES.md', mimeType: 'text/markdown', file: 'SERVICES.md' },
+  { uri: 'devops://setup', name: 'setup-script.md', mimeType: 'text/markdown', file: 'mcp/setup-script.md' },
   { uri: 'devops://skill', name: 'SKILL.md', mimeType: 'text/markdown', file: 'skills/devops-multi-agent-team/SKILL.md' },
 ]
 
@@ -377,14 +418,7 @@ const PROMPTS = [
     name: 'setup_project',
     description: 'Set up the DevOps multi-agent team in this project, step by step, asking before anything is written.',
     arguments: [{ name: 'languages', description: 'Optional: comma-separated language ids; default is to detect.', required: false }, { name: 'services', description: 'Optional: comma-separated service ids, e.g. docker,ollama.', required: false }],
-    build: a => `Set up the DevOps multi-agent team in this project using the devops-multi-agent-team MCP tools.
-1. Call detect_project and tell me which languages and services you found and what is already installed.
-2. ${a.languages ? `Use these languages: ${a.languages}.` : 'Use the detected languages; ask me about any I may want to add or drop.'} ${a.services ? `Also set up these services: ${a.services}.` : 'Ask whether I want Docker, a cloud, an AI service (Claude, GPT, Ollama) or a VM set up.'}
-3. Call install_devops_team with apply=false and show me the plan: files, languages, services, warnings.
-4. Only after I agree, call it again with apply=true, then ensure_gitignore (apply=true) if status shows gitignoreOk is false.
-5. Call check_toolchain for the chosen ids and list which tools I still need to install, with the install lines from get_language / get_service.
-6. Remind me to fill in the "Fill in by hand" section of .devops/project.md and commit it.
-Never run the project's own build or deploy commands yourself; use sandbox_plan to show how they would run in the sandbox.`,
+    build: a => `${SETUP_SCRIPT}\n\nStart now.${a.languages ? ` Use these languages: ${a.languages}.` : ''}${a.services ? ` Also set up these services: ${a.services}.` : ''}`,
   },
   {
     name: 'add_language',

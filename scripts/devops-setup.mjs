@@ -552,7 +552,7 @@ export function gitignoreOk(root) {
   return fs.readFileSync(target, 'utf8').includes(GITIGNORE_BLOCK)
 }
 
-export function install({ dest: destInput, roots, target = 'both', lang = 'auto', services = 'auto', sandbox = true, skipRules = [], force = false, dryRun = false }) {
+export function install({ dest: destInput, roots, target = 'auto', lang = 'auto', services = 'auto', sandbox = true, skipRules = [], force = false, dryRun = false }) {
   const dest = resolveDest(destInput, roots)
   const report = { dest, created: [], replaced: [], skipped: [], same: [], warnings: [], languages: [], services: [], dryRun }
   const opts = { force, dryRun, root: dest }
@@ -564,10 +564,10 @@ export function install({ dest: destInput, roots, target = 'both', lang = 'auto'
   report.languages = selected.map(l => l.id)
   report.services = chosenServices.map(s => s.id)
 
-  const hosts = { cursor: ['.cursor'], claude: ['.claude'], both: ['.cursor', '.claude'] }[target]
-  if (!hosts) throw new Error(`--target must be cursor, claude or both (got ${target})`)
+  const hosts = hostFolders(dest, target)
+  if (!hosts) throw new Error(`--target must be auto, cursor, claude or both (got ${target})`)
   for (const host of hosts) {
-    copyTree(path.join(PACKAGE_ROOT, 'skills', 'devops-multi-agent-team'), path.join(dest, host, 'skills', 'devops-multi-agent-team'), opts, report)
+    for (const skill of fs.readdirSync(path.join(PACKAGE_ROOT, 'skills'))) copyTree(path.join(PACKAGE_ROOT, 'skills', skill), path.join(dest, host, 'skills', skill), opts, report)
     copyTree(path.join(PACKAGE_ROOT, 'agents'), path.join(dest, host, 'agents'), opts, report)
     copyTree(path.join(PACKAGE_ROOT, 'commands'), path.join(dest, host, 'commands'), opts, report)
   }
@@ -602,6 +602,60 @@ export function install({ dest: destInput, roots, target = 'both', lang = 'auto'
   return report
 }
 
+/** `auto` installs into the host folders the project already has, else both. */
+export function hostFolders(dest, target) {
+  if (target === 'auto') {
+    const has = ['.cursor', '.claude'].filter(host => lexists(path.join(dest, host)))
+    return has.length > 0 ? has : ['.cursor', '.claude']
+  }
+  return { cursor: ['.cursor'], claude: ['.claude'], both: ['.cursor', '.claude'] }[target]
+}
+
+const SERVER_NAME = 'devops-multi-agent-team'
+const NPX_SPEC = ['-y', '-p', 'github:BPForbes/Devops-Multi-Agent-Team-Skill', 'devops-multi-agent-team-mcp']
+
+/** Write the MCP server into each client's project config, keeping every other server already there. */
+export function connectClients({ dest: destInput, clients = 'auto', npx = false, dryRun = false }) {
+  const dest = resolveDest(destInput)
+  const wanted = clients === 'auto' ? (hostFolders(dest, 'auto').map(h => (h === '.cursor' ? 'cursor' : 'claude'))) : clients.split(',').map(c => c.trim()).filter(Boolean)
+  const locations = { claude: ['.mcp.json', 'mcpServers'], cursor: ['.cursor/mcp.json', 'mcpServers'], vscode: ['.vscode/mcp.json', 'servers'] }
+  const unknown = wanted.filter(c => !locations[c])
+  if (unknown.length > 0) throw new Error(`unknown client(s): ${unknown.join(', ')} (claude, cursor, vscode)`)
+  const server = npx
+    ? { command: 'npx', args: NPX_SPEC, env: { DEVOPS_MCP_ROOTS: dest } }
+    : { command: 'node', args: [path.join(PACKAGE_ROOT, 'mcp', 'server.mjs')], env: { DEVOPS_MCP_ROOTS: dest } }
+  const report = { dest, written: [], kept: [], commands: [] }
+  for (const client of wanted) {
+    const [rel, key] = locations[client]
+    const target = path.join(dest, rel)
+    let config = {}
+    if (lexists(target)) {
+      try {
+        config = JSON.parse(fs.readFileSync(target, 'utf8'))
+      } catch {
+        throw new Error(`${rel} is not valid JSON; fix or remove it, nothing was changed`)
+      }
+    }
+    const next = { ...config, [key]: { ...(config[key] ?? {}), [SERVER_NAME]: client === 'vscode' ? { type: 'stdio', ...server } : server } }
+    const same = JSON.stringify(config[key]?.[SERVER_NAME]) === JSON.stringify(next[key][SERVER_NAME])
+    report[same ? 'kept' : 'written'].push(target)
+    if (!same && !dryRun) {
+      assertInside(dest, target)
+      fs.mkdirSync(path.dirname(target), { recursive: true })
+      fs.writeFileSync(target, JSON.stringify(next, null, 2) + '\n')
+    }
+  }
+  report.commands.push(`claude mcp add ${SERVER_NAME} --scope project -e DEVOPS_MCP_ROOTS=${dest} -- ${server.command} ${server.args.join(' ')}`)
+  return report
+}
+
+/** One step: install the skill (host folders auto-detected) and connect the MCP server. */
+export function initProject(options) {
+  const installed = install({ ...options, target: options.target ?? 'auto' })
+  const connected = connectClients({ dest: options.dest, clients: options.clients ?? 'auto', npx: options.npx, dryRun: options.dryRun })
+  return { installed, connected }
+}
+
 export function status(destInput, roots) {
   const dest = resolveDest(destInput, roots)
   const has = rel => lexists(path.join(dest, rel))
@@ -621,7 +675,7 @@ export function status(destInput, roots) {
 }
 
 function parseArgs(argv) {
-  const args = { _: [], dest: process.cwd(), target: 'both', lang: 'auto', services: 'auto', phase: 'test', sandbox: true, force: false, dryRun: false, json: false, withServices: false, image: undefined }
+  const args = { _: [], dest: process.cwd(), target: 'auto', clients: 'auto', npx: false, lang: 'auto', services: 'auto', phase: 'test', sandbox: true, force: false, dryRun: false, json: false, withServices: false, image: undefined }
   const rest = argv.indexOf('--')
   const own = rest === -1 ? argv : argv.slice(0, rest)
   args.cmd = rest === -1 ? [] : argv.slice(rest + 1)
@@ -632,6 +686,8 @@ function parseArgs(argv) {
     else if (a === '--lang') args.lang = own[++i]
     else if (a === '--services') args.services = own[++i]
     else if (a === '--phase') args.phase = own[++i]
+    else if (a === '--client') args.clients = own[++i]
+    else if (a === '--npx') args.npx = true
     else if (a === '--skip-rules') args.skipRules = own[++i].split(',').filter(Boolean)
     else if (a === '--no-sandbox') args.sandbox = false
     else if (a === '--force') args.force = true
@@ -649,13 +705,15 @@ const HELP = `devops-setup <command> [options]
   list [--with-services]     print the languages (and services) this package knows
   detect                     print the languages and services found under --dest
   profile                    print the .devops/project.md the installer would write
+  init                       install (host folders auto-detected) AND connect the MCP server, in one step
   install                    copy the skill, agents, commands, profile and sandbox doc into --dest
+  connect                    write the MCP server into .mcp.json / .cursor/mcp.json / .vscode/mcp.json (--client claude,cursor,vscode)
   status                     what is installed in --dest
   check <id,id,...>          is the tool for each language/service id installed? (runs only "<tool> --version")
   sandbox --lang ID [--phase deps|build|test|scan|browser] -- <cmd...>
                              print the sandboxed container command (runs nothing)
 
-options: --dest DIR (default: cwd)  --target cursor|claude|both (default both)
+options: --dest DIR (default: cwd)  --target auto|cursor|claude|both (default auto)
          --lang auto|id,id (default auto)  --services auto|none|id,id (default auto)
          --skip-rules name,name (do not install those rule files; use when the project already has an equivalent)
          --no-sandbox  --force  --dry-run  --json
@@ -695,6 +753,16 @@ function main(argv) {
     }
     for (const w of report.warnings) console.log(`warning: ${w}`)
     console.log('Next: open .devops/project.md and fill the "Fill in by hand" section; commit it.')
+    return
+  }
+  if (command === 'init' || command === 'connect') {
+    const out = command === 'init' ? initProject(args) : { connected: connectClients(args) }
+    if (args.json) return console.log(JSON.stringify(out))
+    if (out.installed) console.log(`Installed: ${out.installed.created.length} created, ${out.installed.replaced.length} replaced, ${out.installed.skipped.length} kept. Languages: ${out.installed.languages.join(', ') || '(none)'}`)
+    for (const f of out.connected.written) console.log(`MCP server written: ${f}`)
+    for (const f of out.connected.kept) console.log(`MCP server already set: ${f}`)
+    console.log(`Or with the Claude Code CLI: ${out.connected.commands[0]}`)
+    console.log('Next: restart or reload the client, then say "set up the DevOps team in this project". Fill in .devops/project.md and commit .devops/, .cursor/ and .claude/ (not devops-skill/thoughts/).')
     return
   }
   if (command === 'status') return console.log(JSON.stringify(status(args.dest), null, 2))

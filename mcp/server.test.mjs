@@ -55,13 +55,13 @@ function client({ env = {}, cwd = os.tmpdir(), capabilities = {}, onRequest } = 
   return ready()
 }
 
-test('initialize negotiates, lists 25 tools, prompts and resources', async () => {
+test('initialize negotiates, lists 27 tools, prompts and resources', async () => {
   const root = tmp()
   const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
   try {
     const tools = (await c.rpc('tools/list')).result.tools.map(t => t.name)
-    for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance']) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 25)
+    for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan']) assert.ok(tools.includes(name), name)
+    assert.equal(tools.length, 27)
     const writers = (await c.rpc('tools/list')).result.tools.filter(t => t.name === 'install_devops_team')
     assert.equal(writers[0].annotations.destructiveHint, false)
     assert.ok((await c.rpc('prompts/list')).result.prompts.some(p => p.name === 'setup_project'))
@@ -268,5 +268,38 @@ test('stories through chat: create, link, graph two projects, check, guide', asy
     assert.equal((await c.call('story_check', { dest: root, id: 'CLI-01' })).json().ok, false)
     assert.match((await c.call('story_guidance', { dest: root })).json().text, /Ready to start: CLI-01/)
     assert.ok((await c.call('story_graph', { dests: [os.tmpdir()] })).isError)
+  } finally { c.close() }
+})
+
+test('the setup script travels in the MCP instructions, a resource and the prompt', async () => {
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: tmp() } })
+  try {
+    const init = await c.rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '0' } })
+    const text = init.result.instructions
+    for (const step of ['SETUP SCRIPT', 'detect_project', 'install_devops_team with apply=false', 'check_toolchain', 'devops-skill/thoughts/non-final/']) assert.ok(text.includes(step), step)
+    const resource = await c.rpc('resources/read', { uri: 'devops://setup' })
+    assert.ok(resource.result.contents[0].text.startsWith('SETUP SCRIPT'))
+    const prompt = await c.rpc('prompts/get', { name: 'setup_project', arguments: { services: 'docker' } })
+    assert.ok(prompt.result.messages[0].content.text.includes('SETUP SCRIPT'))
+    assert.ok(prompt.result.messages[0].content.text.includes('docker'))
+  } finally { c.close() }
+})
+
+test('cleanup through chat: a plain-English statement, a scan, a saved baseline and a comparison', async () => {
+  const block = ['const rows = input.filter(r => r.active)', 'const grouped = new Map()', 'for (const row of rows) {', '  const key = row.team + ":" + row.region', '  grouped.set(key, (grouped.get(key) ?? 0) + row.amount)', '}', 'const sorted = [...grouped.entries()].sort((a, b) => b[1] - a[1])', 'return sorted.slice(0, 10)'].join('\n')
+  const root = tmp({ 'src/a.js': block + '\n', 'src/b.js': block + '\n', 'vendor/v.js': block + '\n' })
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  try {
+    const brief = (await c.call('cleanup_brief', { statement: 'Remove duplicated code in src. Do not touch vendor.' })).json()
+    assert.deepEqual(brief.goals, ['duplicates'])
+    assert.deepEqual(brief.scope.paths, ['src'])
+    const scan = (await c.call('cleanup_scan', { statement: 'Remove duplicated code in src. Do not touch vendor.', save: 'before' })).json()
+    assert.ok(scan.candidates.some(x => x.kind === 'duplicate-code' && x.locations.every(l => l.file.startsWith('src/'))))
+    assert.equal(scan.snapshot.saved, 'devops-skill/thoughts/non-final/cleanup-before.json')
+    fs.writeFileSync(path.join(root, 'src/b.js'), "import './a.js'\n")
+    const after = (await c.call('cleanup_scan', { goals: ['duplicates'], paths: ['src'], compare: 'before' })).json()
+    assert.equal(after.compare.improved, true)
+    assert.ok((await c.call('cleanup_scan', { save: '../x' })).isError)
+    assert.ok((await c.call('cleanup_scan', { dest: os.tmpdir() })).isError)
   } finally { c.close() }
 })

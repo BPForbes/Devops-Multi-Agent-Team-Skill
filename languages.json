@@ -3302,5 +3302,14 @@
     "densityBlock": 0.5,
     "densityMinComments": 5,
     "longBlockLines": 6
+  },
+  "cleanup": {
+    "minDuplicateLines": 6,
+    "minDuplicateChars": 120,
+    "maxFunctionLines": 60,
+    "maxNesting": 4,
+    "maxParams": 6,
+    "maxFiles": 4000,
+    "maxFileBytes": 307200
   }
 }

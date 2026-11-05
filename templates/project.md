@@ -90,6 +90,7 @@ pinning them in tooling.
 - **Release rules:** `<changelog / version / lock rules the QA seat checks, or "none">`
 - **Tooling wired:** CI `<GitHub Actions | Buildkite | none>` · quality `<Sonar | none>` · security `<Snyk | none>` · tickets `<Linear | GitHub issues | none>` · browser `<MCP | none>`
 - **Story catalog:** project code `<XX>`, baseline `<branch sha>`, linked catalogs `<other repos' .devops/stories paths>`, issue tracker `<GitHub issues>`
+- **Cleanup thresholds** (defaults in `languages.json` `cleanup`; change here when the project wants different ones): function lines `60`, nesting `4`, parameters `6`, duplicate block `6` lines
 - **Docs to read first** (the Researcher reads these before any code): `<README, docs/, ADRs, .tex sources, runbooks, schema files>`
 - **Test directories** (weakened-test checks look here): `<tests/, src/**/tests.rs, **/__tests__>`
 - **Blocking boundary rules** (a Reviewer blocks a change that breaks one): `<e.g. the kernel only orchestrates drivers; the web layer never reads the database>`

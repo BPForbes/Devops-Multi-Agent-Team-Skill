@@ -11,13 +11,13 @@ const LICENSE = /\b(copyright|spdx-license|licensed under|all rights reserved)\b
 const DIVIDER = /^[\s\-=*#_~+.\/\\<>|]{4,}$/
 const REASON = /\b(because|since|so that|otherwise|to avoid|avoids?|must|never|always|only|unless|workaround|work around|due to|why|invariant|assumes?|guarantees?|requires?|precondition|postcondition|race|deadlock|overflow|leak|unsafe|security|trade-?off|rfc|spec|regression|see\b)/i
 const MECHANICAL = /^(?:the\s+)?(increment|decrement|set|get|gets|sets|return|returns|loop|loops|iterate|iterates|call|calls|check|checks|create|creates|initiali[sz]e|initiali[sz]es|init|assign|assigns|add|adds|update|updates|print|prints|declare|declares|define|defines|import|imports|open|opens|close|closes|read|reads|write|writes|increase|decrease|store|stores|convert|converts|remove|removes|delete|deletes|push|pushes|pop|pops|append|appends|compute|computes|calculate|calculates|instantiate|constructor|getter|setter|for each|if)\b/i
-const PROCESS = /\b(claude|gpt|chatgpt|copilot|llm|ai[- ]generated|prompt|agent|reviewer|per review|as requested|as discussed|note to self|i (think|guess|added|changed|fixed|removed|wasn'?t|am not)|we (should|need to|might|could)|new code|old code|previously|used to|was changed|changed from|added (for|by|to)|fixed (a )?(bug|issue)|this (pr|commit|branch|change)|wip|for now)\b/i
+const PROCESS = /(?<![./\w-])(?:claude|gpt|chatgpt|copilot|llm)(?![/\w-])|\b(ai[- ]generated|prompt|agent|reviewer|per review|as requested|as discussed|note to self|i (think|guess|added|changed|fixed|removed|wasn'?t|am not)|we (should|need to|might|could)|new code|old code|previously|used to|was changed|changed from|added (for|by|to)|fixed (a )?(bug|issue)|this (pr|commit|branch|change)|wip|for now)\b/i
 const QUESTION = /(\?(\s|$)|^(q:|question|why |should we|do we|can we|is this|are we|not sure|maybe|perhaps|unclear|wondering|hmm)|\b(please (check|confirm|review)|@\w+))/i
 const STOP = new Set(['the', 'a', 'an', 'of', 'to', 'for', 'this', 'that', 'is', 'in', 'on', 'value', 'param', 'parameter', 'argument', 'input', 'given', 'specified'])
 
 const tokens = text => text.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
 
-function syntaxTable(dest) {
+export function syntaxTable(dest) {
   const table = []
   for (const lang of loadLanguages(dest).languages) {
     const c = lang.comments ?? { line: [], block: [] }
@@ -107,6 +107,7 @@ function extract(rows, syntax) {
 const finding = (item, rule, label, blocking, remark) => ({ file: item.file, line: item.line, rule, remark: `${label} (${blocking ? 'blocking' : 'non-blocking'}): ${remark}`, blocking, text: item.text.slice(0, 120) })
 
 function looksLikeCode(text) {
+  if (text.split(/\s+/).length >= 6 && !/\s=\s|[=!<>]=|=>|->|::|[{}]|\(\)/.test(text)) return false
   if (/^[A-Z][^;{}=]*[.!:]$/.test(text) && text.split(/\s+/).length > 3) return false
   return /[;{}]\s*$/.test(text) || /^[\w.\[\]]+\s*[-+*/|&]?=\s*\S/.test(text) || /^[\w.:]+\(.*\)\s*;?$/.test(text) || /^(if|for|while|switch|return|let|const|var|def|fn|func|function|import|from|using|else|elif|try|catch|except|throw|raise)\b.*[;{}):]\s*$/.test(text)
 }

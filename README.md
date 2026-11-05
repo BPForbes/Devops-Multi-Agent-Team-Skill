@@ -32,7 +32,17 @@ The package ships an MCP server (`mcp/server.mjs`, Node 18+, no dependencies)
 so you can set up any project by talking to your assistant instead of copying
 files.
 
-**Connect it once**
+**Fastest: one command** installs the skill (into the `.cursor/` and/or `.claude/` folders the project already has, else both) and connects the MCP server:
+
+```bash
+node scripts/devops-setup.mjs init --dest ~/my-project        # or: scripts/install.sh --dest ~/my-project
+```
+
+It writes the server into `.mcp.json` (Claude Code), `.cursor/mcp.json` (Cursor) and `.vscode/mcp.json` where those clients are used, keeps any other servers already listed, and refuses a config file that is not valid JSON. `connect --client claude,cursor,vscode [--npx]` does only the connection. The `--npx` form points at `npx -y -p github:BPForbes/Devops-Multi-Agent-Team-Skill devops-multi-agent-team-mcp` (not tried by me).
+
+**The MCP server carries its own setup script.** When a client connects, the server's instructions include [`mcp/setup-script.md`](mcp/setup-script.md): detect, choose languages and services, plan, ask, apply, check the toolchain, remind about the profile. Any assistant that connects knows how to do the install without further prompting, and the same text is the `setup_project` prompt and the resource `devops://setup`. Edit that file to change how the install is run.
+
+**Or connect it by hand**
 
 | Client | How |
 |--------|-----|
@@ -75,6 +85,7 @@ prompts) walks the same steps.
 | `story_graph` | link one or several catalogs (two projects): dependency order, ready work, longest chain, cross-project edges, patterns, a Mermaid graph, and every inconsistency |
 | `story_check` | QA check: each OLD block is verbatim from the baseline commit at the lines it names, and the story has its NEW label, Dependencies, Why and Not verified |
 | `story_guidance` | the index for future work: order, patterns, decisions, links |
+| `cleanup_brief`, `cleanup_scan` | cleanup: turn a plain-English statement into a brief (goals, scope, thresholds, constraints); find duplicated blocks, long or deeply nested functions, functions with many parameters and noisy or commented-out code, ranked, with a suggested refactor; `save` a baseline and `compare` after |
 | `ghas_plan` | GitHub Advanced Security: CodeQL, dependency review and Dependabot files for your languages and package managers, `SECURITY.md`, a ruleset template, and the settings commands for **you** to run |
 
 **How the server is sandboxed.** It works only inside the project folders it
@@ -124,6 +135,7 @@ which holds the committed profile `.devops/project.md`. The tests check this aga
 | **Module mind map + reuse map** before any Coder starts; "new, because ..." must hold up | `research-and-reuse.md`, `module_map`, `reuse_search` | Reviewers: re-implementation is a blocking finding; QA checks the brief |
 | **Comment budget and line remarks**: Coders default to zero new comments, list each one they keep in the Push JSON `comments`, and self-audit; Researchers mark the comment-worthy code; Reviewers leave line remarks on over-commented lines in the virtual PR; questions and notes go to the PR Q&A, never into code | `comment-standards.md` §6-7, `comment_audit` | the mod audits every `git commit` (`/devops comments strict` refuses blocking ones); reviewers post the findings |
 | **Comment standards**: no comment just because code was added (self-explanatory code gets none); intent not mechanics; no comment rot; no commented-out code; doc comments only where the contract is not obvious or API docs are published; TODO/FIXME/NOTE for real follow-up | `comment-standards.md`, `rules/comments.md`, per-language `docs` | Reviewers: strict and blocking; Conventional Comments labels |
+| **Cleanup** (`devops-cleanup` skill, `/cleanup`): a plain-English statement drives behavior-preserving cleanup: fewer comments, duplicated code replaced by calls to one implementation, big functions split into helpers, one small step at a time | `skills/devops-cleanup/`, `cleanup_*` tools | Researchers scan and plan; the cleaner changes one thing per step; Reviewers check only structure changed; QA compares before/after numbers |
 | **Stories**: change proposals tied together (OLD verbatim from a baseline commit, then NEW; typed links; patterns and decisions kept for later) | `stories.md`, `/story`, `story_*` tools | Research organizes; Coders OLD then NEW; Reviewers the concepts; QA then Security approve; `story_check` proves OLD |
 | **Virtual PR and virtual git** | `virtual-git.md`, `side-work.md` | the mod refuses push, PR and branch creation until QA PASS and your go |
 | **Failed checks are watched and corrected, then stop** | `monitoring.md`, the mod's monitor | records `check-ledger.md`, bounded retries (default 3), never loosens a check |

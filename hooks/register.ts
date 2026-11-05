@@ -181,9 +181,9 @@ export const register: Register = on => {
       return {
         text: [
           'Easiest: ask me "set up the DevOps team in this project" (MCP server devops-multi-agent-team; I plan first and write only after you agree).',
-          'Or from a shell:',
-          `  node ${$.plugin.root}/scripts/devops-setup.mjs install --dest . --target claude`,
-          'Add --target cursor or both for Cursor; --dry-run to preview; --lang rust,typescript to choose.',
+          'Or one command from a shell (installs and connects the MCP server):',
+          `  node ${$.plugin.root}/scripts/devops-setup.mjs init --dest .`,
+          '--dry-run previews; --lang rust,typescript chooses languages; --target cursor|claude|both overrides the auto-detected host folders.',
           'Then fill in the "Fill in by hand" section of .devops/project.md and commit it.',
         ].join('\n'),
       }

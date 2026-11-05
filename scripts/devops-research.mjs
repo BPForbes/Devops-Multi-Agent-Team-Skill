@@ -13,13 +13,13 @@ const DOC_EXTENSIONS = ['.md', '.markdown', '.tex', '.rst', '.adoc', '.txt']
 const SECRET_FILE = /(^|\/)(\.env(\..*)?|.*\.(pem|key|p12|pfx|jks)|id_(rsa|dsa|ecdsa|ed25519)|credentials?(\..*)?|secrets?(\..*)?)$/i
 const SECRET_VALUE = /((?:secret|token|passw(?:or)?d|api[_-]?key|private[_-]?key)["']?\s*[:=]\s*)(["']?)[^\s"',;]{4,}/gi
 
-function extensionTable(dest) {
+export function extensionTable(dest) {
   const table = new Map()
   for (const lang of loadLanguages(dest).languages) for (const ext of lang.detect?.extensions ?? []) if (!table.has(ext)) table.set(ext, lang.id)
   return table
 }
 
-const languageOf = (rel, table) => {
+export const languageOf = (rel, table) => {
   const lower = rel.toLowerCase()
   let best
   for (const [ext, id] of table) if (lower.endsWith(ext.toLowerCase()) && (best === undefined || ext.length > best.ext.length)) best = { ext, id }
