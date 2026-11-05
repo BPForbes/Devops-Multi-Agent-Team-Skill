@@ -45,7 +45,13 @@ tree vs `<integration-base>`, not `git show HEAD` alone.
 Top-level keys: `topic`, `round`, `seat` (id of the seat that
 wrote this version), `authors` (seat ids of everyone who wrote
 the change), `to` (seat id or role), `notifies` (seat ids or
-roles), `closes`, `qa`, `comments`, `files`.
+roles), `closes`, `qa`, `comments`, `formal`, `files`.
+
+`formal` (optional; only when Lean is on, [formal-check.md](formal-check.md)) is one row per advanced claim:
+`{ "id": "F1", "claim": "...", "status": "proved" | "disproved" | "not-attempted" | "gave-up", "lean": "path",
+"writeup": "path", "covers": "path:line", "notCovers": "...", "counterexampleTest": "path:line" }` (the last only for
+`disproved`). Paths are inside the project. `formal_check` with `push` validates the rows; a row marked `proved`
+whose Lean file has a `sorry`, `admit` or `axiom` is a blocking finding. Basic logic gets no row.
 
 `comments` is the **comment budget**: one row per comment (or run of
 comment lines) the change adds, `{ "file", "line": "12" or "12-15", "why" }`,

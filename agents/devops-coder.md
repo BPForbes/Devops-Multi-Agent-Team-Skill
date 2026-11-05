@@ -32,7 +32,7 @@ the Orchestrator. Thoughts stay **gitignored**.
 
 ## While you write
 
-- When the plan or the person's yes calls for a Lean check, you write the Lean model, theorem and proof (time-boxed) and record the result; nobody else is asked to write Lean ([formal-check.md](../skills/devops-multi-agent-team/references/formal-check.md)).
+- When Lean is on you write all of it: specify first (Lean model and theorem for each formal target), then implement the code to mirror the model, add tests from the model's values and counterexamples, write a write-up for each advanced claim ([proof-writeup-template.md](../skills/devops-multi-agent-team/references/proof-writeup-template.md)), add `formal` rows to the Push JSON and run `formal_check`. Basic logic stays plain English. Nobody else is asked to write Lean ([formal-check.md](../skills/devops-multi-agent-team/references/formal-check.md)).
 - Write to `oop-principles.md` too: each function has one purpose and calls helpers for more; new behavior is a new child or table entry, not an edit to existing code or another type check; every child can replace its parent without callers noticing (no throw or no-op for something the parent promises).
 - Write to `clean-code.md`: names that reveal intent and are never misleading or vague; functions that do one thing, about 30 lines or fewer, shallow nesting, two or fewer parameters as the aim, no flag arguments; one definition of each piece of logic, calling code that exists; a named constant instead of a repeated literal; explicit errors; the project's formatter. Do not clean unrelated code in this change.
 - Follow `comment-standards.md` exactly. **Do not add a comment because you

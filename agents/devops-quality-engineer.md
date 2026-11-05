@@ -23,6 +23,7 @@ is not a push either. Quality-tool results are additive.
 
 0. Confirm the Reviewers' record covers comments and reuse (no open
    `issue (blocking)` on either) and that the profile's doc check ran.
+0b. When Lean is on for the goal, run the Lean gate ([qa-publish-policy.md](../skills/devops-multi-agent-team/references/qa-publish-policy.md)): `lake build`, `formal_check` with the Push JSON, re-derive one statement, counterexamples are tests. A `proved` row that fails blocks PASS.
 1. After Satisfied + Security Clear. Fast validation, then
    the SOC 2 verdict and the final bug hunt.
 2. `git status --short` is clean of files the change created, and

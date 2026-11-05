@@ -15,6 +15,7 @@ import {
 } from '../scripts/devops-setup.mjs'
 import { commentAudit } from '../scripts/devops-comments.mjs'
 import { parseStatement, scanProject, snapshot } from '../scripts/devops-cleanup.mjs'
+import { formalCheck } from '../scripts/devops-formal.mjs'
 import { ghasPlan } from '../scripts/devops-ghas.mjs'
 import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, parseStory } from '../scripts/devops-stories.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
@@ -284,6 +285,17 @@ const TOOLS = [
       gitAllowed()
       return commentAudit(projectDir(args), { base: args.base, head: args.head, staged: optionalBool(args, 'staged', false), listed: args.listed, roots: allowedRoots() })
     },
+  },
+  {
+    name: 'formal_check',
+    description: 'Check Lean 4 work without running Lean: find unproved goals (sorry, admit), assumed axioms and the places a proof does not cover (native_decide, unsafe, extern or implemented_by, partial def) in .lean files, and, with `push`, validate the Push JSON `formal` rows (claim, status, covers path:line, notCovers, lean and writeup files inside the project, a counterexample test for a disproved claim, and no hole in a file marked proved). QA and Reviewers run it when Lean is on; it does not replace `lake build`, which runs in the sandbox. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, paths: { type: 'array', maxItems: 50, items: { type: 'string', maxLength: 300 } }, push: { type: 'string', maxLength: 300 } },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => formalCheck(projectDir(args), { paths: args.paths, push: args.push, roots: allowedRoots() }),
   },
   {
     name: 'cleanup_brief',

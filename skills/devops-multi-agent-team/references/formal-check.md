@@ -1,98 +1,118 @@
 # Formal check with Lean 4 (optional)
 
-Lean 4 can turn a claim about pure code ("these two functions give the same result",
-"this invariant always holds", "this child keeps the parent's promise") into a
-machine-checked proof. It is an optional tool for settling a question, never a gate:
-no project is required to have Lean, and nothing here blocks a push.
+Lean 4 turns a claim about pure code ("these two functions give the same result", "this
+invariant always holds", "this child keeps the parent's promise") into a machine-checked
+proof. It is optional: no project is required to have Lean, and when it is off nothing
+here applies. When it is on, it is used from the start, in research, so the logic is
+settled before it is coded and a virtual PR carries its own evidence instead of a
+debate.
 
 ## What a proof does and does not show
 
 - It shows that a **Lean model** satisfies a **stated specification**. A wrong
   specification can still be proved, so the statement is reviewed like code.
-- Lean 4 compiles to C. It has **no Python or Java backend**, so a proof does not
-  carry over to a Python or Java implementation. The target-language code still has its
-  own tests; the Lean model can generate the expected values for them.
-- It fits pure logic: algorithms, data structures, parsers, state machines, ordering
-  and equivalence rules. It fits I/O, UI, concurrency and business glue poorly, because
-  writing the specification is the hard part.
-- Record the result honestly: **proved**, **disproved (counterexample)**, **not
-  attempted** or **gave up (time-boxed)**. A `sorry` is "not proved", never "proved".
+- Lean 4 compiles to C. It has **no Python or Java backend**, so a proof does not carry
+  over to Python or Java code. The target-language code still has its own tests, and
+  the Lean model supplies their expected values and counterexamples.
+- It fits pure logic: algorithms, data structures, parsers, state machines, ordering and
+  equivalence rules, bounds. It fits I/O, UI, concurrency primitives and business glue
+  poorly, because writing the specification is the hard part.
+- Record results honestly: **proved**, **disproved** (counterexample), **not-attempted**
+  or **gave-up** (time-boxed). A `sorry` is "not proved", never "proved".
 
-## Who writes the Lean
+## Turning it on
 
-**AI Coders write all of it**: the model, the theorem statement and the proof. The person is never asked
-to write or read Lean; their only part is the yes or no above. The Researcher names the claim in plain
-English (what must hold, for which code at `path:line`) and does not write Lean. The Coder who wrote the
-proof is not the one who judges it: a Reviewer checks that the statement says what the claim says and that the model
-matches the code, because Lean checks the proof but cannot check that the statement is the right one.
+Lean is *present* when the project has a `lean` entry detected (`lean-toolchain`,
+`lakefile.*` or `.lean` files) or `lean --version` verifies in the sandbox. If it is
+absent the Orchestrator says nothing about it.
 
-## When it is considered
+1. **At the start of a goal**, if Lean is present and the goal changes pure logic, the
+   Orchestrator asks once: *"Lean 4 is available. Use it to specify and prove the core
+   logic before it is coded, and to help review and QA? (yes/no)"*. A plain **yes** turns
+   it on for the whole goal; **no** leaves it off. The profile's `Lean default` (`ask`,
+   `on` or `off`; `ask` if unset) can answer this in advance.
+2. **At a stalled review.** If it is off and one review thread reaches the profile's
+   `Formal check rounds` (default 3) still disputing what pure code does, the
+   Orchestrator asks once more: *"Review is at round N and still disputes behavior. Use
+   Lean to check it? (yes/no)"*. A "no" here is final for the goal.
 
-1. **Researcher**, in the brief's "Formal checks" section (the claim in plain English; a Coder writes the Lean), when a claim is about
-   equivalence or an invariant of pure code and tests alone leave doubt.
-2. **Review rounds.** The profile sets `Formal check rounds` (default 3). When the
-   same review thread reaches that many rounds with the Coder and Reviewers still
-   disagreeing about what the code does (for example "is the refactor equivalent",
-   "does the child violate the parent's contract"), the Orchestrator asks the person
-   once, in these words: *"Review is at round N and still disputes behavior. Use Lean
-   to check it? (yes/no)"*.
-   - A plain **yes** turns Lean on for the rest of this goal. **no** (or silence) leaves it off,
-     and the question is not asked again for this goal.
-   - The Orchestrator asks only if Lean is present: the project has a `lean` entry
-     detected (`lean-toolchain`, `lakefile.*` or `.lean` files) or `lean --version`
-     verifies in the sandbox. If it is absent, it does not ask and says nothing.
-   - It is asked for a dispute about a specific property, not for every review.
-3. **Cleanup**, below.
+The person never writes or reads Lean. Their only part is the yes or no.
 
-## How a seat uses it
+## Who does what when Lean is on
 
-1. The Coder restates the claim as a Lean theorem over the smallest pure
-   model of the code (copy the logic; do not model the whole system). Illustrative sketch, not compiled here;
-   the proof script will need adjusting to the Lean and Mathlib version:
+| Seat | Part |
+|------|------|
+| **Researcher** | Drives it in research. Picks the **formal targets** (the logic worth proving), writes each claim in plain English with the code at `path:line`, marks it basic or advanced, and asks a Coder seat to model the advanced ones. Uses the results in the recommendation: a counterexample can reject a design before any code exists. Writes no Lean. |
+| **Coder** | **Writes all the Lean**: the model, the theorem and the proof, time-boxed, in `devops-skill/thoughts/non-final/formal-<seat-id>/`. Specifies first, then implements the real code to mirror the model, adds tests from the model's example values and counterexamples, and records `formal` rows in the Push JSON. |
+| **Reviewer** | Reads the statement and write-up first instead of re-deriving the logic. Checks that the statement says what the claim says, that the model matches the code at the cited lines, and the `notCovers` gap. Spends review effort on that gap, not on the proof. |
+| **QA** | Runs the Lean gate below. |
+| **Security** | Reviews lakefiles, dependency revisions, `unsafe`, `extern` and `implemented_by`, and any security-relevant claim (authorization, crypto, parsing). |
+| **Orchestrator** | Asks the questions above, passes the answer to every seat, and makes sure the formal targets are listed before a Coder starts. |
 
-```lean
-def old (xs : List Nat) : List Nat := xs.filter (· > 0) |>.map (· + 1)
-def new (xs : List Nat) : List Nat := xs.filterMap fun x => if x > 0 then some (x + 1) else none
+The Coder who wrote a proof does not judge it; a Reviewer does.
 
-theorem old_eq_new (xs : List Nat) : old xs = new xs := by
-  induction xs with
-  | nil => rfl
-  | cons x xs ih => by_cases h : x > 0 <;> simp [old, new, h] at * <;> simp [ih]
-```
+## Basic and advanced logic
 
-2. Time-box it. Use `lake build` in the sandbox; the proof lives in the thoughts folder
-   (`devops-skill/thoughts/non-final/`) unless the person says the project keeps it.
-3. Record the outcome in the review thread or brief: the statement, the model's source
-   `path:line`, the result, and what it does not cover (the target-language code).
-4. A disproof is the most useful result: the counterexample becomes a test in the
-   project's own language.
+- **Basic logic** is plain English (or the team's own language) in the brief, the
+  handoff and the thread. No Lean, no write-up. A single condition, a simple mapping, an
+  obvious loop, a rename.
+- **Advanced logic** is communicated as **Lean code plus a write-up** (Markdown, with
+  LaTeX for the mathematics where it helps) attached to the virtual PR. It is advanced if
+  any of these hold: an invariant spans several calls or threads; a rewrite's equivalence is
+  not obvious from the diff; arithmetic with bounds or overflow; an ordering, protocol or state
+  machine; a security-relevant check; a Reviewer asked about it twice.
+
+The write-up follows [proof-writeup-template.md](proof-writeup-template.md): claim, model
+and what it stands for, reasoning in prose, result, what it does not cover. It lives next
+to the `.lean` file, is linked from the Push JSON `formal` row and the review thread's
+"Formal (Lean)" section, and a line remark cites the id (for example "F2") instead of
+restating the argument. Both stay gitignored in `non-final/`; a proof the project wants to keep
+goes into `docs/` or the repository with the person's agreement.
+
+## The loop
+
+1. **Research.** Formal targets listed in the brief ([research-and-reuse.md](research-and-reuse.md)).
+   Advanced claims modelled and tried; a disproof changes the plan.
+2. **Code.** Lean model and theorem first; then the implementation and tests that mirror them.
+3. **Handoff.** Push JSON `formal` rows ([push-json.md](push-json.md)) and write-ups. The
+   Coder runs `formal_check` with `push` before handing off.
+4. **Review.** Reviewers check statement, trace and gap. A dispute ends in a proof or a
+   counterexample test, not another round of argument.
+5. **QA.** The Lean gate, below, then the usual final pass.
+
+## The Lean gate (QA, when Lean is on)
+
+Before PASS:
+
+- `lake build` is green for the Lean project in the sandbox, or the report says
+  `NOT RUN` with the reason.
+- `formal_check` (MCP) or `node scripts/devops-formal.mjs --push <push json>` reports no
+  problems and no `sorry`, `admit` or `axiom` in a file a row marks proved.
+- Every `native_decide`, `unsafe`, `extern` and `implemented_by` is named in a write-up with why it is
+  acceptable.
+- QA re-derives at least one statement from its claim in plain words (the statement is the part Lean cannot
+  check) and confirms the model matches the code at `covers`.
+- Each counterexample is a test in the project's language that fails on the old code and passes on the new.
+- The model's example values were run against the real code in its own language (a differential
+  check); the proof covers the model, not the code.
+
+A row marked `proved` that fails the rebuild or has a hole **blocks PASS**. A claim that is
+`gave-up` or `not-attempted` does not block; it is listed in the QA report with its `notCovers`.
 
 ## Safety
 
 A `lakefile.lean` and Lean macros are code that runs at build time, and `lake` downloads
-dependencies. Treat building someone else's Lean project like running untrusted code: only in the
-sandbox ([services-and-sandbox.md](services-and-sandbox.md)), with network only for the
-hosts the profile allows, dependencies pinned by revision, and `sorry`, `unsafe`,
-`@[extern]` and `@[implemented_by]` reviewed by hand because the proof does not cover them.
+dependencies. Treat building any Lean project as running untrusted code: only in the sandbox
+([services-and-sandbox.md](services-and-sandbox.md)), with network only for the hosts the
+profile allows, dependencies pinned by revision, and `sorry`, `unsafe`, `@[extern]` and
+`@[implemented_by]` reviewed by hand because the proof does not cover them.
 
 ## Cleanup while Lean is on
 
 When Lean is on for the goal, the cleanup skill ([devops-cleanup](../../devops-cleanup/SKILL.md))
-uses it for the steps where it helps: for a candidate that is a pure function (a
-split into helpers, a replaced duplicate, a rewritten branch), the Researcher
-names the equivalence claim in the plan and the Cleaner (a Coder) writes the theorem and proves it before the step
-counts as done. A step that cannot be proved in the time-box still goes ahead on its
-tests, and the plan says "tests only". Impure code, public API changes and anything
-the person has not approved are unaffected; proofs never replace the tests, the
-Reviewers' check that only structure changed, or QA's `cleanup_scan compare`.
-
-## Where this appears
-
-| Seat | What it does with Lean |
-|------|------------------------|
-| **Orchestrator** | Asks the yes/no question at the configured round, only when Lean is present, and passes the answer to the seats. |
-| **Researcher** | Names the claim in plain English in the brief's "Formal checks" when a pure-code claim needs more than tests. Writes no Lean. |
-| **Coder / Cleaner** | Writes the Lean model, theorem and proof, time-boxed, and records the result. |
-| **Reviewer** | Checks that the statement says what the dispute is about and that the model matches the code at the cited lines. |
-| **QA** | Confirms the recorded result is accurate and that target-language tests still pass. |
-| **Security** | Reviews lakefiles, dependency revisions and unsafe or extern declarations. |
+uses it for the steps where it helps: for a candidate that is a pure function (a split into helpers, a replaced
+duplicate, a rewritten branch), the Researcher names the equivalence claim in the plan and the Cleaner (a Coder)
+writes the theorem and proves it before the step counts as done. A step that cannot be proved in the time-box still
+goes ahead on its tests, and the plan says "tests only". Impure code, public API changes and anything the person has
+not approved are unaffected; proofs never replace the tests, the Reviewers' check that only structure changed, or
+QA's `cleanup_scan compare`.

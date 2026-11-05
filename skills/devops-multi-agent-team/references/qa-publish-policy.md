@@ -51,6 +51,15 @@ pass.
   could not run when required, do not claim a pass and do not publish; read
   the pushed head's result instead and name it.
 
+## The Lean gate (only when Lean is on for the goal)
+
+See [formal-check.md](formal-check.md). `lake build` green in the sandbox (or `NOT RUN` with the reason);
+`formal_check` with the Push JSON reports no problems and no `sorry`, `admit` or `axiom` in a file marked proved;
+every `native_decide`, `unsafe`, `extern` and `implemented_by` is justified in a write-up; QA re-derives one statement
+from its claim; each counterexample is a test in the project's language; the model's example values were run against the
+real code. A `proved` row that fails the rebuild or has a hole blocks PASS; `gave-up` and `not-attempted` are listed in
+the report and do not block.
+
 ## QA final pass (required before PASS)
 
 After the required commands pass, QA looks over the change one last

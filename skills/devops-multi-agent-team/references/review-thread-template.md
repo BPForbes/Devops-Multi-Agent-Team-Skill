@@ -37,6 +37,13 @@ are `issue (blocking)`. Comments and reimplementation findings are blocking.
 |----------|---------|-------|
 | <reviewer-id> | Changes requested / Satisfied | … |
 
+## Formal (Lean), only when Lean is on
+One row per Push JSON `formal` entry. Reviewers check the statement against the claim, the model against the code at
+`covers`, and the gap in `notCovers`; they do not re-derive a proved argument.
+| Id | Claim | Status | Statement matches claim | Model matches code | Gap accepted |
+|----|-------|--------|-------------------------|--------------------|--------------|
+| F1 | … | proved | yes / no | yes / no | yes / no |
+
 ## Line remarks (virtual PR)
 Reviewers leave remarks on specific lines here, never in the code. Over-commented
 lines, comments that restate code, and anything `comment_audit` finds that holds

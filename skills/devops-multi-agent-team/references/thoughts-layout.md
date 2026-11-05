@@ -25,7 +25,7 @@ alone. Check with `git check-ignore -v <path>`. Never `git add` anything under
 `security-`, `qa-`, `triage-` (named for the QA seat that opens it;
 add `-<n>` for a second), `goal-`, `research-`, `push-` (add `-<topic>` to any of them when a seat works
 several items). Also
-`repro-<topic>.md`, `side-<dept>.md`, `cr-<topic>.md`, and the
+`formal-<seat-id>/` (a folder: the Lean files and write-ups, [formal-check.md](formal-check.md); `.lake/` stays out), `repro-<topic>.md`, `side-<dept>.md`, `cr-<topic>.md`, and the
 Orchestrator's fixed-name `seat-registry.md`, `feedback-ledger.md`
 and `team-board.md` (append-only: seat | item | worktree | files and
 build-file sections touched | status)

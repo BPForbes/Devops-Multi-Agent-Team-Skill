@@ -79,11 +79,13 @@ Also record existing comments that are **wrong, stale, restate the code or are
 commented-out code** in that area, as candidates to delete (not as a license to
 sweep unrelated files). List them by `path:line` with one clause each.
 
-## 4b. Formal checks (optional)
+## 4b. Formal targets (only when Lean is on)
 
-If the project has Lean 4 and a claim about pure code (equivalence, an invariant, a child keeping its parent's
-promise) is in doubt, the brief may include a time-boxed formal check. See [formal-check.md](formal-check.md) for
-when, how and what a proof does not cover.
+When the person has said yes to Lean for the goal, research starts here: list the **formal targets**, the pure
+logic worth proving (invariants, equivalence of a rewrite, bounds, ordering, state machines, security checks), each
+claim in plain English with `path:line` and marked basic or advanced. A Coder models the advanced ones before any code
+is written, and a counterexample can reject a design. Basic logic stays plain English. See
+[formal-check.md](formal-check.md).
 
 ## 5. Brief template
 
@@ -93,7 +95,7 @@ when, how and what a proof does not cover.
 ## Module mind map (Mermaid) + extension points
 ## Reuse map (term | searched where | found | reuse / extend / new because)
 ## Comment-worthy code (path:line, why) and comments to delete (path:line, why)
-## Formal checks (optional; only when Lean is present and a pure-code claim needs more than tests)
+## Formal targets (only when Lean is on): claim, path:line, basic or advanced, result
 ## Options and recommendation (cited)
 ## Open questions for the human
 ```
