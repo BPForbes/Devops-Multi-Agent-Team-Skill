@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// Validates languages.json and services.json against their guides, using the same validators the server uses.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

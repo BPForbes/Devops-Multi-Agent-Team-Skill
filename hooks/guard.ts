@@ -1,13 +1,10 @@
-// Pure helpers: what a shell command would publish or branch, and what a QA note says.
-// No engine calls here so the tests need none.
-
 export type Action =
   | { kind: 'publish'; what: string }
   | { kind: 'branch'; name: string | undefined; what: string }
 
 const GIT_OPTIONS_WITH_ARGUMENT = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace'])
 
-/** Quoted text is data (a commit message that says "git push" publishes nothing). */
+/** Quoted text is data: a commit message that says "git push" publishes nothing. */
 const blankQuotes = (command: string): string =>
   command.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''")
 
@@ -42,7 +39,6 @@ function classifySegment(segment: string): Action | undefined {
   return undefined
 }
 
-/** Every publishing or branch-creating action in a shell command, in order. */
 export function classify(command: string): Action[] {
   return blankQuotes(command)
     .split(/&&|\|\||;|\||\n|\(|\)|`|\$\(/)
@@ -50,25 +46,21 @@ export function classify(command: string): Action[] {
     .filter((action): action is Action => action !== undefined)
 }
 
-/** The last `Publish gate:` line of a QA note, if it has one. */
 export function verdictOf(note: string): 'PASS' | 'BLOCKED' | undefined {
   const all = [...note.matchAll(/^Publish gate:\s*(PASS|BLOCKED)\b/gm)]
   return all.length === 0 ? undefined : (all[all.length - 1][1] as 'PASS' | 'BLOCKED')
 }
 
-/** Split `/devops` arguments into a word and the rest. */
 export function splitArgs(args: string): { word: string; rest: string } {
   const trimmed = args.trim()
   const space = trimmed.search(/\s/)
   return space === -1 ? { word: trimmed, rest: '' } : { word: trimmed.slice(0, space), rest: trimmed.slice(space).trim() }
 }
 
-/** A branch name the person typed, or undefined when it is not a plain ref name. */
 export function branchNameOf(text: string): string | undefined {
   return /^[A-Za-z0-9][A-Za-z0-9._\/-]{0,99}$/.test(text) && !text.includes('..') ? text : undefined
 }
 
-/** The simple commands in a shell line, quoted text blanked, in order. */
 export function classifySegments(command: string): string[] {
   return blankQuotes(command).split(/&&|\|\||;|\||\n|\(|\)|`|\$\(/).map(part => part.trim()).filter(part => part !== '')
 }

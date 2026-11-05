@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-// Research helpers: a module map (Mermaid) and a reuse search. Read-only, in-process, no subprocess,
-// no network. Used by the MCP tools `module_map` and `reuse_search` and by the Researcher seat.
-//
-//   node scripts/devops-research.mjs module-map --dest DIR [--json]
-//   node scripts/devops-research.mjs reuse-search --dest DIR term [term...]
-
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -32,7 +26,6 @@ const languageOf = (rel, table) => {
   return best?.id
 }
 
-/** The module a repository-relative path belongs to: its top-level directory, or the one under a container directory. */
 export function moduleOf(rel) {
   const parts = rel.split('/')
   if (parts.length === 1) return '(root)'
@@ -67,7 +60,6 @@ function importsOf(rel, text, language) {
   return out
 }
 
-/** Modules, their languages and the imports between them, as data and as a Mermaid graph. */
 export function moduleMap(destInput, roots) {
   const dest = resolveDest(destInput, roots)
   const found = walk(dest)
@@ -131,7 +123,6 @@ const COMMENT = /^\s*(?:\/\/|\/\*|\*|#|--|;|!|'''|"""|%|\(\*|<!--)/
 
 const redact = line => line.replace(SECRET_VALUE, '$1$2***')
 
-/** Where each term (or a spelling variant of it) already appears, grouped as definition, doc or use. */
 export function reuseSearch(destInput, terms, roots, { maxPerTerm = 20 } = {}) {
   const dest = resolveDest(destInput, roots)
   if (!Array.isArray(terms) || terms.length === 0 || terms.length > 12) throw new Error('give 1 to 12 terms')

@@ -67,7 +67,6 @@ function checkKeyOf(words: string[]): string | undefined {
   return second !== undefined && /^[a-z][a-z0-9:_-]*$/.test(second) ? `${first} ${second}` : first
 }
 
-/** The checks the profile's languages define, as keys like "cargo test" or "npm run". */
 async function knownChecks($: EngineInterface): Promise<Set<string>> {
   const root = await $.session.root()
   const text = await $.fs.read(`${root}/.devops/languages.json`).catch(() => $.fs.read(`${$.plugin.root}/languages.json`)).catch(() => '')
@@ -84,7 +83,6 @@ async function knownChecks($: EngineInterface): Promise<Set<string>> {
   return keys
 }
 
-/** Which known check, if any, a Bash command runs. */
 async function checkRunBy($: EngineInterface, command: string): Promise<string | undefined> {
   const known = await knownChecks($)
   for (const segment of classifySegments(command)) {
@@ -237,7 +235,6 @@ export const register: Register = on => {
     if (consumeAuthorization && ran.deny === undefined) await $.state.set({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const, false)
     if (ran.deny !== undefined || ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) === false) return ran
 
-    // Monitor: a failing validation command starts the bounded correction loop (monitoring.md).
     const check = await checkRunBy($, e.command)
     if (check === undefined) return ran
     const counts = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const)).value ?? {}

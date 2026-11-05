@@ -1,12 +1,4 @@
 #!/usr/bin/env node
-// Version tracking through git tags: read how the project changed between releases, plan the next
-// tag, create it locally. It runs `git` only with fixed argument lists (no shell, hooks off, no
-// network) and never pushes, moves or deletes a tag; publishing a tag is a gated push.
-//
-//   node scripts/devops-tags.mjs history [--dest DIR] [--limit N] [--save]
-//   node scripts/devops-tags.mjs plan    [--dest DIR] [--bump major|minor|patch] [--version X.Y.Z] [--ref REF]
-//   node scripts/devops-tags.mjs create  [--dest DIR] --version X.Y.Z [--message TEXT] [--ref REF] [--apply]
-
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -17,7 +9,7 @@ const SEMVER = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+
 const REF = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/
 const CONTAINERS = new Set(['src', 'packages', 'crates', 'apps', 'services', 'lib', 'libs', 'internal', 'cmd', 'modules', 'projects'])
 
-/** Run one fixed git command. Hooks, fsmonitor and external diff are off; the environment is bare (HOME only when a tag needs an identity). */
+/** Hooks, fsmonitor and external diff are off and the environment is bare, so a repository's own config cannot run anything. HOME is passed only when a tag needs an identity. */
 function git(dest, args, { identity = false } = {}) {
   const env = { PATH: process.env.PATH ?? '', GIT_TERMINAL_PROMPT: '0', GIT_PAGER: 'cat', GIT_CONFIG_NOSYSTEM: '1', LC_ALL: 'C' }
   if (identity && process.env.HOME) env.HOME = process.env.HOME
@@ -107,7 +99,6 @@ function readTags(dest) {
   })
 }
 
-/** How the project changed between consecutive semver tags, what is unreleased, and (with save) what changed since the last snapshot. */
 export function tagHistory(destInput, { limit = 30, save = false, roots } = {}) {
   const dest = resolveDest(destInput, roots)
   if (!git(dest, ['rev-parse', '--git-dir']).ok) throw new Error('not a git repository (or git refuses this folder: check ownership)')
@@ -158,7 +149,6 @@ function resolveCommit(dest, ref) {
   return out.out.trim()
 }
 
-/** The next tag, from the latest release tag and either a bump or an explicit version. Changes nothing. */
 export function tagPlan(destInput, { bump, version, ref = 'HEAD', roots } = {}) {
   const dest = resolveDest(destInput, roots)
   const history = tagHistory(dest, { limit: 1, roots })
@@ -193,7 +183,6 @@ export function tagPlan(destInput, { bump, version, ref = 'HEAD', roots } = {}) 
   }
 }
 
-/** Create one annotated local tag. Never moves, deletes or pushes. */
 export function tagCreate(destInput, { version, message, ref = 'HEAD', apply = false, roots } = {}) {
   const dest = resolveDest(destInput, roots)
   const parsed = parseSemver(version ?? '')

@@ -1,17 +1,9 @@
 #!/usr/bin/env node
-// MCP server for devops-multi-agent-team: set up the skill, agents, commands, language
-// profile, services and sandbox for ANY project from a chat. Dependency-free (stdio, JSON-RPC 2.0).
-//
-// Sandbox of the server itself:
-//   - it touches only the project folders it is allowed to (DEVOPS_MCP_ROOTS, else the client's
-//     MCP roots, else its working directory), never "/" or the home folder, never through symlinks;
-//   - it writes only .cursor/, .claude/, .devops/ and .gitignore inside that project, and every
-//     write tool defaults to a plan (apply=false);
-//   - it runs two kinds of program, both with fixed argument lists, no shell and a bare environment:
-//     "<tool> --version" checks for ids in the data files (5 s), and read-only `git` commands (plus
-//     one local `git tag -a` on request) for the tag tools, with hooks off. Set DEVOPS_MCP_NO_GIT=1
-//     to disable the tag tools. It never runs a command that appears in a language entry;
-//   - it makes no network requests and never reads or returns a secret (env vars are reported as set/unset).
+// The server's own sandbox: it touches only the folders it is allowed (DEVOPS_MCP_ROOTS, else the
+// client's MCP roots, else its working directory), writes only what the tool names, plans before it
+// writes, runs only fixed `<tool> --version` and read-only `git` argument lists (no shell, bare
+// environment, DEVOPS_MCP_NO_GIT=1 turns the git tools off), makes no network request and never
+// returns a secret.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -37,8 +29,6 @@ const INSTRUCTIONS = [
   'Researchers: read documentation first, then module_map and reuse_search before any code is written.',
 ].join(' ')
 
-// ------------------------------------------------------------------ roots
-
 let clientRoots = []
 
 function allowedRoots() {
@@ -59,8 +49,6 @@ function projectDir(args) {
   return resolveDest(typeof args.dest === 'string' && args.dest !== '' ? args.dest : roots[0], roots)
 }
 
-// ------------------------------------------------------------------ argument helpers
-
 function idList(value, name, { allow = ['auto'] } = {}) {
   if (value === undefined) return 'auto'
   if (typeof value === 'string' && allow.includes(value)) return value
@@ -70,8 +58,6 @@ function idList(value, name, { allow = ['auto'] } = {}) {
 const optionalBool = (args, key, fallback) => (args[key] === undefined ? fallback : args[key] === true)
 
 const text = value => ({ content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }], ...(typeof value === 'object' ? { structuredContent: value } : {}) })
-
-// ------------------------------------------------------------------ tools
 
 const dest = { type: 'string', description: 'Project folder. Defaults to the first folder the client opened (or DEVOPS_MCP_ROOTS).' }
 const langs = { description: '"auto" (detect) or a list of language ids from list_languages. Layers do not restrict: any id works anywhere.', anyOf: [{ type: 'string', enum: ['auto'] }, { type: 'array', items: { type: 'string' } }] }
@@ -288,7 +274,7 @@ function gitAllowed() {
   if (process.env.DEVOPS_MCP_NO_GIT === '1') throw new Error('the tag tools are disabled (DEVOPS_MCP_NO_GIT=1)')
 }
 
-/** Catalog reads need no project: use the first allowed root when there is one, else the package itself. */
+/** Catalog reads work with no project open. */
 function projectDirOrPackage(args) {
   try {
     return projectDir(args)
@@ -296,8 +282,6 @@ function projectDirOrPackage(args) {
     return PACKAGE_ROOT
   }
 }
-
-// ------------------------------------------------------------------ resources and prompts
 
 const RESOURCES = [
   { uri: 'devops://languages', name: 'languages.json', mimeType: 'application/json', file: 'languages.json' },
@@ -328,8 +312,6 @@ Never run the project's own build or deploy commands yourself; use sandbox_plan 
     build: a => `Define the language "${a.name ?? '(name it)'}" for this project. Call get_language on a similar one to see the entry shape, draft a complete entry (detect markers, install lines, validate commands, security tools or null with unanalysed, style, interactsWith, sandboxImage or null; toolchain.verify must be "<tool> --version"), call add_language with apply=false and show me the result, and save it with apply=true only after I agree.`,
   },
 ]
-
-// ------------------------------------------------------------------ JSON-RPC
 
 const send = message => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\n')
 const reply = (id, result) => send({ id, result })

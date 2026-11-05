@@ -1,17 +1,4 @@
 #!/usr/bin/env node
-// devops-setup: detect the languages in a project and install the
-// devops-multi-agent-team skill, agents, commands and project profile.
-//
-//   node scripts/devops-setup.mjs list
-//   node scripts/devops-setup.mjs detect  [--dest DIR] [--json]
-//   node scripts/devops-setup.mjs profile [--dest DIR] [--lang auto|id,id]
-//   node scripts/devops-setup.mjs install [--dest DIR] [--target cursor|claude|both]
-//                                         [--lang auto|id,id] [--force] [--dry-run]
-//
-// No dependencies; Node 18 or newer. This file is the one place that
-// knows how to read languages.json: the Claude mod calls `detect --json`
-// instead of re-implementing it.
-
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -28,9 +15,7 @@ const MAX_DEPTH = 5
 const MAX_ENTRIES = 20000
 const GITIGNORE_MARKER = '# devops-multi-agent-team'
 
-// ---------------------------------------------------------------- data
-
-/** languages.json from the project's .devops/ (if installed) else the package, plus .devops/languages.local.json merged by id. */
+/** The project's .devops/languages.json if installed, else the package's; .devops/languages.local.json is merged over it by id. */
 export function loadLanguages(dest) {
   const projectCopy = path.join(dest, '.devops', 'languages.json')
   const base = JSON.parse(fs.readFileSync(fs.existsSync(projectCopy) ? projectCopy : path.join(PACKAGE_ROOT, 'languages.json'), 'utf8'))
@@ -42,17 +27,14 @@ export function loadLanguages(dest) {
   return { ...base, layers: { ...base.layers, ...(local.layers ?? {}) }, languages: [...byId.values()] }
 }
 
-/** services.json from the project's .devops/ (if installed) else the package. */
 export function loadServices(dest) {
   const projectCopy = path.join(dest, '.devops', 'services.json')
   return JSON.parse(fs.readFileSync(fs.existsSync(projectCopy) ? projectCopy : path.join(PACKAGE_ROOT, 'services.json'), 'utf8'))
 }
 
-// ---------------------------------------------------------------- validation (shared by check-languages and the MCP server)
-
 export const VERIFY_ARGS = new Set(['--version', '-version', 'version', '-v', '-V', '--client'])
 
-/** `tool --version` style text -> argv, or null when it is anything else (paths, shell, other flags). */
+/** Argv for a `tool --version` style check, or null for anything else: paths, shell syntax and other flags are never run. */
 export function parseVerify(text) {
   if (typeof text !== 'string') return null
   const words = text.trim().split(/\s+/)
@@ -64,7 +46,7 @@ export function parseVerify(text) {
 const KEBAB = /^[a-z][a-z0-9-]*$/
 const isStringList = value => Array.isArray(value) && value.every(item => typeof item === 'string')
 
-/** Problems with one language entry. `partial` accepts an override of a known id (only the given fields are checked). */
+/** `partial` is for an override of a known id: only the fields given are checked. */
 export function validateLanguage(lang, ctx, { partial = false } = {}) {
   const problems = []
   const at = `language ${lang?.id ?? '(no id)'}`
@@ -99,7 +81,6 @@ export function validateLanguage(lang, ctx, { partial = false } = {}) {
   return problems
 }
 
-/** Problems with one service entry. */
 export function validateService(svc, ctx) {
   const problems = []
   const at = `service ${svc?.id ?? '(no id)'}`
@@ -122,8 +103,6 @@ export function validateService(svc, ctx) {
   }
   return problems
 }
-
-// ---------------------------------------------------------------- detect
 
 export function walk(root) {
   const files = []
@@ -181,19 +160,16 @@ function detectIn(items, found) {
   return hits.sort((a, b) => b.evidence.length - a.evidence.length || b.count - a.count || a.id.localeCompare(b.id))
 }
 
-/** Which languages the project at `dest` uses, with the evidence for each, strongest first. */
 export function detectLanguages(dest, config = loadLanguages(dest), found = walk(dest)) {
   return detectIn(config.languages, found).map(({ category, ...rest }) => rest)
 }
 
-/** Which supporting services (Docker, cloud, VM...) the project's files show. API-only services are never auto-detected. */
+/** API-only services have no files to find and are never auto-detected. */
 export function detectServices(dest, services = loadServices(dest), found = walk(dest)) {
   return detectIn(services.services.filter(s => !s.detectByConfig), found).map(({ layers, ...rest }) => rest)
 }
 
-// ---------------------------------------------------------------- paths and safe writes
-
-/** A project directory the caller may touch: real, a directory, not `/` or the home directory itself, and inside `roots` when given. */
+/** Rejects `/` and the home directory itself as too broad to be a project. */
 export function resolveDest(dest, roots) {
   let real
   try {
@@ -211,7 +187,7 @@ export function resolveDest(dest, roots) {
 
 export const lexists = p => { try { fs.lstatSync(p); return true } catch { return false } }
 
-/** Refuse any write whose real location is outside `root`, or that would replace a symbolic link. */
+/** Checks the real location, so a symlink cannot lead a write out of `root`. */
 export function assertInside(root, target) {
   let probe = target
   while (!lexists(probe)) probe = path.dirname(probe)
@@ -219,8 +195,6 @@ export function assertInside(root, target) {
   const real = fs.realpathSync(probe)
   if (real !== root && !real.startsWith(root + path.sep)) throw new Error(`refusing to write outside the project: ${target}`)
 }
-
-// ---------------------------------------------------------------- profile
 
 function resolveSelected(config, selection, detected) {
   const ids = selection === 'auto' ? detected.map(d => d.id) : Array.isArray(selection) ? selection : selection.split(',').map(s => s.trim()).filter(Boolean)
@@ -246,14 +220,9 @@ function section(selected, render, empty = '_No language selected. Add rows by h
   return selected.length === 0 ? empty : selected.map(render).join('\n\n')
 }
 
-/** Shell-quote one word for a POSIX shell (display only; nothing here runs it). */
 const quote = word => (/^[A-Za-z0-9_@%+=:,./-]+$/.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`)
 
-/**
- * The container command that runs `cmd` under the sandbox policy. Returns { argv, shell };
- * nothing is executed. Throws on an unknown phase, a bad image or path, a secret-looking
- * pass-through variable, or any flag the policy's `never` list names.
- */
+/** Builds the sandbox command only; nothing is executed. `shell` is for display. */
 export function sandboxArgv(policy, { phase = 'test', image, cmd, worktree, project, engine } = {}) {
   const phaseOverride = policy.phases?.[phase]
   if (!phaseOverride) throw new Error(`unknown sandbox phase "${phase}" (known: ${Object.keys(policy.phases ?? {}).join(', ')})`)
@@ -452,9 +421,7 @@ export function renderProfile(config, selected, dest, ctx = {}) {
     .replace('{{NOTES}}', notes)
 }
 
-// ---------------------------------------------------------------- toolchain check (the only thing here that runs a program)
-
-/** Run `<tool> --version` style checks only: argv from parseVerify, no shell, a bare PATH, 5 s. */
+/** The only place a program is run: what parseVerify accepts, no shell, bare PATH. */
 export function checkTool(verify) {
   const argv = parseVerify(verify)
   if (argv === null) return { checked: false, installed: null, reason: 'no version check defined' }
@@ -465,7 +432,7 @@ export function checkTool(verify) {
   return { checked: true, installed: ran.status === 0, version: text, reason: ran.status === 0 ? undefined : `exit ${ran.status}` }
 }
 
-/** For each requested language / service id: is its tool installed? Env vars are reported by NAME and set/unset only. */
+/** Environment variables are reported by name as set or unset, never by value. */
 export function checkToolchain(dest, ids) {
   const config = loadLanguages(dest)
   const services = loadServices(dest)
@@ -479,9 +446,6 @@ export function checkToolchain(dest, ids) {
   })
 }
 
-// ---------------------------------------------------------------- local language overrides
-
-/** Validate and (with apply) merge one language into .devops/languages.local.json. */
 export function addLocalLanguage(destInput, entry, { apply = false } = {}) {
   const dest = resolveDest(destInput)
   const config = loadLanguages(dest)
@@ -505,8 +469,6 @@ export function addLocalLanguage(destInput, entry, { apply = false } = {}) {
   }
   return { ok: true, problems: [], applied: apply, file: target, replaced: exists }
 }
-
-// ---------------------------------------------------------------- install
 
 const GITIGNORE_BEGIN = '# >>> devops-multi-agent-team (managed block; do not edit between the markers)'
 const GITIGNORE_END = '# <<< devops-multi-agent-team'
@@ -554,7 +516,6 @@ function writeText(target, text, opts, report) {
   fs.writeFileSync(target, text)
 }
 
-/** Add or repair the managed .gitignore block so .devops/thoughts/ (except its .gitkeep) is never committed. */
 export function ensureGitignore(root, opts, report) {
   const target = path.join(root, '.gitignore')
   const current = lexists(target) ? fs.readFileSync(target, 'utf8') : ''
@@ -583,7 +544,6 @@ export function ensureGitignore(root, opts, report) {
   fs.writeFileSync(target, next)
 }
 
-/** True when the managed block is present and complete. */
 export function gitignoreOk(root) {
   const target = path.join(root, '.gitignore')
   if (!lexists(target)) return false
@@ -628,7 +588,6 @@ export function install({ dest: destInput, roots, target = 'both', lang = 'auto'
   return report
 }
 
-/** What is installed in a project, read-only. */
 export function status(destInput, roots) {
   const dest = resolveDest(destInput, roots)
   const has = rel => lexists(path.join(dest, rel))
@@ -646,8 +605,6 @@ export function status(destInput, roots) {
     detectedServices: detectServices(dest).map(d => d.id),
   }
 }
-
-// ---------------------------------------------------------------- cli
 
 function parseArgs(argv) {
   const args = { _: [], dest: process.cwd(), target: 'both', lang: 'auto', services: 'auto', phase: 'test', sandbox: true, force: false, dryRun: false, json: false, withServices: false, image: undefined }

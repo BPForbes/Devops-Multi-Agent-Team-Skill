@@ -17,7 +17,6 @@ function tmp(files = {}) {
   return dir
 }
 
-/** A client for one server process. `onRequest` answers requests the server makes (roots/list). */
 function client({ env = {}, cwd = os.tmpdir(), capabilities = {}, onRequest } = {}) {
   const child = spawn('node', [SERVER], { cwd, env: { PATH: process.env.PATH, ...env }, stdio: ['pipe', 'pipe', 'inherit'] })
   const waiting = new Map()

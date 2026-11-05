@@ -8,7 +8,6 @@ const assert = {
 
 const QA_DIR = '/work/.devops/thoughts/non-finalized'
 
-/** The engine beneath the mod, for one test: a project root, (optionally) a QA note, and state in a Map. */
 function engine(on: any, note: string | undefined) {
   const state = new Map<string, unknown>()
   on('state.get', (_: unknown, e: { key: string }) => ({ value: { value: state.get(e.key), version: 1 } }))
