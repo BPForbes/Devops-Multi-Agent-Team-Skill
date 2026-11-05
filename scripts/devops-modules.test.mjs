@@ -279,3 +279,12 @@ test('the OOP principles are documented with the video examples and wired into t
   assert.ok(fs.existsSync(path.join(dir, '.claude/skills/devops-multi-agent-team/references/oop-principles.md')))
   assert.match(fs.readFileSync(path.join(dir, '.devops/project.md'), 'utf8'), /Extension points/)
 })
+
+test('the clean-code topics page covers the series groups, states its limits and is installed', () => {
+  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+  const doc = fs.readFileSync(path.join(root, 'skills/devops-multi-agent-team/references/clean-code-topics.md'), 'utf8')
+  for (const part of ['Wrap third-party code', 'Write try-catch first', 'The special case pattern', 'The Law of Demeter', 'Feature envy', 'Hidden classes', 'F.I.R.S.T.', 'The three laws of TDD', 'Strategic closure', 'Overengineering', 'Only the lesson titles', 's4.codes']) assert.ok(doc.includes(part), part)
+  const dir = project({ 'a.py': '' })
+  install({ dest: dir, target: 'claude' })
+  assert.ok(fs.existsSync(path.join(dir, '.claude/skills/devops-multi-agent-team/references/clean-code-topics.md')))
+})

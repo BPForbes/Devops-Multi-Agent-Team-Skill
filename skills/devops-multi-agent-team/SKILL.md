@@ -161,6 +161,7 @@ multi-branch merge rule: [virtual-git.md](references/virtual-git.md).
 | Topic | File |
 |-------|------|
 | **Clean code** (names, small functions, DRY with care, no magic numbers, simplicity) | [clean-code.md](references/clean-code.md) |
+| **Clean-code topics** (error handling, boundaries, unit tests, Law of Demeter, special case, feature envy, overengineering) | [clean-code-topics.md](references/clean-code-topics.md) |
 | **Single purpose, closed for modification, Liskov substitution** (with the Shape and Bird examples) | [oop-principles.md](references/oop-principles.md) |
 | Documentation first, module mind map, reuse | [research-and-reuse.md](references/research-and-reuse.md) |
 | Comments and doc comments (Reviewers strict) | [comment-standards.md](references/comment-standards.md) |

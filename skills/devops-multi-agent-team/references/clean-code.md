@@ -73,7 +73,9 @@ the unreferenced items in "Beyond the four sources" as the team's own additions.
    responsibility per type; open for extension, closed for modification; subtypes
    substitutable for their base; small, specific interfaces; depend on abstractions,
    not concrete types. Closed-for-modification and Liskov substitution are binding
-   rules with their own checks: [oop-principles.md](oop-principles.md).
+   rules with their own checks: [oop-principles.md](oop-principles.md). Topic-by-topic
+   handling (errors, boundaries, tests, objects and data, formatting, classes):
+   [clean-code-topics.md](clean-code-topics.md).
 10. **Tested and refactored continuously.** Behavior has tests, the tests are clean
     too, and code is improved in small steps under version control, one kind of
     change per commit. Leave code a little cleaner than you found it, within the
