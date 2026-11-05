@@ -18,9 +18,17 @@ no project is required to have Lean, and nothing here blocks a push.
 - Record the result honestly: **proved**, **disproved (counterexample)**, **not
   attempted** or **gave up (time-boxed)**. A `sorry` is "not proved", never "proved".
 
+## Who writes the Lean
+
+**AI Coders write all of it**: the model, the theorem statement and the proof. The person is never asked
+to write or read Lean; their only part is the yes or no above. The Researcher names the claim in plain
+English (what must hold, for which code at `path:line`) and does not write Lean. The Coder who wrote the
+proof is not the one who judges it: a Reviewer checks that the statement says what the claim says and that the model
+matches the code, because Lean checks the proof but cannot check that the statement is the right one.
+
 ## When it is considered
 
-1. **Researcher**, in the brief's "Formal checks" section, when a claim is about
+1. **Researcher**, in the brief's "Formal checks" section (the claim in plain English; a Coder writes the Lean), when a claim is about
    equivalence or an invariant of pure code and tests alone leave doubt.
 2. **Review rounds.** The profile sets `Formal check rounds` (default 3). When the
    same review thread reaches that many rounds with the Coder and Reviewers still
@@ -38,7 +46,7 @@ no project is required to have Lean, and nothing here blocks a push.
 
 ## How a seat uses it
 
-1. State the property in plain English, then as a Lean theorem over the smallest pure
+1. The Coder restates the claim as a Lean theorem over the smallest pure
    model of the code (copy the logic; do not model the whole system). Illustrative sketch, not compiled here;
    the proof script will need adjusting to the Lean and Mathlib version:
 
@@ -72,7 +80,7 @@ hosts the profile allows, dependencies pinned by revision, and `sorry`, `unsafe`
 When Lean is on for the goal, the cleanup skill ([devops-cleanup](../../devops-cleanup/SKILL.md))
 uses it for the steps where it helps: for a candidate that is a pure function (a
 split into helpers, a replaced duplicate, a rewritten branch), the Researcher
-writes the equivalence theorem in the plan and the Cleaner proves it before the step
+names the equivalence claim in the plan and the Cleaner (a Coder) writes the theorem and proves it before the step
 counts as done. A step that cannot be proved in the time-box still goes ahead on its
 tests, and the plan says "tests only". Impure code, public API changes and anything
 the person has not approved are unaffected; proofs never replace the tests, the
@@ -83,8 +91,8 @@ Reviewers' check that only structure changed, or QA's `cleanup_scan compare`.
 | Seat | What it does with Lean |
 |------|------------------------|
 | **Orchestrator** | Asks the yes/no question at the configured round, only when Lean is present, and passes the answer to the seats. |
-| **Researcher** | Adds "Formal checks" to the brief when a pure-code claim needs more than tests. |
-| **Coder / Cleaner** | Writes the model and proof, time-boxed, and records the result. |
+| **Researcher** | Names the claim in plain English in the brief's "Formal checks" when a pure-code claim needs more than tests. Writes no Lean. |
+| **Coder / Cleaner** | Writes the Lean model, theorem and proof, time-boxed, and records the result. |
 | **Reviewer** | Checks that the statement says what the dispute is about and that the model matches the code at the cited lines. |
 | **QA** | Confirms the recorded result is accurate and that target-language tests still pass. |
 | **Security** | Reviews lakefiles, dependency revisions and unsafe or extern declarations. |

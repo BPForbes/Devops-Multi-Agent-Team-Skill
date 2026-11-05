@@ -296,7 +296,7 @@ test('Lean 4 is a language entry and an optional formal check with a review-roun
   assert.ok(lean && lean.security.unanalysed && lean.detect.files.includes('lean-toolchain'))
   assert.ok(lean.interactsWith.some(e => e.with === 'python') && lean.interactsWith.some(e => e.with === 'java'))
   const doc = read('skills/devops-multi-agent-team/references/formal-check.md')
-  for (const part of ['no Python or Java backend', 'Formal check rounds', 'Use Lean', 'plain **yes**', 'Cleanup while Lean is on', 'sorry', 'sandbox']) assert.ok(doc.includes(part), part)
+  for (const part of ['no Python or Java backend', 'Formal check rounds', 'Use Lean', 'plain **yes**', 'Cleanup while Lean is on', 'AI Coders write all of it', 'Writes no Lean', 'sorry', 'sandbox']) assert.ok(doc.includes(part), part)
   assert.match(read('skills/devops-multi-agent-team/SKILL.md'), /Use Lean/)
   assert.match(read('skills/devops-cleanup/SKILL.md'), /## Lean \(optional\)/)
   assert.match(read('templates/project.md'), /Formal check rounds/)

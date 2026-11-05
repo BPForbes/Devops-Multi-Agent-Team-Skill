@@ -85,7 +85,7 @@ tests for a hierarchy). See oop-principles.md.
 
 ## With Lean
 
-Only when the person has said yes for this goal. For a step that rewrites a pure function, state
+Only when the person has said yes for this goal. For a step that rewrites a pure function, the Cleaner (an AI Coder) states
 `theorem old_eq_new : ∀ x, old x = new x` over a small Lean model of both versions and prove it, time-boxed. Record
 proved, disproved (the counterexample becomes a test) or tests only. A proof about the Lean model does not cover
 Python or Java code; their tests still run. See formal-check.md.

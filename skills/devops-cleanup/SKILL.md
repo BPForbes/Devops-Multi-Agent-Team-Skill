@@ -73,7 +73,7 @@ parameter limits, flag arguments, magic numbers, vague names, and noisy or comme
 ## Lean (optional)
 
 If the person said yes to Lean for this goal ([formal-check.md](../devops-multi-agent-team/references/formal-check.md)),
-the plan adds an equivalence theorem for each step that changes a pure function, and the Cleaner proves it before
+the plan adds an equivalence theorem for each step that changes a pure function, and the Cleaner (an AI Coder, never the person) writes and proves it before
 the step counts as done. A step that cannot be proved in the time-box goes ahead on its tests and the plan says
 "tests only". Proofs never replace the tests, the Reviewers' check or QA's `compare`.
 

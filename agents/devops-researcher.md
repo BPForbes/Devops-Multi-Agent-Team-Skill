@@ -54,7 +54,7 @@ and [version-tags.md](../skills/devops-multi-agent-team/references/version-tags.
    forbidden edges. Read the last tag-to-tag summaries (`tag_history`) to see
    which modules change often.
 3a. **Note the extension points.** For each parent type, interface or registry the change could extend, record where it is declared, who extends it today, and any place that switches on a concrete type instead (those are where new variants will cost an edit).
-3c. **Formal checks.** If Lean is present and a pure-code claim needs more than tests, add a time-boxed formal check to the brief ([formal-check.md](../skills/devops-multi-agent-team/references/formal-check.md)).
+3c. **Formal checks.** If Lean is present and a pure-code claim needs more than tests, name the claim in plain English in the brief for a Coder to write in Lean; you write no Lean ([formal-check.md](../skills/devops-multi-agent-team/references/formal-check.md)).
 3b. **Double-check reuse.** Search every noun and verb of the new concept
    (`reuse_search`, plus the language's own search), also under other names and
    in callers of the nearest neighbour. For each find write reuse as is,
