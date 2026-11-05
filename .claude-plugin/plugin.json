@@ -2,5 +2,9 @@
   "name": "devops-multi-agent-team",
   "version": "0.1.0",
   "description": "DevOps multi-agent team: skill, agents, commands and a language-aware mod that shows detected languages and gates pushes behind QA.",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "license": "MIT",
+  "author": {
+    "name": "bpforbes"
+  }
 }

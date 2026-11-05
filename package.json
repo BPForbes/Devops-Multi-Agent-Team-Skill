@@ -4,10 +4,15 @@
   "private": true,
   "description": "DevOps multi-agent team skill, agents, commands, language setup and Claude mod",
   "type": "module",
-  "bin": { "devops-setup": "scripts/devops-setup.mjs" },
+  "bin": {
+    "devops-setup": "scripts/devops-setup.mjs"
+  },
   "scripts": {
     "check": "node scripts/check-languages.mjs",
     "test": "node scripts/check-languages.mjs && node --test scripts/devops-setup.test.mjs && claude plugin validate . && claude plugin test ."
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
 }

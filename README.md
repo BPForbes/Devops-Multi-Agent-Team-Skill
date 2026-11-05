@@ -120,5 +120,4 @@ which the skill treats as taking precedence.
 
 ## Licence
 
-None chosen yet. Add a `LICENSE` file (or an SPDX `license` in
-`.claude-plugin/plugin.json`) before sharing the repository.
+MIT, see [LICENSE](LICENSE).
