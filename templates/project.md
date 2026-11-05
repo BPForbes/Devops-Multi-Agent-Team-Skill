@@ -89,6 +89,7 @@ pinning them in tooling.
 - **Shared files** (claim on `team-board.md` before editing): `<build files, lockfiles, shared schemas, .gitignore>`
 - **Release rules:** `<changelog / version / lock rules the QA seat checks, or "none">`
 - **Tooling wired:** CI `<GitHub Actions | Buildkite | none>` · quality `<Sonar | none>` · security `<Snyk | none>` · tickets `<Linear | GitHub issues | none>` · browser `<MCP | none>`
+- **Story catalog:** project code `<XX>`, baseline `<branch sha>`, linked catalogs `<other repos' .devops/stories paths>`, issue tracker `<GitHub issues>`
 - **Docs to read first** (the Researcher reads these before any code): `<README, docs/, ADRs, .tex sources, runbooks, schema files>`
 - **Test directories** (weakened-test checks look here): `<tests/, src/**/tests.rs, **/__tests__>`
 - **Blocking boundary rules** (a Reviewer blocks a change that breaks one): `<e.g. the kernel only orchestrates drivers; the web layer never reads the database>`

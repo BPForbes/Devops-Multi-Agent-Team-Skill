@@ -55,13 +55,13 @@ function client({ env = {}, cwd = os.tmpdir(), capabilities = {}, onRequest } = 
   return ready()
 }
 
-test('initialize negotiates, lists 19 tools, prompts and resources', async () => {
+test('initialize negotiates, lists 25 tools, prompts and resources', async () => {
   const root = tmp()
   const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
   try {
     const tools = (await c.rpc('tools/list')).result.tools.map(t => t.name)
-    for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit']) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 19)
+    for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance']) assert.ok(tools.includes(name), name)
+    assert.equal(tools.length, 25)
     const writers = (await c.rpc('tools/list')).result.tools.filter(t => t.name === 'install_devops_team')
     assert.equal(writers[0].annotations.destructiveHint, false)
     assert.ok((await c.rpc('prompts/list')).result.prompts.some(p => p.name === 'setup_project'))
@@ -237,4 +237,36 @@ test('comment_audit works through chat on a staged change and is read-only', asy
   } finally { c.close() }
   const off = await client({ env: { DEVOPS_MCP_ROOTS: root, DEVOPS_MCP_NO_GIT: '1' } })
   try { assert.match((await off.call('comment_audit', { staged: true })).text, /disabled/) } finally { off.close() }
+})
+
+test('stories through chat: create, link, graph two projects, check, guide', async () => {
+  const root = tmp({ 'Makefile': 'CC=cc\nall: build\n' })
+  const { execFileSync } = await import('node:child_process')
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root })
+  execFileSync('git', ['add', '-A'], { cwd: root })
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'base'], { cwd: root })
+  const other = tmp({})
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: [root, other].join(path.delimiter) } })
+  try {
+    await c.call('install_devops_team', { dest: root, target: 'claude', apply: true })
+    await c.call('install_devops_team', { dest: other, target: 'claude', apply: true })
+    assert.equal((await c.call('story_new', { dest: root, id: 'KQ-01', title: 'first' })).json().applied, false)
+    assert.ok(!fs.existsSync(path.join(root, '.devops/stories/KQ-01.md')))
+    await c.call('story_new', { dest: root, id: 'KQ-01', title: 'first', apply: true })
+    await c.call('story_new', { dest: root, id: 'KQ-02', title: 'second', dependsOn: ['KQ-01'], apply: true })
+    await c.call('story_new', { dest: other, id: 'FL-01', title: 'consumer', dependsOn: ['KQ-02'], apply: true })
+    assert.ok((await c.call('story_new', { dest: root, id: 'KQ-01', title: 'dup', apply: true })).isError)
+    await c.call('story_link', { dest: root, from: 'KQ-02', to: 'KQ-01', relation: 'depends-on', apply: true })
+    await c.call('story_link', { dest: root, from: 'KQ-02', to: 'FL-01', relation: 'shares-contract', apply: true })
+    const one = (await c.call('story_graph', { dest: root })).json()
+    assert.deepEqual(one.levels[0], ['KQ-01'])
+    const both = (await c.call('story_graph', { dests: [root, other] })).json()
+    assert.ok(both.stories === 3 && both.crossProject.some(e => e.from === 'KQ-02' && e.to === 'FL-01'))
+    assert.ok(both.problems.some(p => p.startsWith('inverse-missing')), 'FL-01 depends on KQ-02, but KQ-02 does not list it as needed by')
+    const parsed = (await c.call('story_parse', { text: '> **Catalog entry FL-22** · project: **FLINSTONE · C**\n| **Status** | PROPOSED |\n| **Depends on** | KQ-02 |', title: 'FL-22: x' })).json()
+    assert.deepEqual([parsed.id, parsed.status, parsed.dependsOn], ['FL-22', 'PROPOSED', ['KQ-02']])
+    assert.equal((await c.call('story_check', { dest: root, id: 'KQ-01' })).json().ok, false)
+    assert.match((await c.call('story_guidance', { dest: root })).json().text, /Ready to start: KQ-01/)
+    assert.ok((await c.call('story_graph', { dests: [os.tmpdir()] })).isError)
+  } finally { c.close() }
 })

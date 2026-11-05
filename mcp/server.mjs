@@ -14,6 +14,7 @@ import {
 } from '../scripts/devops-setup.mjs'
 import { commentAudit } from '../scripts/devops-comments.mjs'
 import { ghasPlan } from '../scripts/devops-ghas.mjs'
+import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, parseStory } from '../scripts/devops-stories.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 
@@ -279,6 +280,67 @@ const TOOLS = [
       gitAllowed()
       return commentAudit(projectDir(args), { base: args.base, head: args.head, staged: optionalBool(args, 'staged', false), listed: args.listed, roots: allowedRoots() })
     },
+  },
+  {
+    name: 'story_parse',
+    description: 'Parse a story written in the FL/KQ format (a GitHub issue body or a story file) into structure: catalog id, project, baseline sha, status, depends on, needed by, files, OLD blocks (path, lines, text) and NEW blocks (compiled or not), and which sections are present. Pass the text you read from the issue. Pure; reads nothing from the project.',
+    inputSchema: { type: 'object', properties: { text: { type: 'string', maxLength: 300000 }, title: { type: 'string', maxLength: 300 } }, required: ['text'], additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => parseStory(args.text, { title: args.title }),
+  },
+  {
+    name: 'story_graph',
+    description: 'Link the stories of one or more catalogs (.devops/stories/catalog.json; pass several `dests` to tie two projects together, for example Flinstone and KeyQuorum). Returns the dependency order by level, what is ready to start, the longest chain, cross-project edges, the pattern index, a Mermaid graph, and every problem: unknown ids, missing inverse links, cycles, bad statuses, SUPERSEDED without a successor; plus warnings such as DONE before its dependency. Read-only.',
+    inputSchema: { type: 'object', properties: { dest, dests: { type: 'array', items: { type: 'string' }, maxItems: 8 } }, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => {
+      const paths = Array.isArray(args.dests) && args.dests.length > 0 ? args.dests : [projectDir(args)]
+      return buildGraph(paths.map(p => loadCatalog(p, allowedRoots()).catalog))
+    },
+  },
+  {
+    name: 'story_new',
+    description: 'Create a story from the template and add it to the catalog (plan unless apply=true). Fills the id, project, baseline, status, dependency graph and the Depends on / Needed by table; the Coder writes OLD and NEW. Refuses a duplicate id or a bad id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, id: { type: 'string', description: 'For example KQ-17.' }, title: { type: 'string', maxLength: 160 },
+        status: { type: 'string', enum: ['PROPOSED', 'DECIDED', 'REVISED', 'IN-PROGRESS', 'DONE', 'SUPERSEDED', 'DROPPED'] }, statusNote: { type: 'string' },
+        dependsOn: { type: 'array', items: { type: 'string' } }, neededBy: { type: 'array', items: { type: 'string' } },
+        absorbs: { type: 'array', items: { type: 'string' } }, supersedes: { type: 'array', items: { type: 'string' } }, refines: { type: 'array', items: { type: 'string' } }, sharesContract: { type: 'array', items: { type: 'string' } },
+        files: { type: 'array', items: { type: 'string' } }, change: { type: 'string' }, issue: { type: 'integer' }, patterns: { type: 'array', items: { type: 'string' } }, apply: { type: 'boolean' },
+      },
+      required: ['id', 'title'], additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    run: args => {
+      const { dest: _dest, apply, ...spec } = args
+      return newStory(projectDir(args), spec, { apply: optionalBool(args, 'apply', false), roots: allowedRoots() })
+    },
+  },
+  {
+    name: 'story_link',
+    description: 'Relate two stories (depends-on, absorbs, supersedes, refines, shares-contract). Both sides are kept in step (depends-on also fills Needed by) and a link that would create a cycle is refused. The other story may live in another project\'s catalog. Plan unless apply=true.',
+    inputSchema: { type: 'object', properties: { dest, from: { type: 'string' }, to: { type: 'string' }, relation: { type: 'string', enum: ['depends-on', 'absorbs', 'supersedes', 'refines', 'shares-contract'] }, apply: { type: 'boolean' } }, required: ['from', 'to', 'relation'], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    run: args => linkStories(projectDir(args), { from: args.from, to: args.to, relation: args.relation }, { apply: optionalBool(args, 'apply', false), roots: allowedRoots() }),
+  },
+  {
+    name: 'story_check',
+    description: 'QA check of one story file: every OLD block must be verbatim (character for character, trailing spaces ignored) from the baseline commit the story names, at the file and lines it names; reports changed, missing or out-of-range blocks with the first differing line. Also requires a NEW block that says whether it was compiled, a Dependencies section, a Why section and a Not verified statement. `ref` overrides the baseline (use it to see drift against the current head).',
+    inputSchema: { type: 'object', properties: { dest, id: { type: 'string', description: 'Story id (for example FL-22).' }, ref: { type: 'string' } }, required: ['id'], additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => {
+      gitAllowed()
+      return checkStory(projectDir(args), args.id, { ref: args.ref, roots: allowedRoots() })
+    },
+  },
+  {
+    name: 'story_guidance',
+    description: 'Build the guidance index for future work from the catalog: dependency order, what is ready, the longest chain, the reusable patterns each story established (with the stories that share them), recorded decisions, cross-project links and the Mermaid graph. Writes .devops/stories/guidance.md only with apply=true.',
+    inputSchema: { type: 'object', properties: { dest, apply: { type: 'boolean' } }, additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    run: args => guidance(projectDir(args), { apply: optionalBool(args, 'apply', false), roots: allowedRoots() }),
   },
   {
     name: 'ghas_plan',

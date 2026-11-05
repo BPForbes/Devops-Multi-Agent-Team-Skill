@@ -173,3 +173,21 @@ test('the process puts notes in the PR and not in code, and gives Coders, Resear
   assert.match(read('skills/devops-multi-agent-team/references/review-thread-template.md'), /## Line remarks/)
   assert.match(read('skills/devops-multi-agent-team/references/push-json.md'), /comment budget/)
 })
+
+test('install creates the story catalog with a project code, committed rather than ignored', () => {
+  const dir = project({ 'a.py': '' })
+  fs.renameSync(dir, dir + '-KeyQuorum')
+  const named = dir + '-KeyQuorum'
+  install({ dest: named, target: 'claude' })
+  const catalog = JSON.parse(fs.readFileSync(path.join(named, '.devops/stories/catalog.json'), 'utf8'))
+  assert.deepEqual(catalog.stories, [])
+  assert.match(catalog.project.code, /^[A-Z]{2,4}$/)
+  assert.ok(fs.existsSync(path.join(named, '.claude/skills/devops-multi-agent-team/references/story-template.md')))
+  assert.ok(fs.existsSync(path.join(named, '.claude/commands/story.md')))
+  execFileSyncGit(named, ['init', '-q'])
+  assert.notEqual(spawnSync('git', ['check-ignore', '-q', '.devops/stories/catalog.json'], { cwd: named }).status, 0)
+})
+
+function execFileSyncGit(dir, args) {
+  assert.equal(spawnSync('git', args, { cwd: dir }).status, 0)
+}

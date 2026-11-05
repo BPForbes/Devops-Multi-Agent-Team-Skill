@@ -59,6 +59,14 @@ the Orchestrator. Thoughts stay **gitignored**.
 - When a check fails, follow `monitoring.md`: reproduce, fix the cause, re-run,
   stop after the retry cap. Never skip, loosen or disable a check to get green.
 
+## Writing a story
+
+If the task is a story ([stories.md](../skills/devops-multi-agent-team/references/stories.md)), you write **OLD, then
+NEW**, and no product code. OLD: re-read the baseline and copy the lines verbatim with path, line range and the
+baseline commit, then run `story_check` until every block is `verbatim`. NEW: the proposal, reusing what the research
+found, labelled `proposal, not compiled` unless it was compiled. Then Why (decisions, corrections with evidence,
+assumptions), Guidance (pattern, applies when, do not repeat), Not verified, Tests. Work in dependency order.
+
 ## When you finish
 
 Write `push-<seat-id>.json` and a Handoff `To: Reviewer` with `Authors:`,

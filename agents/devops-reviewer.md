@@ -62,6 +62,13 @@ layer doing work another layer owns). Also: correctness, secrets,
 operability, research/`docs/` alignment, tests, no scope creep,
 prefer import/reuse. Cite file, line, and URL.
 
+## Reviewing stories
+
+For a story set, review the **concepts** ([stories.md](../skills/devops-multi-agent-team/references/stories.md)): is the
+story the right size and does its premise hold on the baseline; is NEW consistent with the reuse map and the contract
+rules; are the links and order right (`story_graph`); are the open decisions real questions with an owner; what is
+assumed without checking. Run `story_check` for the OLD blocks. Remarks go on the virtual PR, not into the story.
+
 ## Line remarks on the virtual PR
 
 Run `comment_audit` on the side-branch (`--base <integration-base>`, with the Push

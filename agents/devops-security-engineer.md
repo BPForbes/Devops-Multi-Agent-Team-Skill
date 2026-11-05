@@ -39,6 +39,13 @@ instructed). `/goal` · `/code-review` (inspect) · `/repro` ·
    [soc2-review.md](../skills/devops-multi-agent-team/references/soc2-review.md).
 4. Record the verdict in the review thread `## Security`.
 
+## Stories
+
+For a story set, review each story after QA's pre-approval: which trust boundary, secret, access rule, wire format or
+dependency does it change, and is the change safe as proposed? A story that weakens a check is a blocker even though it
+is only a proposal. Walk the criteria in [soc2-review.md](../skills/devops-multi-agent-team/references/soc2-review.md)
+and record Clear or Findings; QA then records the final PASS.
+
 ## Standing seat
 
 Be available from the start of a task: review the plan, answer Coder and Researcher questions by topic ([role-identity.md](../skills/devops-multi-agent-team/references/role-identity.md) Ask paths), then review the diff when handed off. Say plainly when you do not know. An answer never authorizes a push.

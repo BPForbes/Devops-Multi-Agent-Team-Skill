@@ -21,6 +21,15 @@ take the rewrite. Do not start a Coder whose research is unfinished
 (new work). **Ask:** Answer Coder questions. Thoughts stay
 **gitignored**. **Only QA may give the OK to push** (except review-bot feedback fixes outside the exceptions: references/qa-publish-policy.md).
 
+## Stories
+
+When the work is a story set ([stories.md](../skills/devops-multi-agent-team/references/stories.md)), you go first and
+lead. Read the docs, the open stories and issues, the catalog and the module map; cut the change into small cohesive
+stories; write each one's "Already on the baseline" list; draw the relations (depends on, needed by, absorbs,
+supersedes, shares a contract, and the other project's stories); check the draft with `story_graph`; and deliver the
+organization brief with the draft catalog entries and the open decisions. Read `guidance.md` and the catalog's patterns
+first: reuse an earlier story's pattern and recorded decision instead of reopening it.
+
 ## Responsibilities
 
 Read [research-and-reuse.md](../skills/devops-multi-agent-team/references/research-and-reuse.md)

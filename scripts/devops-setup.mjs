@@ -585,6 +585,10 @@ export function install({ dest: destInput, roots, target = 'both', lang = 'auto'
   writeText(path.join(dest, '.devops', 'languages.local.json'), '{\n  "languages": []\n}\n', { ...opts, force: false }, report)
   writeText(path.join(dest, '.devops', 'project.md'), renderProfile(config, selected, dest, { servicesConfig, services: chosenServices, sandbox }), opts, report)
   if (sandbox) writeText(path.join(dest, '.devops', 'sandbox.md'), renderSandboxDoc(servicesConfig, selected), opts, report)
+  const projectName = path.basename(dest)
+  const code = (projectName.match(/[A-Z]|(?<=[-_ ])[a-z]|^[a-z]/g) ?? [projectName[0] ?? 'X']).join('').toUpperCase().slice(0, 4).padEnd(2, 'X')
+  const skeleton = { schemaVersion: 1, project: { code, name: projectName, language: selected[0]?.name ?? '', baseline: { branch: 'main', sha: '' } }, projects: {}, stories: [] }
+  writeText(path.join(dest, '.devops', 'stories', 'catalog.json'), JSON.stringify(skeleton, null, 2) + '\n', { ...opts, force: false }, report)
   writeText(path.join(dest, '.devops', 'thoughts', 'non-finalized', '.gitkeep'), '', { ...opts, force: false }, report)
   ensureGitignore(dest, opts, report)
   return report
