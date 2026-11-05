@@ -32,8 +32,9 @@ pass.
 ## Comments, reuse and CodeQL (checked before PASS)
 
 - **Comments:** no open `issue (blocking)` against `comment-standards.md`
-  (restating comments, stale comments, commented-out code, missing doc
-  comments, unlisted `TODO`/`FIXME`). The profile's doc check ran.
+  (comments added only because code was added, restating or stale comments,
+  commented-out code, unlisted `TODO`/`FIXME`). The doc check ran only if the
+  profile says the project publishes API docs.
 - **Reuse:** the research brief has a module mind map and a reuse map, no
   open blocking finding says new code duplicates existing code, and every
   "new, because ..." row holds.

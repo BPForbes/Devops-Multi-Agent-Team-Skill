@@ -377,10 +377,11 @@ export function renderProfile(config, selected, dest, ctx = {}) {
 
   const codeqlNotes = selected.some(l => (l.security?.sast?.commands ?? []).length > 0) && (config.codeqlNotes ?? []).length > 0
     ? `${bullets(config.codeqlNotes)}\n\n` : ''
-  const docs = section(selected, l => {
+  const docsBody = section(selected, l => {
     const d = l.docs ?? {}
-    return `### ${l.name}\n${bullets([`Doc format: ${d.format ?? '_not set_'}`, `Line comment marker: ${code(d.lineComment ?? '')}`, `Doc check: ${d.check ?? '_not set_'}`])}`
+    return `### ${l.name}\n${bullets([`Doc format: ${d.format ?? '_not set_'}`, `Line comment marker: ${code(d.lineComment ?? '')}`, `Doc check (only if the project publishes API docs): ${d.check ?? '_not set_'}`])}`
   })
+  const docs = config.docsNote ? `${config.docsNote}\n\n${docsBody}` : docsBody
   const presets = Object.entries(config.presets ?? {}).map(([id, p]) => `### Preset \`${id}\` (opt-in, from ${p.from})\n${bullets(p.rules)}`).join('\n\n')
 
   const style = section(selected, l => {

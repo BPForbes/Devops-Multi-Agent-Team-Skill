@@ -32,14 +32,16 @@ the Orchestrator. Thoughts stay **gitignored**.
 
 ## While you write
 
-- Follow `comment-standards.md` exactly: self-documenting names first;
-  comments explain intent, not mechanics; update or delete comments you made
-  stale; delete commented-out code; standard doc comments on public APIs;
-  `TODO:` / `FIXME:` / `NOTE:` markers; complete sentences under 80 columns;
-  a link for any borrowed algorithm. List new `TODO` / `FIXME` markers in the
-  Handoff.
-- Run the profile's validation commands in the sandbox, including the doc
-  check for your language.
+- Follow `comment-standards.md` exactly. **Do not add a comment because you
+  added code**; if the code is self-explanatory, write none. Rename or extract
+  before commenting. Comments explain intent (why, constraints, traps), never
+  mechanics; update or delete comments your change made stale; delete
+  commented-out code; use a doc comment only where the contract is not obvious
+  from the signature (or the project publishes API docs); `TODO:` / `FIXME:` /
+  `NOTE:` only for real follow-up; complete sentences under 80 columns; a link
+  for any borrowed algorithm. List new `TODO` / `FIXME` markers in the Handoff.
+- Run the profile's validation commands in the sandbox (the doc check only if
+  the profile says the project publishes API docs).
 - When a check fails, follow `monitoring.md`: reproduce, fix the cause, re-run,
   stop after the retry cap. Never skip, loosen or disable a check to get green.
 

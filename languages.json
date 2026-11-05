@@ -120,7 +120,7 @@
       "docs": {
         "format": "Doxygen comments (/** … */ or ///) on public functions, structs and headers",
         "lineComment": "//",
-        "check": "doxygen with WARN_AS_ERROR=YES (or clang -Wdocumentation)"
+        "check": "only if the project publishes API docs: doxygen with WARN_AS_ERROR=YES (or clang -Wdocumentation)"
       }
     },
     {
@@ -202,7 +202,7 @@
       "docs": {
         "format": "Doxygen comments on public classes and functions",
         "lineComment": "//",
-        "check": "doxygen with WARN_AS_ERROR=YES (or clang -Wdocumentation)"
+        "check": "only if the project publishes API docs: doxygen with WARN_AS_ERROR=YES (or clang -Wdocumentation)"
       }
     },
     {
@@ -263,7 +263,7 @@
       ],
       "sandboxImage": "gcc:14",
       "docs": {
-        "format": "a header comment per routine: purpose, calling convention, inputs, outputs, clobbered registers, stack use",
+        "format": "a header comment per routine stating the calling convention, inputs, outputs and clobbered registers (not recoverable from the code)",
         "lineComment": "; (GAS on x86 uses # or /* */; NASM uses ;)",
         "check": "none: reviewed by hand"
       }
@@ -356,9 +356,9 @@
       ],
       "sandboxImage": "rust:1-slim",
       "docs": {
-        "format": "rustdoc: /// on items, //! on modules and crates, with # Errors, # Panics and # Safety sections",
+        "format": "rustdoc: /// on items, //! on modules and crates, with # Errors, # Panics and # Safety sections where they apply",
         "lineComment": "//",
-        "check": "RUSTDOCFLAGS=\"-D warnings\" cargo doc --no-deps; #![warn(missing_docs)] for libraries"
+        "check": "only if the project publishes API docs: RUSTDOCFLAGS=\"-D warnings\" cargo doc --no-deps; #![warn(missing_docs)] for libraries"
       }
     },
     {
@@ -428,9 +428,9 @@
       "seenIn": [],
       "sandboxImage": "golang:1.23",
       "docs": {
-        "format": "godoc: a comment directly above each exported name, starting with the name",
+        "format": "godoc: when a comment is warranted, put it directly above the name and start it with the name",
         "lineComment": "//",
-        "check": "go vet; staticcheck (ST1000 family); revive exported rule"
+        "check": "only if the project publishes API docs: go vet; staticcheck (ST1000 family); revive exported rule"
       }
     },
     {
@@ -520,7 +520,7 @@
       "docs": {
         "format": "XML documentation (/// <summary>, <param>, <returns>, <exception>)",
         "lineComment": "//",
-        "check": "<GenerateDocumentationFile>true</GenerateDocumentationFile> with CS1591 as an error for public APIs"
+        "check": "only if the project publishes API docs: <GenerateDocumentationFile>true</GenerateDocumentationFile> with CS1591 as an error for public APIs"
       }
     },
     {
@@ -596,7 +596,7 @@
       "docs": {
         "format": "Javadoc (/** … */ with @param, @return, @throws)",
         "lineComment": "//",
-        "check": "javadoc -Xdoclint:all"
+        "check": "only if the project publishes API docs: javadoc -Xdoclint:all"
       }
     },
     {
@@ -661,7 +661,7 @@
       "docs": {
         "format": "KDoc (/** … */ with @param, @return, @throws)",
         "lineComment": "//",
-        "check": "dokka; detekt UndocumentedPublicClass/Function"
+        "check": "only if the project publishes API docs: dokka; detekt UndocumentedPublicClass/Function"
       }
     },
     {
@@ -749,7 +749,7 @@
       "docs": {
         "format": "PEP 257 docstrings in triple quotes (Google or NumPy style, one style per project)",
         "lineComment": "#",
-        "check": "ruff check --select D (pydocstyle rules) or pydocstyle"
+        "check": "only if the project publishes API docs: ruff check --select D (pydocstyle rules) or pydocstyle"
       }
     },
     {
@@ -837,7 +837,7 @@
       "docs": {
         "format": "TSDoc/JSDoc (/** … */ with @param, @returns, @throws)",
         "lineComment": "//",
-        "check": "eslint-plugin-jsdoc or eslint-plugin-tsdoc; typedoc --treatWarningsAsErrors"
+        "check": "only if the project publishes API docs: eslint-plugin-jsdoc or eslint-plugin-tsdoc; typedoc --treatWarningsAsErrors"
       }
     },
     {
@@ -909,7 +909,7 @@
       "docs": {
         "format": "JSDoc (/** … */ with @param, @returns, @throws)",
         "lineComment": "//",
-        "check": "eslint-plugin-jsdoc"
+        "check": "only if the project publishes API docs: eslint-plugin-jsdoc"
       }
     },
     {
@@ -968,9 +968,9 @@
       ],
       "sandboxImage": "node:22-slim",
       "docs": {
-        "format": "a short comment above each section and any non-obvious hack, naming the reason",
+        "format": "a short comment above a section or hack when the reason is not clear",
         "lineComment": "/* … */",
-        "check": "stylelint (comment-empty-line-before)"
+        "check": "only if the project publishes API docs: stylelint (comment-empty-line-before)"
       }
     },
     {
@@ -1036,9 +1036,9 @@
       ],
       "sandboxImage": "koalaman/shellcheck-alpine:stable",
       "docs": {
-        "format": "a header comment with purpose, usage and exit codes; a comment on every non-obvious option",
+        "format": "a header comment with purpose, usage and exit codes (a script's interface); comments on non-obvious options",
         "lineComment": "#",
-        "check": "shellcheck; shfmt -d"
+        "check": "only if the project publishes API docs: shellcheck; shfmt -d"
       }
     },
     {
@@ -1095,9 +1095,9 @@
       ],
       "sandboxImage": "mcr.microsoft.com/powershell:lts-ubuntu-22.04",
       "docs": {
-        "format": "comment-based help (.SYNOPSIS, .DESCRIPTION, .PARAMETER, .EXAMPLE) on every exported function",
+        "format": "comment-based help (.SYNOPSIS, .DESCRIPTION, .PARAMETER, .EXAMPLE) on functions users call directly",
         "lineComment": "#",
-        "check": "PSScriptAnalyzer rule PSProvideCommentHelp"
+        "check": "only if the project publishes API docs: PSScriptAnalyzer rule PSProvideCommentHelp"
       }
     },
     {
@@ -1161,7 +1161,7 @@
       "docs": {
         "format": "a comment on each non-obvious query or migration step naming the reason; COMMENT ON for tables and columns where the engine supports it",
         "lineComment": "--",
-        "check": "sqlfluff"
+        "check": "only if the project publishes API docs: sqlfluff"
       }
     },
     {
@@ -1224,9 +1224,9 @@
       ],
       "sandboxImage": "hashicorp/terraform:1.9",
       "docs": {
-        "format": "a description on every variable and output; comments only for why",
+        "format": "a description on variables and outputs whose purpose is not clear from the name (module consumers see it); comments only for why",
         "lineComment": "#",
-        "check": "terraform-docs; tflint terraform_documented_variables / outputs"
+        "check": "only if the project publishes API docs: terraform-docs; tflint terraform_documented_variables / outputs"
       }
     },
     {
@@ -1297,7 +1297,7 @@
       "docs": {
         "format": "a comment above each non-obvious instruction (why this base image, why this flag)",
         "lineComment": "#",
-        "check": "hadolint"
+        "check": "only if the project publishes API docs: hadolint"
       }
     },
     {
@@ -1363,9 +1363,9 @@
       ],
       "sandboxImage": "rhysd/actionlint:1.7.1",
       "docs": {
-        "format": "a name on every workflow, job and step; comments for why a permission or pin exists",
+        "format": "a name on every workflow, job and step (needed for readable runs); comments only for why a permission or pin exists",
         "lineComment": "#",
-        "check": "actionlint"
+        "check": "only if the project publishes API docs: actionlint"
       }
     },
     {
@@ -1437,7 +1437,7 @@
       "docs": {
         "format": "comments only for non-obvious structure or a required workaround; never commented-out markup",
         "lineComment": "<!-- … -->",
-        "check": "html-validate"
+        "check": "only if the project publishes API docs: html-validate"
       }
     },
     {
@@ -1520,7 +1520,7 @@
       "docs": {
         "format": "PHPDoc (/** … */ with @param, @return, @throws)",
         "lineComment": "//",
-        "check": "phpcs with the PEAR/PSR-5 doc sniffs, or phpstan"
+        "check": "only if the project publishes API docs: phpcs with the PEAR/PSR-5 doc sniffs, or phpstan"
       }
     },
     {
@@ -1602,7 +1602,7 @@
       "docs": {
         "format": "YARD (# @param, @return, @raise)",
         "lineComment": "#",
-        "check": "yard stats --list-undoc; rubocop Style/Documentation"
+        "check": "only if the project publishes API docs: yard stats --list-undoc; rubocop Style/Documentation"
       }
     },
     {
@@ -1673,9 +1673,9 @@
       ],
       "seenIn": [],
       "docs": {
-        "format": "dartdoc: /// comments on public members, first line a one-sentence summary",
+        "format": "dartdoc: /// comments, first line a one-sentence summary, where the contract is not obvious",
         "lineComment": "//",
-        "check": "dart doc; public_member_api_docs lint"
+        "check": "only if the project publishes API docs: dart doc; public_member_api_docs lint"
       }
     },
     {
@@ -1748,7 +1748,7 @@
       "docs": {
         "format": "Scaladoc (/** … */ with @param, @return, @throws)",
         "lineComment": "//",
-        "check": "sbt doc with -Xfatal-warnings"
+        "check": "only if the project publishes API docs: sbt doc with -Xfatal-warnings"
       }
     },
     {
@@ -1835,7 +1835,7 @@
       "docs": {
         "format": "DocC / Swift markup: /// with - Parameter:, - Returns:, - Throws:",
         "lineComment": "//",
-        "check": "swift package generate-documentation; SwiftLint missing_docs"
+        "check": "only if the project publishes API docs: swift package generate-documentation; SwiftLint missing_docs"
       }
     },
     {
@@ -1908,7 +1908,7 @@
       "docs": {
         "format": "POD (=head1, =head2, =item) in or after the code",
         "lineComment": "#",
-        "check": "podchecker; Perl::Critic Documentation policies"
+        "check": "only if the project publishes API docs: podchecker; Perl::Critic Documentation policies"
       }
     },
     {
@@ -1985,7 +1985,7 @@
       "docs": {
         "format": "LDoc (--- with @param, @return)",
         "lineComment": "--",
-        "check": "ldoc"
+        "check": "only if the project publishes API docs: ldoc"
       }
     },
     {
@@ -2056,7 +2056,7 @@
       "docs": {
         "format": "## doc comments above classes, signals, exports and functions",
         "lineComment": "#",
-        "check": "gdlint"
+        "check": "only if the project publishes API docs: gdlint"
       }
     },
     {
@@ -2121,7 +2121,7 @@
       "docs": {
         "format": "/// doc comments on declarations and //! on modules",
         "lineComment": "//",
-        "check": "zig build-lib -femit-docs"
+        "check": "only if the project publishes API docs: zig build-lib -femit-docs"
       }
     },
     {
@@ -2201,9 +2201,9 @@
       ],
       "seenIn": [],
       "docs": {
-        "format": ";; comments on each import and export saying what the host must provide or what it returns",
+        "format": ";; comments on imports and exports whose contract the host must know",
         "lineComment": "(;; …)  line comments use ;;",
-        "check": "wasm-tools validate"
+        "check": "only if the project publishes API docs: wasm-tools validate"
       }
     },
     {
@@ -2278,7 +2278,7 @@
       "docs": {
         "format": "FORD-style !> doc comments before procedures and modules",
         "lineComment": "!",
-        "check": "ford"
+        "check": "only if the project publishes API docs: ford"
       }
     },
     {
@@ -2344,7 +2344,7 @@
       ],
       "seenIn": [],
       "docs": {
-        "format": "a comment block (*> in free format) at the top of each program naming its purpose, inputs, outputs and return codes",
+        "format": "a short comment block at the top of each program naming its purpose, inputs, outputs and return codes where the code does not make them plain",
         "lineComment": "*>",
         "check": "none: reviewed by hand"
       }
@@ -2422,7 +2422,7 @@
       "docs": {
         "format": "roxygen2 (#' with @param, @return, @export, @examples)",
         "lineComment": "#",
-        "check": "devtools::document(); R CMD check (undocumented arguments)"
+        "check": "only if the project publishes API docs: devtools::document(); R CMD check (undocumented arguments)"
       }
     },
     {
@@ -2492,7 +2492,7 @@
       "docs": {
         "format": "docstrings in triple quotes above the definition, with a signature, Arguments and Examples",
         "lineComment": "#",
-        "check": "Documenter.jl doctests"
+        "check": "only if the project publishes API docs: Documenter.jl doctests"
       }
     },
     {
@@ -2567,7 +2567,7 @@
       "docs": {
         "format": "Haddock (-- | on the line above, -- ^ after a field)",
         "lineComment": "--",
-        "check": "cabal haddock"
+        "check": "only if the project publishes API docs: cabal haddock"
       }
     },
     {
@@ -2636,9 +2636,9 @@
       ],
       "seenIn": [],
       "docs": {
-        "format": "odoc comments (** … *) on every value in the .mli",
+        "format": "odoc comments (** … *) in the .mli where a value's contract is not obvious from its type",
         "lineComment": "(* … *)",
-        "check": "dune build @doc"
+        "check": "only if the project publishes API docs: dune build @doc"
       }
     },
     {
@@ -2709,9 +2709,9 @@
       ],
       "seenIn": [],
       "docs": {
-        "format": "edoc (%% @doc, @param, @returns) and -spec on exported functions",
+        "format": "edoc (%% @doc, @param, @returns) where useful, and -spec on exported functions (specs are code, not comments)",
         "lineComment": "%%",
-        "check": "rebar3 edoc; dialyzer for specs"
+        "check": "only if the project publishes API docs: rebar3 edoc; dialyzer for specs"
       }
     },
     {
@@ -2789,9 +2789,9 @@
       ],
       "seenIn": [],
       "docs": {
-        "format": "@moduledoc and @doc with iex> doctests, and @spec on public functions",
+        "format": "@moduledoc and @doc with iex> doctests where the behaviour is not obvious, and @spec on public functions (specs are code)",
         "lineComment": "#",
-        "check": "mix docs; credo Readability.ModuleDoc; ExUnit doctests"
+        "check": "only if the project publishes API docs: mix docs; credo Readability.ModuleDoc; ExUnit doctests"
       }
     },
     {
@@ -2866,7 +2866,7 @@
       "docs": {
         "format": "docstrings as the first element of def, defn and ns",
         "lineComment": "; (;; for line comments)",
-        "check": "clj-kondo missing-docstring linter"
+        "check": "only if the project publishes API docs: clj-kondo missing-docstring linter"
       }
     },
     {
@@ -2940,7 +2940,7 @@
       "docs": {
         "format": "XML documentation (/// <summary> …)",
         "lineComment": "//",
-        "check": "--warnon:3390 (XML doc validation)"
+        "check": "only if the project publishes API docs: --warnon:3390 (XML doc validation)"
       }
     }
   ],
@@ -2969,5 +2969,6 @@
     "A CodeQL result is 'satisfied' only when: the database was created for the affected language; the analysis completed; the SARIF was read; no unresolved finding introduced or materially affected by the change remains; and no query, path filter or workflow was weakened to get there.",
     "Run CodeQL for every affected language, and always for changes to authentication, secrets, cryptography, HTTP handling, SQL/ORM, file uploads, command execution, deserialization, XSS/SSRF surfaces and security configuration.",
     "Unaffected languages may be NOT APPLICABLE when CI does not require all of them."
-  ]
+  ],
+  "docsNote": "Doc formats apply only where a doc comment is warranted: when the contract is not obvious from the name and signature, or when the project publishes generated API docs. Self-explanatory code gets no comment, and no comment is added just because code was added."
 }

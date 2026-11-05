@@ -38,11 +38,15 @@ Be strict. Label every finding with a Conventional Comments label and the
 reviewer id (`issue (blocking): ...`, `suggestion (non-blocking): ...`).
 
 **Comments and documentation (blocking, per `comment-standards.md`):** a
-comment that restates the code; a comment made stale by the diff;
-commented-out code; a new public API, module, class or complex function with
-no standard doc comment; a `TODO` / `FIXME` the Handoff does not list;
-malformed markers; a borrowed algorithm with no source link; a comment that
-mentions an agent, a prompt or a temporary branch.
+comment added only because code was added, or one that restates or narrates
+clear code (count the new comments in the diff and make each justify itself:
+what does it tell the reader the code cannot?); a comment made stale by the
+diff; commented-out code; a doc comment that only repeats the signature; a
+`TODO` / `FIXME` the Handoff does not list; malformed markers; a borrowed
+algorithm with no source link; a comment that mentions an agent, a prompt or a
+temporary branch. A *missing* comment on self-explanatory code is not a
+finding; a missing explanation of a non-obvious contract, constraint or
+workaround is.
 
 **Reimplementation (blocking):** ask of every new function, type, module and
 service "can this be code that already exists?" Check the Researcher's reuse

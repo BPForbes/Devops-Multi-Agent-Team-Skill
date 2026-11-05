@@ -50,10 +50,13 @@ environment variables only; values live in the environment or a secret manager.
 
 ## Comments and documentation
 
-Coders follow `comment-standards.md` (intent not mechanics, no comment rot,
-no commented-out code, doc comments on public APIs, TODO/FIXME/NOTE markers,
-complete sentences, links for borrowed algorithms); Reviewers enforce it as
-blocking. Per language:
+Coders follow `comment-standards.md`: **no comment is added just because code
+was added** (self-explanatory code gets none); intent not mechanics; no comment
+rot; no commented-out code; doc comments only where the contract is not obvious
+or where API docs are published; TODO/FIXME/NOTE only for real follow-up;
+complete sentences; links for borrowed algorithms. Reviewers enforce it as
+blocking. Does this project publish generated API docs? `<yes (which packages) | no>`.
+Per language (the doc check applies only if the answer is yes):
 
 {{DOCS}}
 

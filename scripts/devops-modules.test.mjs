@@ -140,3 +140,16 @@ test('install ships the reuse and comment rules for both hosts and the docs sect
   assert.match(profile, /Preset `readable-code`/)
   assert.match(profile, /codeql database analyze/)
 })
+
+test('the comment policy says self-explanatory code gets no comment, in the rule, the standard and the profile', () => {
+  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+  const dir = project({ 'a.py': '' })
+  install({ dest: dir, target: 'claude' })
+  for (const file of ['rules/comments.md', 'skills/devops-multi-agent-team/references/comment-standards.md', 'agents/devops-coder.md', 'agents/devops-reviewer.md']) {
+    assert.match(fs.readFileSync(path.join(root, file), 'utf8'), /because (you added )?code was added|self-explanatory/i, file)
+  }
+  const profile = fs.readFileSync(path.join(dir, '.devops/project.md'), 'utf8')
+  assert.match(profile, /no comment is added just because code\s+was added/)
+  assert.match(profile, /Self-explanatory code gets no comment/)
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'agents/devops-reviewer.md'), 'utf8'), /with\s+no standard doc comment/)
+})

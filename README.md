@@ -116,7 +116,7 @@ The tests check this against real `git check-ignore`.
 |------|-------|-------------|
 | **Documentation first** (Markdown, LaTeX, code comments, then code, then the web) | `research-and-reuse.md`, researcher agent | Reviewers reject a brief without it |
 | **Module mind map + reuse map** before any Coder starts; "new, because ..." must hold up | `research-and-reuse.md`, `module_map`, `reuse_search` | Reviewers: re-implementation is a blocking finding; QA checks the brief |
-| **Comment standards** (intent not mechanics, no comment rot, no commented-out code, doc comments, TODO/FIXME/NOTE, sentences under 80 columns, source links) | `comment-standards.md`, `rules/comments.md`, per-language `docs` | Reviewers: strict and blocking; Conventional Comments labels |
+| **Comment standards**: no comment just because code was added (self-explanatory code gets none); intent not mechanics; no comment rot; no commented-out code; doc comments only where the contract is not obvious or API docs are published; TODO/FIXME/NOTE for real follow-up | `comment-standards.md`, `rules/comments.md`, per-language `docs` | Reviewers: strict and blocking; Conventional Comments labels |
 | **Virtual PR and virtual git** | `virtual-git.md`, `side-work.md` | the mod refuses push, PR and branch creation until QA PASS and your go |
 | **Failed checks are watched and corrected, then stop** | `monitoring.md`, the mod's monitor | records `check-ledger.md`, bounded retries (default 3), never loosens a check |
 | **Tags are the project history** | `version-tags.md`, `tag_*` tools | pushing a tag is gated like any push |
