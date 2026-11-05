@@ -124,7 +124,7 @@ const TOOLS = [
   },
   {
     name: 'install_devops_team',
-    description: 'Install the DevOps multi-agent team into a project: skill, agents, commands (Cursor and/or Claude), .devops/ language and service data, the project profile, the sandbox doc, and the .gitignore block that keeps .devops/thoughts/ out of git. With apply=false (default) it only reports the plan. Existing files that differ are kept unless force=true.',
+    description: 'Install the DevOps multi-agent team into a project: skill, agents, commands (Cursor and/or Claude), .devops/ language and service data, the project profile, the sandbox doc, and the .gitignore block that keeps devops-skill/thoughts/ out of git. With apply=false (default) it only reports the plan. Existing files that differ are kept unless force=true.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -163,7 +163,7 @@ const TOOLS = [
   },
   {
     name: 'ensure_gitignore',
-    description: 'Add or repair the managed .gitignore block that keeps .devops/thoughts/ (research notes, review threads, QA notes, scratch) out of git while keeping its .gitkeep and the committed .devops/project.md. Plan only unless apply=true.',
+    description: 'Add or repair the managed .gitignore block that keeps devops-skill/thoughts/ (research notes, review threads, QA notes, scratch) out of git while keeping its .gitkeep and the committed .devops/project.md. Plan only unless apply=true.',
     inputSchema: { type: 'object', properties: { dest, apply: { type: 'boolean' } }, additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     run: args => {
@@ -283,14 +283,14 @@ const TOOLS = [
   },
   {
     name: 'story_parse',
-    description: 'Parse a story written in the FL/KQ format (a GitHub issue body or a story file) into structure: catalog id, project, baseline sha, status, depends on, needed by, files, OLD blocks (path, lines, text) and NEW blocks (compiled or not), and which sections are present. Pass the text you read from the issue. Pure; reads nothing from the project.',
+    description: 'Parse a story written in the catalog format (a GitHub issue body or a story file) into structure: catalog id, project, baseline sha, status, depends on, needed by, files, OLD blocks (path, lines, text) and NEW blocks (compiled or not), and which sections are present. Pass the text you read from the issue. Pure; reads nothing from the project.',
     inputSchema: { type: 'object', properties: { text: { type: 'string', maxLength: 300000 }, title: { type: 'string', maxLength: 300 } }, required: ['text'], additionalProperties: false },
     annotations: { readOnlyHint: true },
     run: args => parseStory(args.text, { title: args.title }),
   },
   {
     name: 'story_graph',
-    description: 'Link the stories of one or more catalogs (.devops/stories/catalog.json; pass several `dests` to tie two projects together, for example Flinstone and KeyQuorum). Returns the dependency order by level, what is ready to start, the longest chain, cross-project edges, the pattern index, a Mermaid graph, and every problem: unknown ids, missing inverse links, cycles, bad statuses, SUPERSEDED without a successor; plus warnings such as DONE before its dependency. Read-only.',
+    description: 'Link the stories of one or more catalogs (.devops/stories/catalog.json; pass several `dests` to tie two projects together, for example a server and its client). Returns the dependency order by level, what is ready to start, the longest chain, cross-project edges, the pattern index, a Mermaid graph, and every problem: unknown ids, missing inverse links, cycles, bad statuses, SUPERSEDED without a successor; plus warnings such as DONE before its dependency. Read-only.',
     inputSchema: { type: 'object', properties: { dest, dests: { type: 'array', items: { type: 'string' }, maxItems: 8 } }, additionalProperties: false },
     annotations: { readOnlyHint: true },
     run: args => {
@@ -304,7 +304,7 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        dest, id: { type: 'string', description: 'For example KQ-17.' }, title: { type: 'string', maxLength: 160 },
+        dest, id: { type: 'string', description: 'For example SRV-17.' }, title: { type: 'string', maxLength: 160 },
         status: { type: 'string', enum: ['PROPOSED', 'DECIDED', 'REVISED', 'IN-PROGRESS', 'DONE', 'SUPERSEDED', 'DROPPED'] }, statusNote: { type: 'string' },
         dependsOn: { type: 'array', items: { type: 'string' } }, neededBy: { type: 'array', items: { type: 'string' } },
         absorbs: { type: 'array', items: { type: 'string' } }, supersedes: { type: 'array', items: { type: 'string' } }, refines: { type: 'array', items: { type: 'string' } }, sharesContract: { type: 'array', items: { type: 'string' } },
@@ -328,7 +328,7 @@ const TOOLS = [
   {
     name: 'story_check',
     description: 'QA check of one story file: every OLD block must be verbatim (character for character, trailing spaces ignored) from the baseline commit the story names, at the file and lines it names; reports changed, missing or out-of-range blocks with the first differing line. Also requires a NEW block that says whether it was compiled, a Dependencies section, a Why section and a Not verified statement. `ref` overrides the baseline (use it to see drift against the current head).',
-    inputSchema: { type: 'object', properties: { dest, id: { type: 'string', description: 'Story id (for example FL-22).' }, ref: { type: 'string' } }, required: ['id'], additionalProperties: false },
+    inputSchema: { type: 'object', properties: { dest, id: { type: 'string', description: 'Story id (for example SRV-22).' }, ref: { type: 'string' } }, required: ['id'], additionalProperties: false },
     annotations: { readOnlyHint: true },
     run: args => {
       gitAllowed()

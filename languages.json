@@ -109,12 +109,9 @@
         }
       ],
       "setupNotes": [
-        "Memory primitives, allocator internals, low-level synchronization and port I/O belong in the architecture-specific ASM layer; C holds policy, orchestration and services (Bailey-Forbes-Flinstone).",
-        "Frozen contract and ABI headers (contracts/, fl/*) are wire/ABI: append, never renumber or reorder.",
+        "Memory primitives, allocator internals, low-level synchronization and port I/O belong in the architecture-specific ASM layer; C holds policy, orchestration and services.",
+        "Frozen contract and ABI headers are wire/ABI: append, never renumber or reorder.",
         "If a make target needs a cross compiler or emcc that is not installed, report NOT RUN, never a pass."
-      ],
-      "seenIn": [
-        "Bailey-Forbes-Flinstone"
       ],
       "sandboxImage": "gcc:14",
       "docs": {
@@ -210,7 +207,6 @@
         "One CodeQL language id (cpp) covers C and C++; run it once with the project's build command.",
         "Unreal Engine C++ builds with UnrealBuildTool and the engine installed; that is NOT RUN in the sandbox. Engine-independent game logic can be built with CMake as usual."
       ],
-      "seenIn": [],
       "sandboxImage": "gcc:14",
       "docs": {
         "format": "Doxygen comments on public classes and functions",
@@ -283,9 +279,6 @@
         "Do not mix GAS and NASM syntax in one tree unless the build already does; keep the dialect the directory uses.",
         "A change that touches assembly always takes the full gate: reviewers cannot lean on a scanner.",
         "The gcc image carries GNU as; install nasm in your own pinned image if the tree uses NASM."
-      ],
-      "seenIn": [
-        "Bailey-Forbes-Flinstone"
       ],
       "sandboxImage": "gcc:14",
       "docs": {
@@ -376,7 +369,7 @@
         {
           "with": "c",
           "via": "cdylib/staticlib with a cbindgen header",
-          "contract": "the header plus KQ_*_ABI_VERSION style constant; one archive carries all headers"
+          "contract": "the header plus an ABI version constant; one archive carries all headers"
         },
         {
           "with": "terraform",
@@ -386,12 +379,8 @@
       ],
       "setupNotes": [
         "Run the lint and test lines with --features for every shipped combination; a build that is clean without a feature can be broken with it.",
-        "Wire-format codes, kind bytes and event codes are append-only; the review fails a renumbering (KeyQuorum).",
+        "Wire-format codes, kind bytes and event codes are append-only; the review fails a renumbering.",
         "A feature that must not coexist (for example a provider host and the wasm lab) is refused in build.rs; keep that guard when adding features."
-      ],
-      "seenIn": [
-        "KeyQuorum",
-        "Homework-Central"
       ],
       "sandboxImage": "rust:1-slim",
       "docs": {
@@ -477,7 +466,6 @@
       "setupNotes": [
         "Run go test -race for any change touching goroutines or shared state."
       ],
-      "seenIn": [],
       "sandboxImage": "golang:1.23",
       "docs": {
         "format": "godoc: when a comment is warranted, put it directly above the name and start it with the name",
@@ -552,7 +540,6 @@
       "optInStyle": [
         {
           "id": "explicit-types",
-          "from": "Homework-Central",
           "rule": "No `var` and no `dynamic`: write explicit types for locals, foreach variables and pattern positions; pin it with csharp_style_var_* = false:error in .editorconfig and EnforceCodeStyleInBuild so a green build proves it. Do not even write the bare word var in prose."
         }
       ],
@@ -575,9 +562,6 @@
         "CI rejects unparameterized raw SQL (FromSqlRaw / ExecuteSqlRaw / SqlQueryRaw); the Security seat greps for them every review.",
         "Comment and documentation rules (when to comment, XML docs) belong in the project's own guide; the profile links it.",
         "ASP.NET services and Unity/Godot-C# game code are all this entry; Unity needs the editor's own batchmode runner, which is NOT RUN in the sandbox."
-      ],
-      "seenIn": [
-        "Homework-Central"
       ],
       "sandboxImage": "mcr.microsoft.com/dotnet/sdk:8.0",
       "docs": {
@@ -667,7 +651,6 @@
       "setupNotes": [
         "Java and Kotlin share the CodeQL id java-kotlin; run it once."
       ],
-      "seenIn": [],
       "sandboxImage": "eclipse-temurin:21-jdk",
       "docs": {
         "format": "Javadoc (/** … */ with @param, @return, @throws)",
@@ -745,7 +728,6 @@
       "setupNotes": [
         "Android modules need the Android SDK and the project's Gradle properties; report NOT RUN rather than guess."
       ],
-      "seenIn": [],
       "sandboxImage": "eclipse-temurin:21-jdk",
       "docs": {
         "format": "KDoc (/** … */ with @param, @return, @throws)",
@@ -844,9 +826,6 @@
         "As a backend, use the full gate; as a script, keep it small and let ruff + a smoke run be the validation.",
         "Run untrusted checkouts with `python -I` so a planted module in the current directory is not imported."
       ],
-      "seenIn": [
-        "Bailey-Forbes-Flinstone"
-      ],
       "sandboxImage": "python:3.12-slim",
       "docs": {
         "format": "PEP 257 docstrings in triple quotes (Google or NumPy style, one style per project)",
@@ -938,10 +917,6 @@
         "Run commands from the package that owns them (frontend/, lab/, workers/); a monorepo has one lockfile per package.",
         "A browser app is verified by the Verifier seat's smoke run, not by unit tests alone."
       ],
-      "seenIn": [
-        "Homework-Central",
-        "KeyQuorum"
-      ],
       "sandboxImage": "node:22-slim",
       "docs": {
         "format": "TSDoc/JSDoc (/** … */ with @param, @returns, @throws)",
@@ -1024,9 +999,6 @@
       "setupNotes": [
         "Edge/Worker code (Cloudflare Workers and similar) has its own guard scripts and wrangler config: run them as part of validation and never put credentials in wrangler.toml [vars]."
       ],
-      "seenIn": [
-        "KeyQuorum"
-      ],
       "sandboxImage": "node:22-slim",
       "docs": {
         "format": "JSDoc (/** … */ with @param, @returns, @throws)",
@@ -1083,7 +1055,6 @@
       "optInStyle": [
         {
           "id": "token-only",
-          "from": "Homework-Central",
           "rule": "Plain CSS with custom properties, no Tailwind, no CSS-in-JS; every visual value traces to a token in design.md; styling changes stay separate from component-structure changes."
         }
       ],
@@ -1097,9 +1068,6 @@
       ],
       "setupNotes": [
         "Read the design doc before touching color, spacing or animation."
-      ],
-      "seenIn": [
-        "Homework-Central"
       ],
       "sandboxImage": "node:22-slim",
       "docs": {
@@ -1174,10 +1142,6 @@
         "Backstop scripts that grep for banned constructs (check-no-var.sh style) are CI code: a change to one takes the full gate.",
         "The shellcheck image is enough for linting; bash -n and a real run need a bash image of your own."
       ],
-      "seenIn": [
-        "Bailey-Forbes-Flinstone",
-        "Homework-Central"
-      ],
       "sandboxImage": "koalaman/shellcheck-alpine:stable",
       "docs": {
         "format": "a header comment with purpose, usage and exit codes (a script's interface); comments on non-obvious options",
@@ -1239,9 +1203,6 @@
       ],
       "setupNotes": [
         "Keep the .ps1 and .sh twins of a dev script in the same change."
-      ],
-      "seenIn": [
-        "Homework-Central"
       ],
       "sandboxImage": "mcr.microsoft.com/powershell:lts-ubuntu-22.04",
       "docs": {
@@ -1313,10 +1274,6 @@
       ],
       "setupNotes": [
         "A schema change is a wire/storage change: the review asks for the migration, the rollback story and the old-database test."
-      ],
-      "seenIn": [
-        "Homework-Central",
-        "KeyQuorum"
       ],
       "sandboxImage": "python:3.12-slim",
       "docs": {
@@ -1390,9 +1347,6 @@
       ],
       "setupNotes": [
         "Never run apply from a seat; a plan is evidence, an apply is the operator's decision."
-      ],
-      "seenIn": [
-        "KeyQuorum"
       ],
       "sandboxImage": "hashicorp/terraform:1.9",
       "docs": {
@@ -1473,10 +1427,9 @@
         }
       ],
       "setupNotes": [
-        "Some projects ship no container on purpose (KeyQuorum is Cloudflare only); do not add one without a plan.",
+        "Some projects ship no container on purpose; do not add one without a plan.",
         "No sandbox image: building images needs a container engine, and a container engine is never mounted into the sandbox. Run image builds on the host or in a VM with the human's OK."
       ],
-      "seenIn": [],
       "sandboxImage": null,
       "docs": {
         "format": "a comment above each non-obvious instruction (why this base image, why this flag)",
@@ -1545,11 +1498,6 @@
       ],
       "setupNotes": [
         "A required check keeps one stable name (for example `test`); a change to a workflow file always takes the full gate and is never review-bot exempt."
-      ],
-      "seenIn": [
-        "Bailey-Forbes-Flinstone",
-        "KeyQuorum",
-        "Homework-Central"
       ],
       "sandboxImage": "rhysd/actionlint:1.7.1",
       "docs": {
@@ -1629,7 +1577,6 @@
         "Templates in a server framework (Blade, ERB, Razor, Jinja) are reviewed as that language for injection and as HTML for structure.",
         "Set a Content-Security-Policy and test that it still allows the page to work."
       ],
-      "seenIn": [],
       "docs": {
         "format": "comments only for non-obvious structure or a required workaround; never commented-out markup",
         "lineComment": "<!-- … -->",
@@ -1721,7 +1668,6 @@
         "Laravel and Symfony have their own console test and lint commands; put them in the profile instead of guessing.",
         "Run composer with --no-scripts when inspecting an untrusted checkout."
       ],
-      "seenIn": [],
       "docs": {
         "format": "PHPDoc (/** … */ with @param, @return, @throws)",
         "lineComment": "//",
@@ -1815,7 +1761,6 @@
         "Rails: run db:migrate on an empty and a populated database before sign-off.",
         "Gem versions are pinned by Gemfile.lock; a lockfile change is a dependency change."
       ],
-      "seenIn": [],
       "docs": {
         "format": "YARD (# @param, @return, @raise)",
         "lineComment": "#",
@@ -1899,7 +1844,6 @@
         "Flutter device and integration tests need an emulator or device: NOT RUN in the sandbox.",
         "Flutter needs its own SDK image; the dart image covers pure Dart packages."
       ],
-      "seenIn": [],
       "docs": {
         "format": "dartdoc: /// comments, first line a one-sentence summary, where the contract is not obvious",
         "lineComment": "//",
@@ -1985,7 +1929,6 @@
         "No official sbt image is pinned here: build a project image from eclipse-temurin with sbt and pin its digest, or run on the host with the human's OK.",
         "Spark jobs need a cluster or local[*] session; keep tests on local mode."
       ],
-      "seenIn": [],
       "docs": {
         "format": "Scaladoc (/** … */ with @param, @return, @throws)",
         "lineComment": "//",
@@ -2085,7 +2028,6 @@
         "CodeQL for Swift needs macOS; the Linux image builds Foundation-only packages. UIKit/SwiftUI/Xcode builds are NOT RUN in the sandbox.",
         "Objective-C code in a mixed project is reviewed under this entry; it has no entry of its own."
       ],
-      "seenIn": [],
       "docs": {
         "format": "DocC / Swift markup: /// with - Parameter:, - Returns:, - Throws:",
         "lineComment": "//",
@@ -2171,7 +2113,6 @@
       "setupNotes": [
         "Legacy scripts often lack tests: add a characterization test (run on sample input, compare output) before changing one."
       ],
-      "seenIn": [],
       "docs": {
         "format": "POD (=head1, =head2, =item) in or after the code",
         "lineComment": "#",
@@ -2259,7 +2200,6 @@
         "For scripts embedded in a host (game engine, Neovim, nginx) the host binary is needed to run real tests: NOT RUN unless a headless mode exists.",
         "No official image is pinned here; use the host's own CI image or a pinned custom one."
       ],
-      "seenIn": [],
       "docs": {
         "format": "LDoc (--- with @param, @return)",
         "lineComment": "--",
@@ -2342,7 +2282,6 @@
         "Exports (Windows, Android, web) need export templates and are NOT RUN in the sandbox.",
         "Pin the Godot version in the project and in CI: scene and resource formats change between minor versions."
       ],
-      "seenIn": [],
       "docs": {
         "format": "## doc comments above classes, signals, exports and functions",
         "lineComment": "#",
@@ -2414,7 +2353,6 @@
         "Zig is pre-1.0: pin the compiler version in the profile and in CI.",
         "No official container image exists; use a pinned custom image."
       ],
-      "seenIn": [],
       "docs": {
         "format": "/// doc comments on declarations and //! on modules",
         "lineComment": "//",
@@ -2504,7 +2442,6 @@
         "This entry is a build target, not a source language: the source language's own entry decides compile, lint and scan; here you validate the binary and its surface.",
         "emcc and wasm-pack are usually missing in a plain sandbox: report NOT RUN rather than a pass."
       ],
-      "seenIn": [],
       "docs": {
         "format": ";; comments on imports and exports whose contract the host must know",
         "lineComment": "(;; …)  line comments use ;;",
@@ -2590,7 +2527,6 @@
         "The gcc image carries gfortran but not fpm: add fpm in a pinned project image.",
         "Numerical results are compared with a tolerance, never for equality."
       ],
-      "seenIn": [],
       "docs": {
         "format": "FORD-style !> doc comments before procedures and modules",
         "lineComment": "!",
@@ -2664,7 +2600,6 @@
         "GnuCOBOL is the free compiler; mainframe-only dialect features may not compile there: report NOT RUN for those, never a pass.",
         "Treat a record layout like a wire format: append, never renumber or resize."
       ],
-      "seenIn": [],
       "docs": {
         "format": "a short comment block at the top of each program naming its purpose, inputs, outputs and return codes where the code does not make them plain",
         "lineComment": "*>",
@@ -2747,7 +2682,6 @@
         "Notebooks (.Rmd) are code: render them in CI and diff the outputs only when they are deterministic.",
         "renv.lock is the dependency record; a change to it is a dependency change."
       ],
-      "seenIn": [],
       "docs": {
         "format": "roxygen2 (#' with @param, @return, @export, @examples)",
         "lineComment": "#",
@@ -2823,7 +2757,6 @@
         "Precompilation makes the first run slow; cache ~/.julia in CI, not in the sandbox image.",
         "Manifest.toml is committed for applications and not for libraries."
       ],
-      "seenIn": [],
       "docs": {
         "format": "docstrings in triple quotes above the definition, with a signature, Arguments and Examples",
         "lineComment": "#",
@@ -2910,7 +2843,6 @@
         "Pin GHC and the package set (stack resolver or cabal freeze file) in the profile.",
         "First builds take long; cache dist-newstyle outside the sandbox image."
       ],
-      "seenIn": [],
       "docs": {
         "format": "Haddock (-- | on the line above, -- ^ after a field)",
         "lineComment": "--",
@@ -2992,7 +2924,6 @@
       "setupNotes": [
         "The opam image is large: pin the tag and cache switches outside the sandbox."
       ],
-      "seenIn": [],
       "docs": {
         "format": "odoc comments (** … *) in the .mli where a value's contract is not obvious from its type",
         "lineComment": "(* … *)",
@@ -3074,7 +3005,6 @@
         "Dialyzer is a type checker, not a security scanner; it does not change the unanalysed note.",
         "Distributed nodes need a secret cookie from the environment, never from the repo."
       ],
-      "seenIn": [],
       "docs": {
         "format": "edoc (%% @doc, @param, @returns) where useful, and -spec on exported functions (specs are code, not comments)",
         "lineComment": "%%",
@@ -3161,7 +3091,6 @@
       "setupNotes": [
         "Sobelow covers Phoenix apps; plain OTP libraries have no scanner, so say so in the report."
       ],
-      "seenIn": [],
       "docs": {
         "format": "@moduledoc and @doc with iex> doctests where the behaviour is not obvious, and @spec on public functions (specs are code)",
         "lineComment": "#",
@@ -3243,7 +3172,6 @@
       "setupNotes": [
         "Other Lisps (Common Lisp, Scheme, Racket) are not separate entries: use this one for REPL-driven workflow notes and add a local entry if you need their toolchains."
       ],
-      "seenIn": [],
       "docs": {
         "format": "docstrings as the first element of def, defn and ns",
         "lineComment": "; (;; for line comments)",
@@ -3324,7 +3252,6 @@
       "setupNotes": [
         "CodeQL does not support F#; the C# entry's scan covers only C# projects in the same solution."
       ],
-      "seenIn": [],
       "docs": {
         "format": "XML documentation (/// <summary> …)",
         "lineComment": "//",
@@ -3346,7 +3273,6 @@
   ],
   "presets": {
     "readable-code": {
-      "from": "Homework-Central",
       "rules": [
         "Prefer pattern matching (switch expressions, match, case) over long if/else chains for closed-set decisions.",
         "Prefer fail-first control flow: validate and return or throw early, and keep the happy path unindented at the end of the function.",
@@ -3357,7 +3283,6 @@
       ]
     },
     "no-suppression": {
-      "from": "Homework-Central",
       "rules": [
         "Never silence a style or analysis rule to get green: no pragma/disable comments, NoWarn, SuppressMessage, nested config overrides or inline-config toggles for a rule the project pins as an error.",
         "Back the pinned rules with a grep backstop script in CI (for example a check-no-var script) and run linters with inline config disabled, so a suppression cannot hide a violation."

@@ -84,7 +84,7 @@ finds nothing open, and every `NOT RUN` is named in the report.
 
 ## Recording PASS
 
-QA writes `qa-<seat-id>.md` in `.devops/thoughts/non-finalized/` with,
+QA writes `qa-<seat-id>.md` in `devops-skill/thoughts/non-final/` with,
 on a line of its own, exactly one of:
 
 ```text
@@ -177,7 +177,7 @@ here.
 ### Assignment (feedback ledger)
 
 1. **Log.** On each review-bot event the Orchestrator adds one row to
-   `.devops/thoughts/non-finalized/feedback-ledger.md`: bot (login,
+   `devops-skill/thoughts/non-final/feedback-ledger.md`: bot (login,
    account id and type, verified yes/no), thread or comment id,
    `file:line`, severity as the bot labels it, verdict (valid /
    optional / invalid, with one line of code evidence), assigned seat

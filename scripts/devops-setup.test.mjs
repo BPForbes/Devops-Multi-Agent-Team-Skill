@@ -49,9 +49,10 @@ test('install writes both hosts, the profile and the gitignore, once', () => {
   for (const rel of [
     '.cursor/skills/devops-multi-agent-team/SKILL.md', '.claude/skills/devops-multi-agent-team/SKILL.md',
     '.claude/agents/devops-reviewer.md', '.cursor/commands/goal.md', '.devops/project.md', '.devops/languages.json',
-    '.devops/LANGUAGES.md', '.devops/languages.local.json', '.devops/thoughts/non-finalized/.gitkeep',
+    '.devops/LANGUAGES.md', '.devops/languages.local.json', 'devops-skill/thoughts/non-final', 'devops-skill/thoughts/final',
   ]) assert.ok(fs.existsSync(path.join(dir, rel)), rel)
-  assert.match(fs.readFileSync(path.join(dir, '.gitignore'), 'utf8'), /\.devops\/thoughts\/\*/)
+  const ignoreText = fs.readFileSync(path.join(dir, '.gitignore'), 'utf8')
+  assert.ok(ignoreText.includes('devops-skill/thoughts/non-final/') && ignoreText.includes('devops-skill/thoughts/final/'))
 
   fs.appendFileSync(path.join(dir, '.devops/project.md'), '\nMY EDIT\n')
   const second = install({ dest: dir, target: 'both' })
@@ -91,14 +92,14 @@ test('an unknown --lang id is refused', () => {
 const git = (dir, ...args) => spawnSync('git', args, { cwd: dir, encoding: 'utf8' })
 const ignored = (dir, rel) => git(dir, 'check-ignore', '-q', rel).status === 0
 
-test('thoughts are git-ignored, their .gitkeep and the profile are not (checked with real git)', () => {
+test('both thought folders are git-ignored and the committed profile is not (checked with real git)', () => {
   const dir = project({ 'main.py': 'print(1)\n' })
   execFileSync('git', ['init', '-q'], { cwd: dir })
   install({ dest: dir, target: 'claude' })
-  for (const rel of ['.devops/thoughts/non-finalized/review-reviewer-0b0b0b.md', '.devops/thoughts/non-finalized/push-coder-0a0a0a.json', '.devops/thoughts/finalized/goal-x.md', '.devops/thoughts/team-board.md', 'codeql-python.sarif']) {
+  for (const rel of ['devops-skill/thoughts/non-final/review-reviewer-0b0b0b.md', 'devops-skill/thoughts/non-final/push-coder-0a0a0a.json', 'devops-skill/thoughts/final/goal-x.md', 'devops-skill/thoughts/team-board.md', 'codeql-python.sarif']) {
     assert.ok(ignored(dir, rel), `${rel} should be ignored`)
   }
-  for (const rel of ['.devops/thoughts/non-finalized/.gitkeep', '.devops/project.md', '.devops/sandbox.md', '.devops/languages.json', '.claude/skills/devops-multi-agent-team/SKILL.md']) {
+  for (const rel of ['.devops/project.md', '.devops/sandbox.md', '.devops/languages.json', '.claude/skills/devops-multi-agent-team/SKILL.md']) {
     assert.ok(!ignored(dir, rel), `${rel} must not be ignored`)
   }
 })
@@ -109,7 +110,7 @@ test('the gitignore block is added to a missing file, repaired when damaged, and
   const text = fs.readFileSync(path.join(none, '.gitignore'), 'utf8')
   for (const line of GITIGNORE_LINES) assert.ok(text.includes(line), line)
 
-  const damaged = project({ 'a.py': '', '.gitignore': 'node_modules/\n# >>> devops-multi-agent-team (managed block; do not edit between the markers)\n.devops/thoughts/*\n# <<< devops-multi-agent-team\ndist/\n' })
+  const damaged = project({ 'a.py': '', '.gitignore': 'node_modules/\n# >>> devops-multi-agent-team (managed block; do not edit between the markers)\ndevops-skill/thoughts/*\n# <<< devops-multi-agent-team\ndist/\n' })
   install({ dest: damaged, target: 'claude' })
   const fixed = fs.readFileSync(path.join(damaged, '.gitignore'), 'utf8')
   for (const line of GITIGNORE_LINES) assert.ok(fixed.includes(line), line)
@@ -117,10 +118,12 @@ test('the gitignore block is added to a missing file, repaired when damaged, and
   const again = install({ dest: damaged, target: 'claude' })
   assert.ok(again.same.some(f => f.endsWith('.gitignore')) && !again.replaced.some(f => f.endsWith('.gitignore')))
 
-  const legacy = project({ 'a.py': '', '.gitignore': 'build/\n\n# devops-multi-agent-team\n.devops/thoughts/*\n!.devops/thoughts/non-finalized/\n\nout/\n' })
+  const legacy = project({ 'a.py': '', '.gitignore': 'build/\n\n# devops-multi-agent-team\ndevops-skill/thoughts/*\n!devops-skill/thoughts/non-final/\n\nout/\n' })
   install({ dest: legacy, target: 'claude' })
   const migrated = fs.readFileSync(path.join(legacy, '.gitignore'), 'utf8')
-  assert.equal((migrated.match(/\.devops\/thoughts\/\*\n/g) ?? []).length, 1)
+  assert.equal((migrated.match(/>>> devops-multi-agent-team/g) ?? []).length, 1)
+  assert.ok(!migrated.includes('!devops-skill/thoughts/non-final/'), 'the legacy block is replaced')
+  assert.ok(migrated.includes('devops-skill/thoughts/final/'))
   assert.ok(migrated.includes('build/') && migrated.includes('out/'))
 })
 

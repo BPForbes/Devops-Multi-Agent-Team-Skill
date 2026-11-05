@@ -116,7 +116,7 @@ export function buildGraph(catalogs) {
   const problems = []
   const warnings = []
   for (const s of stories) {
-    if (!STORY_ID.test(s.id)) problems.push(`story ${s.id}: id must look like FL-22`)
+    if (!STORY_ID.test(s.id)) problems.push(`story ${s.id}: id must look like SRV-22`)
     if (byId.has(s.id)) problems.push(`story ${s.id}: duplicate id`)
     byId.set(s.id, s)
     if (!STATUSES.includes(s.status)) problems.push(`story ${s.id}: status ${s.status} is not one of ${STATUSES.join(', ')}`)

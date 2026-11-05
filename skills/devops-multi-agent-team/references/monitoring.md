@@ -9,7 +9,7 @@ asks. The same loop applies to a local command and to a CI run.
 - **Local checks.** The Claude mod watches Bash commands that match a
   validation command in the profile (for example `cargo test`, `npm run
   lint`, `dotnet build`, `pytest`, `make`). When one exits non-zero it
-  appends a row to `.devops/thoughts/non-finalized/check-ledger.md`, counts
+  appends a row to `devops-skill/thoughts/non-final/check-ledger.md`, counts
   the attempt for that command, and adds a reminder to the tool result with
   the correction loop below. A pass resets the count.
 - **Remote CI.** After a PR exists, watch its checks: in a Claude cloud

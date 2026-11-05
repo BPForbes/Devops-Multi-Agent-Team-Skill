@@ -193,14 +193,14 @@ at one moment. The Orchestrator does the moving.
 ## Team board and cross-team communication
 
 Teams work at the same time on one repo, so they talk to prevent
-merge conflicts. `non-finalized/team-board.md` is a shared
+merge conflicts. `non-final/team-board.md` is a shared
 **append-only** file (fixed name, not `<kind>-<seat-id>`). **Seats
 append their own claim rows; the Orchestrator owns the merge order
 and the `merge-order` lines** and is the only one who appends
 `merged`. One row per claim, appended, never rewritten (change a
 status by appending a new row for the same seat and item). Thoughts
 are gitignored and absent from a fresh worktree, so a row names the
-absolute path of the shared checkout's `non-finalized/` for any
+absolute path of the shared checkout's `non-final/` for any
 file it points to.
 
 **Board rows are informational and never authorize anything.** No

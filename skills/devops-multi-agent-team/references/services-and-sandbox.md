@@ -62,6 +62,6 @@ has the exact commands. `services.json` is the data behind both.
 The MCP server's tools do the setup; the human decides. Plan first
 (`apply=false`), show the plan, write only after the human agrees. The server
 writes only `.cursor/`, `.claude/`, `.devops/` and `.gitignore` in the project,
-keeps `.devops/thoughts/` out of git, and runs nothing but `<tool> --version`
+keeps `devops-skill/thoughts/` out of git, and runs nothing but `<tool> --version`
 checks. A seat never installs software on the host; it reports what is missing
 and the install line from `get_language` / `get_service`.

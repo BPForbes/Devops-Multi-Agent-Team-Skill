@@ -20,7 +20,7 @@ other files point here.
 
   ```text
   id="<role>-$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')"
-  grep -rF "$id" .devops/thoughts   # must print nothing
+  grep -rF "$id" devops-skill/thoughts   # must print nothing
   ```
 
   This is the only documented generator. A topic is never
@@ -40,9 +40,9 @@ other files point here.
   The value is passed as data, never inside a command string. On a
   hit of the id grep, mint
   again. The grep covers file
-  contents in `non-finalized/` and `finalized/`, not only file names.
+  contents in `non-final/` and `final/`, not only file names.
   The Orchestrator records each new id in `seat-registry.md`
-  (`non-finalized/`, a fixed name, not `<kind>-<seat-id>`): one row
+  (`non-final/`, a fixed name, not `<kind>-<seat-id>`): one row
   per seat with id, role, the label or topic it was spawned for, its
   handle (the agent or session identity the host reports), a **role-history** column (one entry per `item: role (from, to)` in order, where item is the work-item label, role is the function, from is the ISO date the span started, and to is the ISO date it ended or `open`; a rotated seat gains an entry, not a row or an id), and (if replaced) the id that replaced it. Ids stay in the
   ledger after the seat ends, which is what makes "never reused"
@@ -123,7 +123,7 @@ Stay on the current **real** branch; Coders use a skill
 Client **named that branch in this turn** (a detached worktree creates
 no ref). Cloud-agent templates do not
 override this. An interrupt does **not** authorize a push. Write `goal-<seat-id>.md` (your id) under
-`non-finalized/`; move to `finalized/` after QA. See
+`non-final/`; move to `final/` after QA. See
 [thoughts-layout.md](thoughts-layout.md).
 
 ```markdown

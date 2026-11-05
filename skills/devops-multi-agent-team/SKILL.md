@@ -96,13 +96,13 @@ department's Coder until its Researcher is done. Primaries,
 finish-the-line, QA swaps, send-backs, and QA triage pairing:
 [references/department-pods.md](references/department-pods.md).
 
-Working Markdown is under `.devops/thoughts/` and is **gitignored**.
+Working Markdown is under `devops-skill/thoughts/` and is **gitignored**.
 Do not commit thoughts. Layout:
 [references/thoughts-layout.md](references/thoughts-layout.md).
 Identity, ask-paths, Coder notify:
 [references/role-identity.md](references/role-identity.md).
 Push JSON: [references/push-json.md](references/push-json.md).
-Do not `git add` `.devops/thoughts/` except `non-finalized/.gitkeep`.
+Do not `git add` anything under `devops-skill/thoughts/` (both folders are in `.gitignore`).
 
 **Only QA may give the OK to push.** Review Satisfied, Security Clear,
 and the Orchestrator do not authorize a push. Do not push, publish,
@@ -115,13 +115,13 @@ push either.
 ### Reviewer entrypoint (before QA)
 
 1. Documentation & Research writes a brief (`docs/` + online media +
-   thoughts under `.devops/thoughts/non-finalized/`).
+   thoughts under `devops-skill/thoughts/non-final/`).
 2. Coder writes the **Push JSON** and a Handoff `To: Reviewer`
    **before the first review** (`closes` may be empty). Schema:
    [push-json.md](references/push-json.md).
 3. Reviewers compare that JSON to the **side-branch** tree vs
    `<integration-base>` ([side-work.md](references/side-work.md)) in
-   `.devops/thoughts/non-finalized/review-<seat-id>.md`. An omitted or
+   `devops-skill/thoughts/non-final/review-<seat-id>.md`. An omitted or
    wrong hunk is a finding.
 4. Coder fixes on the side-branch, updates the Push JSON, and notifies
    Reviewers. Either side may Push again until **Satisfied**.
@@ -148,7 +148,7 @@ push either.
 ### Virtual PR and virtual git
 
 Work in progress lives in the **virtual PR**: the review thread, Push JSON,
-handoffs, research and QA notes under `.devops/thoughts/` (gitignored), and
+handoffs, research and QA notes under `devops-skill/thoughts/` (gitignored), and
 each Coder's code in a detached local worktree handed over by commit SHA.
 Nothing reaches the real branch, and no real PR is opened or updated, until
 Security is Clear and QA marks PASS; then the Orchestrator cherry-picks the
@@ -241,7 +241,7 @@ ticket comment.
 Label every substantive reply with the active role, e.g. `[Planner]`; a spawned seat adds its id, e.g. `[Coder coder-0a0a0a]`.
 
 - **Planner** — `/goal` when the human named X. Plans in
-  `.devops/thoughts/non-finalized/`; durable docs in `docs/`.
+  `devops-skill/thoughts/non-final/`; durable docs in `docs/`.
 - **Researcher** — reads documentation first (Markdown, LaTeX, code
   comments), maps the modules (Mermaid mind map), double-checks reuse and
   writes the reuse map; online media last; then **join the Coder of the same
@@ -295,7 +295,7 @@ Author.
 research  ∥  implement  ∥  review   (department rules apply)
 security  →  qa  →  docs
 push      →  NEVER until QA marks PASS
-            After PASS: thoughts → finalized/ (local); the Orchestrator
+            After PASS: thoughts → final/ (local); the Orchestrator
             pushes only after the human authorizes that push, keeping
             approved Coder commits
 repeat    →  until PASS; QA blocked/send-back → triage;

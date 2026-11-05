@@ -20,7 +20,7 @@ no branch or ref is created, so there is nothing to push, collide
 on or delete. The Coder's work is handed over **by commit SHA**.
 
 1. Write `side-<dept>.md` under the shared checkout's
-   `.devops/thoughts/non-finalized/` (absolute path; thoughts are
+   `devops-skill/thoughts/non-final/` (absolute path; thoughts are
    gitignored and absent from a fresh worktree, so Coders write and
    claim there, never inside the worktree): `name`
    (`side/<dept>-<topic>`, a label only), `worktree` (the path

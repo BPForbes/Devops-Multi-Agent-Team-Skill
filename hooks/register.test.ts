@@ -6,7 +6,7 @@ const assert = {
   deepEqual: (a: unknown, b: unknown) => expect(a).toEqual(b),
 }
 
-const QA_DIR = '/work/.devops/thoughts/non-finalized'
+const QA_DIR = '/work/devops-skill/thoughts/non-final'
 
 function engine(on: any, note: string | undefined) {
   const state = new Map<string, unknown>()

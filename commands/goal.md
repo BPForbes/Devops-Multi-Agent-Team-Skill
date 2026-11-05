@@ -9,11 +9,11 @@ Also: `set a goal`, `do until X`, `keep going until X`.
 
 Do until you achieve **X**. Do not stop at a plan or a partial implement.
 
-1. Write the objective to `.devops/thoughts/non-finalized/goal-<seat-id>.md`
+1. Write the objective to `devops-skill/thoughts/non-final/goal-<seat-id>.md`
    (acceptance criteria, non-goals, done-when); `<seat-id>` is your own
    id ([role-identity.md](../skills/devops-multi-agent-team/references/role-identity.md)),
    or `orchestrator-<topic>` for the Orchestrator. Do not `git add` those files. After QA
-   PASS, move closed goals to `.devops/thoughts/finalized/` (local).
+   PASS, move closed goals to `devops-skill/thoughts/final/` (local).
 2. If the host has a goal tool (Cursor `CreateGoal` / `UpdateGoal`), also use it for a long-running human-invoked goal.
 3. The Orchestrator (`/devops-multi-agent-team`) loops the DevOps cycle until X is actually achieved.
 4. Spawn roles with `/create-subagent` **asynchronously**. Subagents accept the same `/` command or plain wording.

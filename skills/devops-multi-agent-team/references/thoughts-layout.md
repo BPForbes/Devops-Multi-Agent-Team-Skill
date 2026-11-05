@@ -2,25 +2,23 @@
 
 Working notes are **transient** and **gitignored**. Do not commit
 research dumps, review threads, `/goal` logs, `/repro` notes, role
-goals, or Push JSON. Committing `non-finalized/` stores those blobs
+goals, or Push JSON. Committing `non-final/` stores those blobs
 in every earlier commit.
 
 | Path | Git | When |
 |------|-----|------|
-| `.devops/thoughts/non-finalized/` | **Gitignored** (keepfile only) | Open |
-| `.devops/thoughts/finalized/` | **Gitignored** | Done (local after QA) |
+| `devops-skill/thoughts/non-final/` | **Gitignored** | Open work |
+| `devops-skill/thoughts/final/` | **Gitignored** | Closed work (kept locally after QA PASS) |
 
-The installer (or the MCP tool `ensure_gitignore`) writes and repairs a
-managed block in `.gitignore` between `# >>> devops-multi-agent-team` and
-`# <<< devops-multi-agent-team`: it ignores everything under
-`.devops/thoughts/` except `non-finalized/.gitkeep`, and leaves the committed
-`.devops/project.md` alone. Check with `git check-ignore -v <path>`.
-
-Keep `.devops/thoughts/non-finalized/.gitkeep`. Do not `git add`
-any other file under `.devops/thoughts/`.  Push JSON lives in `non-finalized/`
+Both folders are created by the installer and listed in `.gitignore`. The
+installer (or the MCP tool `ensure_gitignore`) writes and repairs the managed
+block between `# >>> devops-multi-agent-team` and `# <<< devops-multi-agent-team`.
+It leaves the committed `.devops/` folder (profile, language data, stories)
+alone. Check with `git check-ignore -v <path>`. Never `git add` anything under
+`devops-skill/thoughts/`. Push JSON lives in `non-final/`
 ([push-json.md](push-json.md)).
 
-**non-finalized:** a seat's files are named `<kind>-<seat-id>.md`
+**non-final:** a seat's files are named `<kind>-<seat-id>.md`
 (`.json` for Push JSON), with its own id from
 [role-identity.md](role-identity.md) (Seat ids): `handoff-`,
 `review-` (the thread, named for the Reviewer who opens it),
@@ -32,7 +30,7 @@ Orchestrator's fixed-name `seat-registry.md`, `feedback-ledger.md`
 and `team-board.md` (append-only: seat | item | worktree | files and
 build-file sections touched | status)
 ([triage-template.md](triage-template.md),
-[side-work.md](side-work.md)). **finalized** after QA PASS: move
+[side-work.md](side-work.md)). **final** after QA PASS: move
 matching files locally; do not `git add`.
 
 If a note must survive clones, put it in `docs/` or skill
@@ -45,7 +43,7 @@ tokens; prefer exit codes.
 Coders do not commit on the shared checkout. After Satisfied,
 Security Clear, **and QA marks PASS** (or the review-bot path in qa-publish-policy.md):
 
-1. Move closed thoughts to `finalized/` (local).
+1. Move closed thoughts to `final/` (local).
 2. Compress. **Keep reviewer-approved trees as keep-commits**
    (Orchestrator). A **keep-commit** since `<integration-base>`
    includes product,

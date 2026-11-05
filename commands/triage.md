@@ -10,7 +10,7 @@ Also: `open triage`, `track this bug`, `QA triage`.
 **Owner: QA** (`../agents/devops-quality-engineer.md`).
 
 1. Copy `../skills/devops-multi-agent-team/references/triage-template.md`
-   to `.devops/thoughts/non-finalized/triage-<seat-id>.md`.
+   to `devops-skill/thoughts/non-final/triage-<seat-id>.md`.
 2. Fill **What went wrong**, **Expected**, **Actual**, environment,
    and the command that discovered it. Set **State:** `active`.
 3. Use **Q&A** on that file (same table + Push JSON `qa` as the

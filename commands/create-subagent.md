@@ -22,7 +22,7 @@ Spawn specialized roles. They run **asynchronously in pods**, not a linear queue
 6. Give every spawned seat a seat id (`<role>-<6 hex>`, minted by the
    Orchestrator, see `role-identity.md` Seat ids) and put it in the
    spawn description. Resume standing seats; do not mint a new id.
-7. Working Markdown goes in `.devops/thoughts/non-finalized/` while open.
+7. Working Markdown goes in `devops-skill/thoughts/non-final/` while open.
    Agent files set `is_background: true`. Always spawn with
    `run_in_background: true`.
 

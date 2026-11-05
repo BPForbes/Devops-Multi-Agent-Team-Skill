@@ -1,8 +1,6 @@
 node_modules/
-.devops/thoughts/*
-!.devops/thoughts/non-finalized/
-.devops/thoughts/non-finalized/*
-!.devops/thoughts/non-finalized/.gitkeep
+devops-skill/thoughts/final/
+devops-skill/thoughts/non-final/
 .claude-plugin/types/
 *.sarif
 .codeql-db-*

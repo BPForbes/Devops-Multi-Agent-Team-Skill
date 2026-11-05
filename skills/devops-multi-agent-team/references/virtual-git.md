@@ -11,13 +11,13 @@ Work in progress lives in a **virtual PR**, not on the real branch:
 
 | Part | Where | Real branch sees it? |
 |------|-------|----------------------|
-| Review thread, Q&A, Handoffs | `.devops/thoughts/non-finalized/review-<seat-id>.md` | never |
+| Review thread, Q&A, Handoffs | `devops-skill/thoughts/non-final/review-<seat-id>.md` | never |
 | Push JSON (what changed, hunk by hunk) | `push-<seat-id>.json` | never |
 | Research brief, reuse map, module mind map, comment-worthy code | `research-<seat-id>.md` | never |
 | Line remarks, questions and notes between Coder and Reviewer | review thread `## Line remarks` and `## Q&A`, Push JSON `qa` | never (and never in code comments) |
 | QA verdict, triage, check ledger | `qa-…`, `triage-…`, `check-ledger.md` | never |
 | The Coder's code | a **detached git worktree** off the integration SHA (the "skill side-branch") | never |
-| Team board, seat registry, feedback ledger | fixed-name files in `non-finalized/` | never |
+| Team board, seat registry, feedback ledger | fixed-name files in `non-final/` | never |
 
 All of it is gitignored (the installer writes the `.gitignore` block).
 Agents can track history and talk because the thread and the worktree
@@ -47,7 +47,7 @@ exist; the real branch stays clean until the work is approved.
    not an author re-approves the integrated tree
    ([department-pods.md](department-pods.md), Team board). Only mechanical
    conflicts are resolved by the Orchestrator, who then counts as an Author.
-6. **Compress and push once.** Closed thoughts move to `finalized/`
+6. **Compress and push once.** Closed thoughts move to `final/`
    (local). Keep-commits are replayed with their messages, process files are
    folded away, and the Orchestrator pushes **once, after the human
    authorizes that push** ([thoughts-layout.md](thoughts-layout.md), One push).

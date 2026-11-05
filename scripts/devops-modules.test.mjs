@@ -176,8 +176,8 @@ test('the process puts notes in the PR and not in code, and gives Coders, Resear
 
 test('install creates the story catalog with a project code, committed rather than ignored', () => {
   const dir = project({ 'a.py': '' })
-  fs.renameSync(dir, dir + '-KeyQuorum')
-  const named = dir + '-KeyQuorum'
+  fs.renameSync(dir, dir + '-ProjectX')
+  const named = dir + '-ProjectX'
   install({ dest: named, target: 'claude' })
   const catalog = JSON.parse(fs.readFileSync(path.join(named, '.devops/stories/catalog.json'), 'utf8'))
   assert.deepEqual(catalog.stories, [])

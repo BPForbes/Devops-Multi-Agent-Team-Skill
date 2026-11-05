@@ -6,12 +6,9 @@ pods, gates and handoffs. **What "build", "test", "lint" and "scan" mean
 is decided here**, one language at a time, and written into each
 project's `.devops/project.md`.
 
-It exists because the three projects this was extracted from
-(Bailey-Forbes-Flinstone, KeyQuorum, Homework-Central) each carried a
-hand-edited copy of the skill with their own language rules baked in:
-a C/ASM kernel built with `make`, a Rust crate with JS Workers and
-Terraform, and a .NET API with a React front end. Those rules now live as
-data in [`languages.json`](languages.json), and this page explains it.
+It exists because a skill that carries each project's language rules by hand
+goes stale and diverges. The rules now live as data in
+[`languages.json`](languages.json), and this page explains it.
 
 | File | Role |
 |------|------|
@@ -39,7 +36,7 @@ node scripts/devops-setup.mjs install --dest ~/my-project --target both
 2. **Install** copies the skill, the nine agents and the commands into
    `.cursor/` and/or `.claude/`, copies `languages.json` and this file into
    `.devops/`, writes `.devops/project.md` for the detected languages,
-   creates `.devops/thoughts/non-finalized/.gitkeep` and adds the
+   creates `devops-skill/thoughts/final/` and `non-final/` and adds the
    gitignore block. It never overwrites a file that differs unless you pass
    `--force`; `--dry-run` shows what would change.
 3. **You finish the profile.** The generator fills in what is knowable
@@ -108,9 +105,9 @@ shared contract.
 
 | Stack | Departments | Boundary | Validation order | Watch for |
 |-------|-------------|----------|------------------|-----------|
-| **React/TS + .NET API** (Homework-Central) | web, backend, data, tooling | REST + SignalR; EF migrations | `dotnet build/test` → `npm ci/lint/test/build` → smoke in browser | raw SQL; `var`/`dynamic` rule; design tokens; `.sh`/`.ps1` twins |
-| **Rust core + TS lab + JS Workers + Terraform** (KeyQuorum) | systems/backend, web, infra | wasm build; Worker wrangler config; C header for FFI | `cargo fmt/clippy/test` (every feature set) → `npm run build:wasm/build/test:browser` → worker guard → `terraform validate` | features that must not combine; tests in own file; secrets only from the test helper; documented limits vs. deploy evidence |
-| **C kernel + ASM + shell/Python tooling** (Flinstone) | systems, tooling, infra | calling convention; frozen contract headers; wasm lab | `make` + test targets (with sanitizers) → asm assembly per arch → script checks → CodeQL (cpp, python, actions) | asm not scanned; ABI headers append-only; versioning/lock rules; the kernel only orchestrates drivers |
+| **React/TS + .NET API** | web, backend, data, tooling | REST + SignalR; EF migrations | `dotnet build/test` → `npm ci/lint/test/build` → smoke in browser | raw SQL; `var`/`dynamic` rule; design tokens; `.sh`/`.ps1` twins |
+| **Rust core + TS lab + JS Workers + Terraform** | systems/backend, web, infra | wasm build; Worker wrangler config; C header for FFI | `cargo fmt/clippy/test` (every feature set) → `npm run build:wasm/build/test:browser` → worker guard → `terraform validate` | features that must not combine; tests in own file; secrets only from the test helper; documented limits vs. deploy evidence |
+| **C kernel + ASM + shell/Python tooling** | systems, tooling, infra | calling convention; frozen contract headers; wasm lab | `make` + test targets (with sanitizers) → asm assembly per arch → script checks → CodeQL (cpp, python, actions) | asm not scanned; ABI headers append-only; versioning/lock rules; the kernel only orchestrates drivers |
 | **Python service + TS SPA** | backend, web | OpenAPI | `ruff/mypy/pytest` → `npm …` | `shell=True`, pickle/yaml.load, untrusted `-I` imports |
 | **Go service + containers + Terraform** | backend, infra | gRPC/OpenAPI; image | `gofmt/vet/staticcheck/test -race` → `docker build` + `trivy` → `terraform validate` | unpinned base images; `apply` is never run by a seat |
 | **Java/Kotlin + Gradle** | backend | OpenAPI | `./gradlew build` | one CodeQL id for both |
@@ -138,8 +135,7 @@ commands for the languages in a project.
 Install a compiler and the analyzers (`build-essential clang clang-tidy
 cppcheck`). Build with the project's own system; do not invent a new one.
 Build twice: strict warnings, and with `-fsanitize=address,undefined`.
-CodeQL needs the real build command. Frozen headers (`contracts/`,
-`fl/*`) are ABI: append, never renumber. If a target needs a cross
+CodeQL needs the real build command. Frozen contract and ABI headers are ABI: append, never renumber. If a target needs a cross
 compiler or `emcc` that is missing, it is `NOT RUN`.
 
 #### `cpp` — C++
@@ -176,7 +172,7 @@ Install the SDK from `global.json`. Restore, `dotnet format
 `dotnet build`. Raw SQL calls (`FromSqlRaw`, `ExecuteSqlRaw`,
 `SqlQueryRaw`) must be parameterized; the Security seat searches for
 them. The strict **explicit-types** preset (no `var`, no `dynamic`) is an
-opt-in from Homework-Central, pinned in `.editorconfig` so a green build
+an opt-in preset, pinned in `.editorconfig` so a green build
 proves it.
 
 #### `java` — Java
@@ -211,7 +207,7 @@ and a `wrangler.toml`: run them, and never put a credential in `[vars]`.
 
 #### `css` — CSS / SCSS
 `stylelint` and a look in light and dark themes. Colors, shadows and
-timings come from design tokens; the token-only preset (Homework-Central)
+timings come from design tokens; the token-only preset
 forbids hard-coded values. No scanner; the review checks `url()` input.
 
 ### Scripting layer
@@ -243,7 +239,7 @@ git.
 #### `containers` — Containers
 `hadolint`, a real `docker build`, `trivy` for the image and config, pinned
 base images, non-root user. Some projects deliberately ship no container
-(KeyQuorum is Cloudflare-only): do not add one without a plan.
+(a project can be Cloudflare-only): do not add one without a plan.
 
 #### `ci-workflows` — CI workflows
 `actionlint`; actions pinned to a commit; least-privilege `permissions:`;

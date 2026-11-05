@@ -1,9 +1,9 @@
 # QA triage item
 
-Copy to `.devops/thoughts/non-finalized/triage-<seat-id>.md`. Same
+Copy to `devops-skill/thoughts/non-final/triage-<seat-id>.md`. Same
 Handoff + **Q&A** as the review thread. Copy ids into Push JSON
 `qa`. `"files"` may be `{}`. Do not `git add`. After QA PASS,
-move to `finalized/`.
+move to `final/`.
 
 When QA is **blocked**, **sends back**, or is **not pleased**, QA
 opens this file. The department's Researcher **joins the Coder
@@ -18,7 +18,7 @@ research-then-coder queue.
 **Opened by:** <qa-seat-id>
 **Discovered during:** <command, `/repro`, VM, SOC 2 review, CI>
 **Branch:** <current checkout>
-**Review thread:** `.devops/thoughts/non-finalized/review-<seat-id>.md`
+**Review thread:** `devops-skill/thoughts/non-final/review-<seat-id>.md`
 
 ## What went wrong / Expected / Actual
 - …

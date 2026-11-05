@@ -38,7 +38,7 @@ is not a push either. Quality-tool results are additive.
    `To: Coder`, open `triage-<seat-id>.md`. the department's Researcher joins the
    Coder who picks it up (`department-pods.md`).
 4. PASS only when AC, tests, the SOC 2 verdict and the bug hunt hold. List thoughts for
-   `finalized/`. Orchestrator cherry-picks the approved
+   `final/`. Orchestrator cherry-picks the approved
    side-branch SHAs; a QA seat that is not an author of the integrated
    tree re-approves it (authors: the union of the Handoff `Authors:` and the
    Push JSON `authors` of every cherry-picked SHA, the Orchestrator's conflict

@@ -1,8 +1,8 @@
 # Agent commands
 
 Accept as `/name` or plain wording. Copies live in
-`commands/` (plugin) or `.cursor/commands/` / `.claude/commands/` (installed). Notes under `.devops/thoughts/non-finalized/`
-(**gitignored**); after QA PASS move to `finalized/` (local).
+`commands/` (plugin) or `.cursor/commands/` / `.claude/commands/` (installed). Notes under `devops-skill/thoughts/non-final/`
+(**gitignored**); after QA PASS move to `final/` (local).
 See [thoughts-layout.md](thoughts-layout.md). Stay on the current
 non-`main` branch. **Never** create a git branch (`git worktree add -b` included)
 unless The Client named that branch in this turn; a detached worktree

@@ -7,7 +7,7 @@ Reviewers **always** compare it to the side-branch tree vs
 or wrong hunk is a finding. Do not mark Satisfied from the JSON
 alone.
 
-`.devops/thoughts/non-finalized/` is **gitignored**. Do not
+`devops-skill/thoughts/non-final/` is **gitignored**. Do not
 `git add` Push JSON.
 
 | File | Who | When |

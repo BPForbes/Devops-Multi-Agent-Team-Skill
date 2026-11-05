@@ -4,7 +4,7 @@ import type { Found } from '../types'
 import { branchNameOf, classify, classifySegments, commitInfo, splitArgs, verdictOf } from './guard'
 
 const PLUGIN = 'devops-multi-agent-team'
-const THOUGHT_DIRS = ['.devops/thoughts/non-finalized', '.devops/thoughts/finalized']
+const THOUGHT_DIRS = ['devops-skill/thoughts/non-final', 'devops-skill/thoughts/final']
 
 
 const HELP = [
@@ -106,7 +106,7 @@ async function retryCap($: EngineInterface): Promise<number> {
 async function appendLedger($: EngineInterface, row: string): Promise<void> {
   const root = await $.session.root()
   if (!(await $.fs.exists(`${root}/.devops`).catch(() => false))) return
-  const file = `${root}/.devops/thoughts/non-finalized/check-ledger.md`
+  const file = `${root}/devops-skill/thoughts/non-final/check-ledger.md`
   const current = await $.fs.read(file).catch(() => '')
   const header = 'time (UTC) | check | where | exit/conclusion | attempt | class | first failing line | status\n'
   await $.fs.write(file, (typeof current === 'string' && current !== '' ? current : header) + row + '\n')
@@ -251,7 +251,7 @@ export const register: Register = on => {
       const authorized = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const)).value ?? false
       const qa = await latestQaVerdict($)
       if (qa.verdict !== 'PASS') {
-        return { deny: `${PLUGIN}: ${actions.find(a => a.kind === 'publish')?.what} is refused. Only QA may give the OK to push: no qa-*.md note under .devops/thoughts says "Publish gate: PASS" (latest: ${qa.verdict ?? 'none'}).` }
+        return { deny: `${PLUGIN}: ${actions.find(a => a.kind === 'publish')?.what} is refused. Only QA may give the OK to push: no qa-*.md note under devops-skill/thoughts says "Publish gate: PASS" (latest: ${qa.verdict ?? 'none'}).` }
       }
       if (!authorized) {
         return { deny: `${PLUGIN}: QA recorded PASS, but the person has not authorized a push. Ask them to type /devops push-ok.` }
@@ -287,7 +287,7 @@ export const register: Register = on => {
     await $.state.set({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const, { ...counts, [check]: attempt })
     await appendLedger($, `${stamp} | ${check} | local | non-zero | ${attempt} | unclassified | see tool output | ${attempt >= cap ? 'escalated' : 'open'}`)
     const context = attempt >= cap
-      ? `${PLUGIN} monitor: "${check}" has failed ${attempt} times (cap ${cap}). Stop trying variations. Open triage-<seat-id>.md with the rows in .devops/thoughts/non-finalized/check-ledger.md and ask the person. Never skip, loosen or disable a test, rule or check to get green.`
+      ? `${PLUGIN} monitor: "${check}" has failed ${attempt} times (cap ${cap}). Stop trying variations. Open triage-<seat-id>.md with the rows in devops-skill/thoughts/non-final/check-ledger.md and ask the person. Never skip, loosen or disable a test, rule or check to get green.`
       : `${PLUGIN} monitor: "${check}" failed (attempt ${attempt} of ${cap}). Correct it per monitoring.md: record, classify (ours, existing, environment, flaky with evidence), reproduce in the sandbox, fix the cause on your side-branch, then re-run this same check. Never skip, loosen or disable a test, rule or check to get green.`
     return { ...ran, context: [...(ran.context ?? []), context] }
   }).catch(($, e, next) =>

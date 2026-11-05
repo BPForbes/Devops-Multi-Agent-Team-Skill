@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Look at the change; do not edit. Write findings to .devops/thoughts/non-finalized/. Primary owner is QA.
+description: Look at the change; do not edit. Write findings to devops-skill/thoughts/non-final/. Primary owner is QA.
 ---
 
 # /code-review
@@ -24,7 +24,7 @@ Primary owner: **QA** (`../agents/devops-quality-engineer.md`). Reviewers may us
    module or driver that repeats existing behavior is a **blocking**
    finding. Record file and line and the existing code to reuse or
    extend. Do not mark a review done while one remains.
-3. Write findings into `.devops/thoughts/non-finalized/review-<seat-id>.md`.
+3. Write findings into `devops-skill/thoughts/non-final/review-<seat-id>.md`.
    Line-level feedback may also go in an uncommitted `push-<seat-id>.json`.
 4. **Do not edit** product code, workflows, or docs to "fix" findings while acting as `/code-review`. Hand remediations to the Coder.
 5. Prefer proving a finding in a throwaway clone

@@ -4,10 +4,10 @@ A **story** is a written change proposal at the level of the code: what exists
 now (OLD), what it becomes (NEW), why, and how it relates to other stories. It
 is a specification, not the implementation. Stories are how a large change is
 cut into pieces that can be reviewed, ordered and, later, built, and how two
-projects (for example Flinstone and KeyQuorum) agree on the pieces that cross
+projects (for example a server and its client) agree on the pieces that cross
 between them.
 
-The format is the one the FL/KQ catalog uses: one file per story, a catalog
+The format: one file per story, a catalog
 index, typed links, verbatim OLD blocks pinned to a baseline commit, NEW blocks
 that say honestly whether they were compiled, and a Why section with decisions
 and corrections.
@@ -19,9 +19,9 @@ and corrections.
 | `.devops/stories/catalog.json` | the index: id, title, status, links, files, patterns, decisions, issue number | committed |
 | `.devops/stories/<ID>.md` | one story ([story-template.md](story-template.md)) | committed |
 | `.devops/stories/guidance.md` | generated: order, ready work, patterns, decisions, graph | committed |
-| `.devops/thoughts/non-finalized/` | the drafts, reviews and remarks while a story is worked | ignored |
+| `devops-skill/thoughts/non-final/` | the drafts, reviews and remarks while a story is worked | ignored |
 
-The catalog names its project code (`FL`, `KQ`) and baseline branch and commit.
+The catalog names its project code (`SRV`, `CLI`) and baseline branch and commit.
 Ids are `<CODE>-<number>`. A project links to another project's stories by
 their ids; to see both at once, load both catalogs (`story_graph` with
 `dests`).
@@ -38,10 +38,10 @@ their ids; to see both at once, load both catalogs (`story_graph` with
 | `SUPERSEDED` | replaced (needs `supersededBy`) |
 | `DROPPED` | withdrawn, with the reason in the Why |
 
-Add a short reason in parentheses after the status, as the real stories do.
+Add a short reason in parentheses after the status, as is usual in a catalog.
 
 Links are typed and always kept on both sides: `depends-on` (and its inverse
-`needed by`), `absorbs` (FL-20 absorbs FL-24), `supersedes`, `refines`,
+`needed by`), `absorbs` (SRV-20 absorbs SRV-24), `supersedes`, `refines`,
 `shares-contract` (two stories change one interface). `story_link` writes both
 sides and refuses a cycle; `story_graph` finds anything that drifted.
 

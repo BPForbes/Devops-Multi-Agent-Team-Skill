@@ -9,7 +9,7 @@ export const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.
 
 const SKIP_DIRS = new Set([
   '.git', 'node_modules', 'target', 'dist', 'build', '.venv', 'venv', '__pycache__',
-  '.devops', '.terraform', 'vendor', 'bin', 'obj', '.next', '.cache', '.gradle', '.idea',
+  '.devops', 'devops-skill', '.terraform', 'vendor', 'bin', 'obj', '.next', '.cache', '.gradle', '.idea',
 ])
 const MAX_DEPTH = 5
 const MAX_ENTRIES = 20000
@@ -352,11 +352,11 @@ export function renderProfile(config, selected, dest, ctx = {}) {
     return `### ${l.name}\n${bullets([`Doc format: ${d.format ?? '_not set_'}`, `Line comment marker: ${code(d.lineComment ?? '')}`, `Doc check (only if the project publishes API docs): ${d.check ?? '_not set_'}`])}`
   })
   const docs = config.docsNote ? `${config.docsNote}\n\n${docsBody}` : docsBody
-  const presets = Object.entries(config.presets ?? {}).map(([id, p]) => `### Preset \`${id}\` (opt-in, from ${p.from})\n${bullets(p.rules)}`).join('\n\n')
+  const presets = Object.entries(config.presets ?? {}).map(([id, p]) => `### Preset \`${id}\` (opt-in)\n${bullets(p.rules)}`).join('\n\n')
 
   const style = section(selected, l => {
     const rules = [...(l.style ?? [])]
-    const optIn = (l.optInStyle ?? []).map(o => `_Opt-in (${o.from}, \`${o.id}\`):_ ${o.rule}`)
+    const optIn = (l.optInStyle ?? []).map(o => `_Opt-in (\`${o.id}\`):_ ${o.rule}`)
     return `### ${l.name}\n${bullets([...rules, ...optIn])}`
   })
 
@@ -473,11 +473,12 @@ export function addLocalLanguage(destInput, entry, { apply = false } = {}) {
 
 const GITIGNORE_BEGIN = '# >>> devops-multi-agent-team (managed block; do not edit between the markers)'
 const GITIGNORE_END = '# <<< devops-multi-agent-team'
+export const THOUGHTS_FINAL = 'devops-skill/thoughts/final'
+export const THOUGHTS_NON_FINAL = 'devops-skill/thoughts/non-final'
 export const GITIGNORE_LINES = [
-  '.devops/thoughts/*',
-  '!.devops/thoughts/non-finalized/',
-  '.devops/thoughts/non-finalized/*',
-  '!.devops/thoughts/non-finalized/.gitkeep',
+  'devops-skill/thoughts/*',
+  `${THOUGHTS_FINAL}/`,
+  `${THOUGHTS_NON_FINAL}/`,
   '_scratch/',
   '*.scratch*',
   'codeql-*.sarif',
@@ -589,7 +590,14 @@ export function install({ dest: destInput, roots, target = 'both', lang = 'auto'
   const code = (projectName.match(/[A-Z]|(?<=[-_ ])[a-z]|^[a-z]/g) ?? [projectName[0] ?? 'X']).join('').toUpperCase().slice(0, 4).padEnd(2, 'X')
   const skeleton = { schemaVersion: 1, project: { code, name: projectName, language: selected[0]?.name ?? '', baseline: { branch: 'main', sha: '' } }, projects: {}, stories: [] }
   writeText(path.join(dest, '.devops', 'stories', 'catalog.json'), JSON.stringify(skeleton, null, 2) + '\n', { ...opts, force: false }, report)
-  writeText(path.join(dest, '.devops', 'thoughts', 'non-finalized', '.gitkeep'), '', { ...opts, force: false }, report)
+  for (const dir of [THOUGHTS_NON_FINAL, THOUGHTS_FINAL]) {
+    const target = path.join(dest, dir)
+    if (lexists(target)) continue
+    report.created.push(target)
+    if (opts.dryRun) continue
+    assertInside(dest, target)
+    fs.mkdirSync(target, { recursive: true })
+  }
   ensureGitignore(dest, opts, report)
   return report
 }
@@ -605,7 +613,7 @@ export function status(destInput, roots) {
     profile: has('.devops/project.md'),
     sandboxDoc: has('.devops/sandbox.md'),
     languageData: has('.devops/languages.json'),
-    thoughtsKeepFile: has('.devops/thoughts/non-finalized/.gitkeep'),
+    thoughtsDirs: has(THOUGHTS_NON_FINAL) && has(THOUGHTS_FINAL),
     gitignoreOk: gitignoreOk(dest),
     detectedLanguages: detectLanguages(dest).map(d => d.id),
     detectedServices: detectServices(dest).map(d => d.id),

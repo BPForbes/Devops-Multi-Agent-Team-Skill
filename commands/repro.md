@@ -1,6 +1,6 @@
 ---
 name: repro
-description: Reproduce a failure with exact commands before declaring a cause. Notes stay in .devops/thoughts/non-finalized/.
+description: Reproduce a failure with exact commands before declaring a cause. Notes stay in devops-skill/thoughts/non-final/.
 ---
 
 # /repro
@@ -10,7 +10,7 @@ Also: `reproduce`, `write a repro`.
 Reproduce the failure before declaring a cause.
 
 1. Recreate it with exact commands, inputs, and exit codes.
-2. Write the repro to `.devops/thoughts/non-finalized/repro-<topic>.md`.
+2. Write the repro to `devops-skill/thoughts/non-final/repro-<topic>.md`.
    Redact secrets first ([thoughts-layout.md](../skills/devops-multi-agent-team/references/thoughts-layout.md)).
 3. Files the repro *creates* in the project tree are process output and
    never land on the committed timeline. Prefer a throwaway clone

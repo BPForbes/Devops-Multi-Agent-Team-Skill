@@ -10,7 +10,7 @@ const MAX_SEARCH_BYTES = 512 * 1024
 const MAX_FILES_READ = 3000
 const MAX_FILES_SEARCHED = 6000
 const DOC_EXTENSIONS = ['.md', '.markdown', '.tex', '.rst', '.adoc', '.txt']
-const SECRET_FILE = /(^|\/)(\.env(\..*)?|.*\.(pem|key|p12|pfx|jks|kqkey|kqcert|kqrl|kqpb)|id_(rsa|dsa|ecdsa|ed25519)|credentials?(\..*)?|secrets?(\..*)?)$/i
+const SECRET_FILE = /(^|\/)(\.env(\..*)?|.*\.(pem|key|p12|pfx|jks)|id_(rsa|dsa|ecdsa|ed25519)|credentials?(\..*)?|secrets?(\..*)?)$/i
 const SECRET_VALUE = /((?:secret|token|passw(?:or)?d|api[_-]?key|private[_-]?key)["']?\s*[:=]\s*)(["']?)[^\s"',;]{4,}/gi
 
 function extensionTable(dest) {

@@ -1,7 +1,7 @@
 # Review thread template
 
-Copy to `.devops/thoughts/non-finalized/review-<seat-id>.md`.
-Local only; do not commit. After QA PASS, move to `finalized/`.
+Copy to `devops-skill/thoughts/non-final/review-<seat-id>.md`.
+Local only; do not commit. After QA PASS, move to `final/`.
 See [thoughts-layout.md](thoughts-layout.md).
 
 ```markdown
@@ -18,7 +18,7 @@ See [thoughts-layout.md](thoughts-layout.md).
 - … · | URL | Takeaway |
 
 ## Push JSON
-- Latest: `.devops/thoughts/non-finalized/push-<seat-id>.json`
+- Latest: `devops-skill/thoughts/non-final/push-<seat-id>.json`
 - The Coder (`seat`) writes this **before the first review**. Reviewers compare
   it to the side-branch tree vs `<integration-base>`.
 

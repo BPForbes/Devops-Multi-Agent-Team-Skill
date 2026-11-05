@@ -1,8 +1,7 @@
 # devops-multi-agent-team
 
-A multi-agent DevOps workflow for Cursor and Claude Code, extracted from
-the copies that lived in three projects (Bailey-Forbes-Flinstone,
-KeyQuorum, Homework-Central), plus two things those copies did by hand:
+A multi-agent DevOps workflow for Cursor and Claude Code: a skill, agents and
+commands, plus:
 
 1. **A language setup file** ([`languages.json`](languages.json), explained in
    [`LANGUAGES.md`](LANGUAGES.md)) that says what build, test, lint, scan and
@@ -62,7 +61,7 @@ prompts) walks the same steps.
 | `detect_project`, `status` | what the project's files show; what is installed |
 | `install_devops_team` | skill, agents, commands for Cursor and/or Claude, `.devops/` data, profile, sandbox doc, `.gitignore` block (plan unless `apply=true`) |
 | `get_profile` | the profile it would write, without writing |
-| `ensure_gitignore` | add or repair the block that keeps `.devops/thoughts/` out of git |
+| `ensure_gitignore` | add or repair the block that keeps `devops-skill/thoughts/` out of git |
 | `add_language` | define a language that is not listed; validated, saved to `.devops/languages.local.json` |
 | `check_toolchain` | is each tool installed? (`<tool> --version` only; env vars reported as set/unset, never their values) |
 | `sandbox_plan` | prints the container command that runs a command for a language in the sandbox; runs nothing |
@@ -71,7 +70,7 @@ prompts) walks the same steps.
 | `tag_history` | versions: how the project changed between git tags (commits, files, lines, directories, languages, commit types), unreleased work and a suggested bump; `save` keeps a snapshot in `.devops/tags/` |
 | `tag_plan`, `tag_create` | versions: plan the next semver tag; create one annotated local tag. Never pushes, moves or deletes a tag |
 | `comment_audit` | the comments a change adds (staged, working tree or `base...head`), as ready-to-paste Conventional Comments: restating comments, commented-out code, questions or notes left in code, process notes, bare TODO/FIXME, signature-only docs, over-commented files; with the Push JSON `comments` list it also flags comments the Coder did not justify |
-| `story_parse` | read a story in the FL/KQ format (an issue body) into structure: id, project, baseline, status, depends on, needed by, OLD and NEW blocks |
+| `story_parse` | read a story in this format (an issue body) into structure: id, project, baseline, status, depends on, needed by, OLD and NEW blocks |
 | `story_new`, `story_link` | create a story from the template and link stories (depends-on, absorbs, supersedes, refines, shares-contract); both sides stay in step and a cycle is refused |
 | `story_graph` | link one or several catalogs (two projects): dependency order, ready work, longest chain, cross-project edges, patterns, a Mermaid graph, and every inconsistency |
 | `story_check` | QA check: each OLD block is verbatim from the baseline commit at the lines it names, and the story has its NEW label, Dependencies, Why and Not verified |
@@ -91,11 +90,12 @@ the data files, and read-only `git` for the tag tools (hooks off; one local
 never returns a secret. Commands inside language and service entries are
 guidance for the team; the server does not execute them.
 
-**Thought files stay out of git.** Installing adds a managed block to
-`.gitignore` that ignores everything under `.devops/thoughts/` except
-`non-finalized/.gitkeep` and leaves the committed `.devops/project.md` alone.
-It is repaired if damaged and warns if another rule ignores all of `.devops/`.
-The tests check this against real `git check-ignore`.
+**Thought files stay out of git.** Research notes, review threads, QA notes and scratch live in
+`devops-skill/thoughts/non-final/` (open work) and `devops-skill/thoughts/final/` (closed work).
+Installing creates both folders and adds a managed block to `.gitignore` that ignores them. The
+block is repaired if damaged, and a warning appears if another rule ignores all of `.devops/`,
+which holds the committed profile `.devops/project.md`. The tests check this against real
+`git check-ignore`.
 
 ## Languages, services and the sandbox
 
@@ -178,10 +178,10 @@ The plugin provides the skill, agents, commands, the MCP server and the mod.
 | Hook | Does |
 |------|------|
 | `tool.call` Bash (comment audit) | On `git commit` it runs the comment audit on the staged diff (the working tree for `-a`) and adds the findings to the result. `/devops comments strict` refuses a commit with blocking findings; `off` turns it off. |
-| `tool.call` Bash (monitor) | A command that matches a validation command in the language data (for example `cargo test`, `npm run lint`) and fails is recorded in `.devops/thoughts/non-finalized/check-ledger.md`, counted per check, and the result gets a reminder to reproduce, fix the cause and re-run; at the retry cap (default 3, set in `project.md`) it says stop and escalate. A pass clears the count. `/devops monitor off` (typed by you) turns it off. |
+| `tool.call` Bash (monitor) | A command that matches a validation command in the language data (for example `cargo test`, `npm run lint`) and fails is recorded in `devops-skill/thoughts/non-final/check-ledger.md`, counted per check, and the result gets a reminder to reproduce, fix the cause and re-run; at the retry cap (default 3, set in `project.md`) it says stop and escalate. A pass clears the count. `/devops monitor off` (typed by you) turns it off. |
 | `session.start` | Runs `devops-setup detect --json`, shows `devops: rust+typescript` in the status line, registers `/devops`. |
 | `command.run` `/devops` | `status`, `languages`, `setup` (anyone); `push-ok`, `push-reset`, `allow-branch NAME`, `gates on|off` (only when **you** type them; an agent that runs the command is refused). |
-| `tool.call` Bash | Refuses `git push`, `gh pr create\|merge\|ready\|edit\|close\|reopen`, `gh release create` unless the newest `qa-*.md` under `.devops/thoughts/` has `Publish gate: PASS` **and** you ran `/devops push-ok` (consumed by that push). Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>`. Detached worktrees and reads pass. If the check itself fails, it refuses. |
+| `tool.call` Bash | Refuses `git push`, `gh pr create\|merge\|ready\|edit\|close\|reopen`, `gh release create` unless the newest `qa-*.md` under `devops-skill/thoughts/` has `Publish gate: PASS` **and** you ran `/devops push-ok` (consumed by that push). Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>`. Detached worktrees and reads pass. If the check itself fails, it refuses. |
 | `prompt.compose` | Adds a short session section naming the detected languages and pointing at `.devops/project.md`. |
 
 Limits, stated plainly:
@@ -203,23 +203,6 @@ npm test      # data check, setup CLI and MCP server tests, claude plugin valida
 
 Tests for the setup CLI are `scripts/devops-setup.test.mjs` and for the MCP
 server `mcp/server.test.mjs` (node:test); the mod's are `hooks/*.test.ts` (run by `claude plugin test`).
-
-## Where the original content went
-
-| Was (in each project) | Now |
-|-----------------------|-----|
-| `.cursor/skills/devops-multi-agent-team/` (Flinstone has the fuller set, Homework-Central a shorter one) | `skills/devops-multi-agent-team/`, one generic copy built on Flinstone's fuller reference set |
-| `.cursor/agents/devops-*.md`, `.cursor/commands/*.md` | `agents/`, `commands/` (links are relative, so they work under `.cursor/`, `.claude/` and the plugin) |
-| `qa-publish-policy.md` (C/ASM, `make`, `.ver` rules) and `codeql-validation-publish-policy.md` (C#/TS/Rust) | one generic `qa-publish-policy.md`; commands and CodeQL settings per language in `languages.json` |
-| `Repo alignment` paragraph in each `SKILL.md`; versioning rules in `.cursor/rules/versioning.mdc` | each project's `.devops/project.md` ("Fill in by hand": release rules, never-stage paths, sensitive paths) |
-| `.cursor/rules/csharp-no-var.mdc`, the C# / TS / CSS hard rules | opt-in style presets in `languages.json` (`optInStyle`) |
-| KeyQuorum's Rust conventions (tests in own file, no secret literals, wire codes append-only) | the `rust` entry's `style` and `setupNotes` |
-| thoughts under `.cursor/thoughts/` | `.devops/thoughts/` (same layout, host-neutral) |
-
-Project-only rules (the Flinstone `.ver` lock system, KeyQuorum's contract
-and Worker rules, Homework-Central's design tokens) are intentionally **not**
-in the package. They stay in those projects' own `AGENTS.md`/`CLAUDE.md`,
-which the skill treats as taking precedence.
 
 ## Licence
 
