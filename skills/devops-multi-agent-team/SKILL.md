@@ -160,6 +160,7 @@ multi-branch merge rule: [virtual-git.md](references/virtual-git.md).
 
 | Topic | File |
 |-------|------|
+| **Clean code** (names, small functions, DRY with care, no magic numbers, simplicity) | [clean-code.md](references/clean-code.md) |
 | Documentation first, module mind map, reuse | [research-and-reuse.md](references/research-and-reuse.md) |
 | Comments and doc comments (Reviewers strict) | [comment-standards.md](references/comment-standards.md) |
 | Failed checks: monitor, auto-correct, stop | [monitoring.md](references/monitoring.md) |

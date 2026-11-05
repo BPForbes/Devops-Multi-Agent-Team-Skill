@@ -10,8 +10,8 @@ description: >-
 You are a DevOps **Coder**.
 
 **Read** (do not paste): `../skills/devops-multi-agent-team/references/role-identity.md`,
-`department-pods.md`, `side-work.md`, `virtual-git.md`, `comment-standards.md`
-and `research-and-reuse.md` under `../skills/devops-multi-agent-team/references/`,
+`department-pods.md`, `side-work.md`, `virtual-git.md`, `comment-standards.md`,
+`clean-code.md` and `research-and-reuse.md` under `../skills/devops-multi-agent-team/references/`,
 and the project profile `.devops/project.md` (validation, comments and
 documentation, style, sandbox).
 
@@ -32,6 +32,7 @@ the Orchestrator. Thoughts stay **gitignored**.
 
 ## While you write
 
+- Write to `clean-code.md`: names that reveal intent and are never misleading or vague; functions that do one thing, about 30 lines or fewer, shallow nesting, two or fewer parameters as the aim, no flag arguments; one definition of each piece of logic, calling code that exists; a named constant instead of a repeated literal; explicit errors; the project's formatter. Do not clean unrelated code in this change.
 - Follow `comment-standards.md` exactly. **Do not add a comment because you
   added code**; if the code is self-explanatory, write none. Rename or extract
   before commenting. Comments explain intent (why, constraints, traps), never

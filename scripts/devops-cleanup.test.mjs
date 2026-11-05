@@ -41,7 +41,9 @@ test('a plain-English statement becomes goals, scope, thresholds and constraints
   assert.ok(only.scope.exclude.includes('tests'))
 
   const vague = parseStatement('tidy this up', dir)
-  assert.deepEqual(vague.goals, ['comments', 'duplicates', 'split'])
+  assert.deepEqual(vague.goals, ['comments', 'duplicates', 'split', 'constants', 'naming'])
+  assert.deepEqual(parseStatement('Follow clean code principles in src.', dir).goals.length, 5)
+  assert.deepEqual(parseStatement('Replace the magic numbers and give things better names.', dir).goals.sort(), ['constants', 'naming'])
   assert.equal(vague.defaultedGoals, true)
   assert.deepEqual(parseStatement('Remove duplicated code. The colors are ugly.', dir).unrecognized, ['The colors are ugly.'])
   assert.deepEqual(parseStatement('../../etc/passwd and clean up', dir).scope.paths, [])
@@ -103,4 +105,54 @@ test('a saved scan can be compared after the cleanup, and a worse result is call
   fs.writeFileSync(path.join(dir, 'src/b.js'), BLOCK.join('\n') + '\n')
   assert.ok(snapshot(dir, 'first', scanProject(dir, { goals: ['duplicates'] })).worse.includes('duplicatedLines'))
   assert.throws(() => snapshot(dir, '../evil', before, { save: true }), /snapshot name/)
+})
+
+test('the scan finds magic numbers, vague names and flag arguments, and leaves named constants alone', () => {
+  const dir = project({
+    'src/price.js': [
+      'const TAX_RATE = 0.2',
+      'function total(items, applyDiscount) {',
+      '  const data = items.map(i => i.price * 1.2)',
+      '  let tmp = 0',
+      '  for (const x of data) tmp += x',
+      '  if (tmp > 500) tmp -= 50',
+      '  if (tmp > 500) tmp -= 50',
+      '  return tmp',
+      '}',
+      'class UserInfo {}',
+      '',
+    ].join('\n'),
+    'src/m.py': 'class Box:\n    def __init__(self):\n        self.m_size = 1\n\ndef run(a, force=True):\n    b = 42 + 42\n    return b\n',
+    'tests/t.js': 'const data = 77 + 77\n',
+  })
+  const scan = scanProject(dir, { goals: ['constants', 'naming', 'split'] })
+  const magic = scan.candidates.filter(c => c.kind === 'magic-number')
+  assert.ok(magic.some(c => c.literal === '500' && c.count === 2 && c.file === 'src/price.js'))
+  assert.ok(magic.some(c => c.literal === '42' && c.file === 'src/m.py'))
+  assert.ok(!magic.some(c => c.literal === '0.2'), 'a named constant is the fix, not the problem')
+  assert.ok(!magic.some(c => c.file.startsWith('tests/')))
+  const names = scan.candidates.filter(c => c.kind === 'vague-name').flatMap(c => c.examples).join('\n')
+  for (const want of [/data/, /tmp/, /UserInfo/, /m\.py:\d+ a:/, /m_size/]) assert.match(names, want)
+  assert.doesNotMatch(names, /: x /, 'loop names are fine')
+  const flags = scan.candidates.filter(c => c.kind === 'flag-argument')
+  assert.ok(flags.some(c => c.name === 'total') && flags.some(c => c.name === 'run'))
+  assert.ok(scan.summary.magicNumbers >= 2 && scan.summary.vagueNames >= 5 && scan.summary.flagArguments === 2)
+})
+
+test('options objects, expression arrows and constants are not reported as flag arguments, functions or vague names', () => {
+  const dir = project({ 'src/ok.js': [
+    'const PROCESS = /x/',
+    'const isAssignment = word => /^[a-z]+=/.test(word)',
+    'const fromEnv = (process.env.NAME ?? "").split(",")',
+    'function build({ apply = false, force = false }) {',
+    '  return [apply, force]',
+    '}',
+    'function install(target, dryRun) {',
+    '  return [target, dryRun]',
+    '}',
+    '',
+  ].join('\n') })
+  const scan = scanProject(dir, { goals: ['split', 'naming'] })
+  assert.deepEqual(scan.candidates.filter(c => c.kind === 'flag-argument').map(c => c.name), [])
+  assert.equal(scan.candidates.filter(c => c.kind === 'vague-name').length, 0)
 })

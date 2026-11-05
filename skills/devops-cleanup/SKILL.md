@@ -29,15 +29,19 @@ The person says in plain English how the code should be cleaned, for example:
 
 Turn it into a brief with `cleanup_brief` (MCP) or
 `node scripts/devops-cleanup.mjs brief --statement "..."`. The brief holds the
-**goals** (comments, duplicates, split, dead code, naming), the **scope** (paths
+**goals** (comments, duplicates, split, constants, dead code, naming), the **scope** (paths
 named in the statement that exist, and what to leave alone), the **thresholds**
 (function length, nesting, parameters, duplicate size; numbers in the statement
 win), the **constraints** (your own sentences about what must not change, plus
 the standing ones), and any sentence it did not understand. Show the brief to the
 person. Ask about anything in `unrecognized`; do not guess. A vague statement
-("tidy this up") defaults to comments, duplicates and split.
+("tidy this up") or "follow clean code principles" uses all five scanned goals: comments, duplicates, split, constants and naming.
+The standard being applied is [clean-code.md](../devops-multi-agent-team/references/clean-code.md); its thresholds are the defaults.
 
 ## The flow
+
+The scan reports six kinds of candidate: duplicated blocks, functions over the length, nesting or
+parameter limits, flag arguments, magic numbers, vague names, and noisy or commented-out code.
 
 1. **Baseline.** Run the profile's validation in the sandbox. It must be green.
    If it is red, stop and report; cleanup does not start on a failing project.

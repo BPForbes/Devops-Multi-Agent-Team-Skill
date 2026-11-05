@@ -246,3 +246,21 @@ test('install ships every skill, including cleanup, with its agent and command',
   }
   assert.match(fs.readFileSync(path.join(dir, '.devops/project.md'), 'utf8'), /Cleanup thresholds/)
 })
+
+test('the clean-code standard is installed as a rule, a reference and part of the Coder, Reviewer and cleaner duties', () => {
+  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+  const read = rel => fs.readFileSync(path.join(root, rel), 'utf8')
+  const standard = read('skills/devops-multi-agent-team/references/clean-code.md')
+  for (const url of ['frc3624wiki.readthedocs.io', 'blog.codacy.com/what-is-clean-code', 'freecodecamp.org/news/how-to-write-clean-code', 'axolo.co/blog/p/core-principles-of-writing-clean-code']) assert.ok(standard.includes(url), url)
+  assert.match(standard, /could not fetch those pages/)
+  for (const principle of ['Names reveal intent', 'Small functions', 'DRY, with care', 'No magic numbers', 'Simplicity over cleverness']) assert.ok(standard.includes(principle), principle)
+  assert.match(read('agents/devops-coder.md'), /clean-code\.md/)
+  assert.match(read('agents/devops-reviewer.md'), /clean-code\.md/)
+  assert.match(read('agents/devops-cleaner.md'), /clean-code\.md/)
+  const dir = project({ 'a.py': '' })
+  install({ dest: dir, target: 'both' })
+  assert.ok(fs.existsSync(path.join(dir, '.cursor/rules/clean-code.mdc')))
+  assert.ok(fs.existsSync(path.join(dir, '.claude/rules/clean-code.md')))
+  assert.ok(fs.existsSync(path.join(dir, '.claude/skills/devops-multi-agent-team/references/clean-code.md')))
+  assert.match(fs.readFileSync(path.join(dir, '.devops/project.md'), 'utf8'), /function lines `30`/)
+})

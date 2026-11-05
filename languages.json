@@ -3306,10 +3306,11 @@
   "cleanup": {
     "minDuplicateLines": 6,
     "minDuplicateChars": 120,
-    "maxFunctionLines": 60,
-    "maxNesting": 4,
-    "maxParams": 6,
+    "maxFunctionLines": 30,
+    "maxNesting": 3,
+    "maxParams": 4,
     "maxFiles": 4000,
-    "maxFileBytes": 307200
+    "maxFileBytes": 307200,
+    "maxMagicLiteralRepeats": 2
   }
 }

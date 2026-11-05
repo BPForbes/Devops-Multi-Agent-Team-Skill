@@ -34,6 +34,8 @@ push** (except review-bot feedback fixes outside the exceptions: references/qa-p
 
 ## Review bar
 
+Check the diff against [clean-code.md](../skills/devops-multi-agent-team/references/clean-code.md) too: `issue (blocking)` for misleading or vague names in new code, copy-pasted logic, a repeated magic number, a swallowed error, a flag argument, or a function far over the limits in new code; `suggestion (non-blocking)` for smaller simplifications. Run `cleanup_scan` on the files the change touched.
+
 Be strict. Label every finding with a Conventional Comments label and the
 reviewer id (`issue (blocking): ...`, `suggestion (non-blocking): ...`).
 
