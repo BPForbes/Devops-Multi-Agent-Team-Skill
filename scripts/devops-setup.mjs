@@ -550,7 +550,7 @@ export function gitignoreOk(root) {
   return fs.readFileSync(target, 'utf8').includes(GITIGNORE_BLOCK)
 }
 
-export function install({ dest: destInput, roots, target = 'both', lang = 'auto', services = 'auto', sandbox = true, force = false, dryRun = false }) {
+export function install({ dest: destInput, roots, target = 'both', lang = 'auto', services = 'auto', sandbox = true, skipRules = [], force = false, dryRun = false }) {
   const dest = resolveDest(destInput, roots)
   const report = { dest, created: [], replaced: [], skipped: [], same: [], warnings: [], languages: [], services: [], dryRun }
   const opts = { force, dryRun, root: dest }
@@ -573,6 +573,7 @@ export function install({ dest: destInput, roots, target = 'both', lang = 'auto'
     for (const rule of fs.readdirSync(path.join(PACKAGE_ROOT, 'rules')).filter(f => f.endsWith('.md'))) {
       const body = fs.readFileSync(path.join(PACKAGE_ROOT, 'rules', rule), 'utf8')
       const name = rule.replace(/\.md$/, '')
+      if (skipRules.includes(name)) continue
       if (host === '.cursor') writeText(path.join(dest, host, 'rules', `${name}.mdc`), `---\ndescription: ${body.split('\n')[0].replace(/^#\s*/, '')}\nglobs:\n  - "**/*"\nalwaysApply: true\n---\n\n${body}`, opts, report)
       else writeText(path.join(dest, host, 'rules', rule), body, opts, report)
     }
@@ -618,6 +619,7 @@ function parseArgs(argv) {
     else if (a === '--lang') args.lang = own[++i]
     else if (a === '--services') args.services = own[++i]
     else if (a === '--phase') args.phase = own[++i]
+    else if (a === '--skip-rules') args.skipRules = own[++i].split(',').filter(Boolean)
     else if (a === '--no-sandbox') args.sandbox = false
     else if (a === '--force') args.force = true
     else if (a === '--dry-run') args.dryRun = true
@@ -642,6 +644,7 @@ const HELP = `devops-setup <command> [options]
 
 options: --dest DIR (default: cwd)  --target cursor|claude|both (default both)
          --lang auto|id,id (default auto)  --services auto|none|id,id (default auto)
+         --skip-rules name,name (do not install those rule files; use when the project already has an equivalent)
          --no-sandbox  --force  --dry-run  --json
 `
 

@@ -153,3 +153,11 @@ test('the comment policy says self-explanatory code gets no comment, in the rule
   assert.match(profile, /Self-explanatory code gets no comment/)
   assert.doesNotMatch(fs.readFileSync(path.join(root, 'agents/devops-reviewer.md'), 'utf8'), /with\s+no standard doc comment/)
 })
+
+test('a rule the project already has can be skipped, the other is still installed', () => {
+  const dir = project({ 'a.py': '' })
+  install({ dest: dir, target: 'both', skipRules: ['reuse-before-implement'] })
+  assert.ok(!fs.existsSync(path.join(dir, '.cursor/rules/reuse-before-implement.mdc')))
+  assert.ok(!fs.existsSync(path.join(dir, '.claude/rules/reuse-before-implement.md')))
+  assert.ok(fs.existsSync(path.join(dir, '.cursor/rules/comments.mdc')))
+})

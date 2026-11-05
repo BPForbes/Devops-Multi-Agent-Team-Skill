@@ -131,6 +131,7 @@ const TOOLS = [
         languages: langs,
         services: svcs,
         sandbox: { type: 'boolean', description: 'Write .devops/sandbox.md (default true).' },
+        skipRules: { type: 'array', items: { type: 'string' }, description: 'Rule files not to install (reuse-before-implement, comments) because the project already has an equivalent.' },
         force: { type: 'boolean', description: 'Overwrite files that differ (default false).' },
         apply: { type: 'boolean', description: 'false (default) = plan only; true = write.' },
       },
@@ -142,7 +143,7 @@ const TOOLS = [
       target: ['cursor', 'claude', 'both'].includes(args.target) ? args.target : 'both',
       lang: idList(args.languages, 'languages'),
       services: idList(args.services, 'services', { allow: ['auto', 'none'] }),
-      sandbox: optionalBool(args, 'sandbox', true), force: optionalBool(args, 'force', false), dryRun: !optionalBool(args, 'apply', false),
+      sandbox: optionalBool(args, 'sandbox', true), skipRules: idList(args.skipRules ?? [], 'skipRules', { allow: [] }), force: optionalBool(args, 'force', false), dryRun: !optionalBool(args, 'apply', false),
     }),
   },
   {
