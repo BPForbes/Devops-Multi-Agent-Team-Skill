@@ -1,0 +1,11 @@
+{
+  "name": "devops-multi-agent-team",
+  "owner": { "name": "bpforbes" },
+  "plugins": [
+    {
+      "name": "devops-multi-agent-team",
+      "source": "./",
+      "description": "DevOps multi-agent team: skill, agents, commands, per-language setup and a mod that gates pushes behind QA."
+    }
+  ]
+}

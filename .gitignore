@@ -1,0 +1,9 @@
+node_modules/
+.devops/thoughts/*
+!.devops/thoughts/non-finalized/
+.devops/thoughts/non-finalized/*
+!.devops/thoughts/non-finalized/.gitkeep
+.claude-plugin/types/
+*.sarif
+.codeql-db-*
+_scratch/
