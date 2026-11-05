@@ -37,6 +37,17 @@ real command once, here. A command that cannot run is `NOT RUN`.
 
 {{SECURITY}}
 
+## Services
+
+Supporting systems this project uses (containers, cloud, AI, VMs). Names of
+environment variables only; values live in the environment or a secret manager.
+
+{{SERVICES}}
+
+## Sandbox
+
+{{SANDBOX}}
+
 ## Style rules
 
 {{STYLE}}

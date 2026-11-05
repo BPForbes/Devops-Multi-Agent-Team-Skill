@@ -30,8 +30,9 @@ is the one place that says which languages the project uses, which
 layer each belongs to (web, backend, systems, scripting, infra), the
 fast-validation and security commands for each, the departments, the
 sensitive and never-stage paths, and the CI and MCP tooling that is
-wired. It is built by `scripts/devops-setup.mjs install` from
-`languages.json` (the plugin root, or `.devops/languages.json` in an
+wired. Layers are sorting tags, never restrictions: any language can be used
+for anything. It is built by `scripts/devops-setup.mjs install` from
+`languages.json` and `services.json` (the plugin root, or `.devops/` in an
 installed project; per-project tweaks go in `.devops/languages.local.json`)
 and edited by hand afterwards.
 
@@ -42,6 +43,15 @@ and edited by hand afterwards.
   files win over this skill; the profile wins over this skill's
   defaults. Where this skill's "no push until QA" gate and a project
   workflow differ, follow the stricter one.
+- **Services and sandbox:** the profile also lists the services in use
+  (containers, cloud, AI, VMs) and the sandbox every build, test and scan
+  runs in. Read [services-and-sandbox.md](references/services-and-sandbox.md);
+  a seat never runs a cloud, Kubernetes or deploy command that changes
+  something, and never runs project commands on the host when an image exists.
+- **Setup from chat:** with the `devops-multi-agent-team` MCP server
+  connected, the human can ask for the setup ("set up the team for this
+  project with Rust, TypeScript and Docker"); use `detect_project`, plan with
+  `install_devops_team` (`apply=false`), show it, and apply only on their yes.
 - **Several languages:** departments follow layers, and a change that
   crosses a boundary (an API shape, an FFI header, a schema) is staffed
   on both sides and validated with both sides' commands. See

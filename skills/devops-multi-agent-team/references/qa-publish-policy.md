@@ -23,7 +23,8 @@ has recorded `Publish gate: PASS` and the human has run
 ## Fast validation
 
 Run every command the profile lists for each language the change
-touches, then the cross-stack ones (a change to an API contract runs
+touches, inside the sandbox ([services-and-sandbox.md](services-and-sandbox.md)),
+then the cross-stack ones (a change to an API contract runs
 both the producer's and the consumer's checks). Record each command and
 its exit code. A command that cannot run here is `NOT RUN`, never a
 pass.

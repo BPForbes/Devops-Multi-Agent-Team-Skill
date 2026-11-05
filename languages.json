@@ -1,26 +1,69 @@
 {
   "schemaVersion": 1,
-  "about": "Language setup for devops-multi-agent-team. The installer and the mod read this file; LANGUAGES.md explains it. Add a language by appending an entry, or override one per project in .devops/languages.local.json (merged by id).",
-
+  "about": "Language setup for devops-multi-agent-team. The installer, the mod and the MCP server read this file; LANGUAGES.md explains it. Layers are sorting tags only: every language can be set up for any purpose. Add a language by appending an entry, by chat through the MCP server, or per project in .devops/languages.local.json (merged by id).",
   "layers": {
-    "web":       { "department": "web",       "summary": "Runs in a browser or webview: UI, styles, client state." },
-    "backend":   { "department": "backend",   "summary": "Services, APIs, workers, data access, business rules." },
-    "systems":   { "department": "systems",   "summary": "Native code, kernels, drivers, FFI libraries, anything with manual memory or an ABI." },
-    "scripting": { "department": "tooling",   "summary": "Glue: dev stack scripts, build helpers, checks, automation." },
-    "infra":     { "department": "infra",     "summary": "Pipelines, containers, IaC, deploy and environment config." },
-    "data":      { "department": "data",      "summary": "Schemas, migrations, queries." }
+    "web": {
+      "department": "web",
+      "summary": "Runs in a browser or webview: UI, styles, client state."
+    },
+    "backend": {
+      "department": "backend",
+      "summary": "Services, APIs, workers, data access, business rules."
+    },
+    "systems": {
+      "department": "systems",
+      "summary": "Native code, kernels, drivers, FFI libraries, anything with manual memory or an ABI."
+    },
+    "scripting": {
+      "department": "tooling",
+      "summary": "Glue: dev stack scripts, build helpers, checks, automation."
+    },
+    "infra": {
+      "department": "infra",
+      "summary": "Pipelines, containers, IaC, deploy and environment config."
+    },
+    "data": {
+      "department": "data",
+      "summary": "Schemas, migrations, queries."
+    },
+    "game": {
+      "department": "game",
+      "summary": "Game engines, game logic and the scripting that drives them. A tag for sorting, not a restriction: any language here can do anything."
+    },
+    "science": {
+      "department": "science",
+      "summary": "Data science, numerical and functional-first work. A tag for sorting, not a restriction."
+    }
   },
-
-  "codeqlLanguages": ["actions", "cpp", "csharp", "go", "java-kotlin", "javascript-typescript", "python", "ruby", "rust", "swift"],
-
+  "codeqlLanguages": [
+    "actions",
+    "cpp",
+    "csharp",
+    "go",
+    "java-kotlin",
+    "javascript-typescript",
+    "python",
+    "ruby",
+    "rust",
+    "swift"
+  ],
   "languages": [
     {
       "id": "c",
       "name": "C",
-      "layers": ["systems"],
-      "detect": { "extensions": [".c"] },
+      "layers": [
+        "systems"
+      ],
+      "detect": {
+        "extensions": [
+          ".c"
+        ]
+      },
       "toolchain": {
-        "install": ["apt-get install -y build-essential clang clang-tidy cppcheck", "brew install llvm cppcheck"],
+        "install": [
+          "apt-get install -y build-essential clang clang-tidy cppcheck",
+          "brew install llvm cppcheck"
+        ],
         "verify": "cc --version"
       },
       "validate": [
@@ -31,31 +74,67 @@
         "cppcheck --enable=warning,performance --error-exitcode=1 <changed paths>"
       ],
       "security": {
-        "sast": { "tool": "codeql", "language": "cpp", "buildMode": "command", "command": "<the project build command>" },
+        "sast": {
+          "tool": "codeql",
+          "language": "cpp",
+          "buildMode": "command",
+          "command": "<the project build command>"
+        },
         "sca": [],
-        "secrets": ["gitleaks detect --redact"],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": false
       },
-      "style": ["Follow the project's .clang-format; do not reflow unrelated lines."],
-      "sensitiveHints": ["allocators, locking, parsing of untrusted bytes, path and permission checks, syscalls"],
+      "style": [
+        "Follow the project's .clang-format; do not reflow unrelated lines."
+      ],
+      "sensitiveHints": [
+        "allocators, locking, parsing of untrusted bytes, path and permission checks, syscalls"
+      ],
       "interactsWith": [
-        { "with": "asm", "via": "calling convention; the assembly layer owns primitives, C owns policy", "contract": "headers declaring each asm symbol" },
-        { "with": "rust", "via": "C ABI (cbindgen header, extern \"C\")", "contract": "the generated header and an ABI version constant" }
+        {
+          "with": "asm",
+          "via": "calling convention; the assembly layer owns primitives, C owns policy",
+          "contract": "headers declaring each asm symbol"
+        },
+        {
+          "with": "rust",
+          "via": "C ABI (cbindgen header, extern \"C\")",
+          "contract": "the generated header and an ABI version constant"
+        }
       ],
       "setupNotes": [
         "Memory primitives, allocator internals, low-level synchronization and port I/O belong in the architecture-specific ASM layer; C holds policy, orchestration and services (Bailey-Forbes-Flinstone).",
         "Frozen contract and ABI headers (contracts/, fl/*) are wire/ABI: append, never renumber or reorder.",
         "If a make target needs a cross compiler or emcc that is not installed, report NOT RUN, never a pass."
       ],
-      "seenIn": ["Bailey-Forbes-Flinstone"]
+      "seenIn": [
+        "Bailey-Forbes-Flinstone"
+      ],
+      "sandboxImage": "gcc:14"
     },
     {
       "id": "cpp",
       "name": "C++",
-      "layers": ["systems"],
-      "detect": { "extensions": [".cpp", ".cc", ".cxx", ".hpp", ".hh"] },
+      "layers": [
+        "systems",
+        "game"
+      ],
+      "detect": {
+        "extensions": [
+          ".cpp",
+          ".cc",
+          ".cxx",
+          ".hpp",
+          ".hh"
+        ]
+      },
       "toolchain": {
-        "install": ["apt-get install -y build-essential clang clang-tidy clang-format cmake ninja-build", "brew install llvm cmake ninja"],
+        "install": [
+          "apt-get install -y build-essential clang clang-tidy clang-format cmake ninja-build",
+          "brew install llvm cmake ninja"
+        ],
         "verify": "c++ --version"
       },
       "validate": [
@@ -66,28 +145,67 @@
         "rebuild with -fsanitize=address,undefined (and thread for concurrent code)"
       ],
       "security": {
-        "sast": { "tool": "codeql", "language": "cpp", "buildMode": "command", "command": "cmake --build build" },
+        "sast": {
+          "tool": "codeql",
+          "language": "cpp",
+          "buildMode": "command",
+          "command": "cmake --build build"
+        },
         "sca": [],
-        "secrets": ["gitleaks detect --redact"],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": false
       },
-      "style": ["Follow the project's .clang-format and .clang-tidy; prefer RAII and std types over manual memory."],
-      "sensitiveHints": ["raw owning pointers, unsafe casts, lifetime of views, deserialization"],
-      "interactsWith": [
-        { "with": "c", "via": "extern \"C\" boundary", "contract": "the C header" },
-        { "with": "csharp", "via": "P/Invoke or C++/CLI", "contract": "exported C ABI plus a managed wrapper" },
-        { "with": "python", "via": "pybind11 / nanobind / C extension", "contract": "the binding module and its stubs" }
+      "style": [
+        "Follow the project's .clang-format and .clang-tidy; prefer RAII and std types over manual memory."
       ],
-      "setupNotes": ["One CodeQL language id (cpp) covers C and C++; run it once with the project's build command."],
-      "seenIn": []
+      "sensitiveHints": [
+        "raw owning pointers, unsafe casts, lifetime of views, deserialization"
+      ],
+      "interactsWith": [
+        {
+          "with": "c",
+          "via": "extern \"C\" boundary",
+          "contract": "the C header"
+        },
+        {
+          "with": "csharp",
+          "via": "P/Invoke or C++/CLI",
+          "contract": "exported C ABI plus a managed wrapper"
+        },
+        {
+          "with": "python",
+          "via": "pybind11 / nanobind / C extension",
+          "contract": "the binding module and its stubs"
+        }
+      ],
+      "setupNotes": [
+        "One CodeQL language id (cpp) covers C and C++; run it once with the project's build command.",
+        "Unreal Engine C++ builds with UnrealBuildTool and the engine installed; that is NOT RUN in the sandbox. Engine-independent game logic can be built with CMake as usual."
+      ],
+      "seenIn": [],
+      "sandboxImage": "gcc:14"
     },
     {
       "id": "asm",
       "name": "Assembly",
-      "layers": ["systems"],
-      "detect": { "extensions": [".s", ".S", ".asm", ".nasm"] },
+      "layers": [
+        "systems"
+      ],
+      "detect": {
+        "extensions": [
+          ".s",
+          ".S",
+          ".asm",
+          ".nasm"
+        ]
+      },
       "toolchain": {
-        "install": ["apt-get install -y binutils nasm", "brew install nasm"],
+        "install": [
+          "apt-get install -y binutils nasm",
+          "brew install nasm"
+        ],
         "verify": "as --version"
       },
       "validate": [
@@ -98,26 +216,50 @@
       "security": {
         "sast": null,
         "sca": [],
-        "secrets": ["gitleaks detect --redact"],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": true,
         "note": "No scanner reads assembly. The Security seat reviews it by hand and the report says so."
       },
-      "style": ["Keep one architecture per directory; name every global symbol with the project prefix; comment the calling convention at the top of each routine."],
-      "sensitiveHints": ["stack and register discipline, privileged instructions, port I/O, atomics and locks"],
+      "style": [
+        "Keep one architecture per directory; name every global symbol with the project prefix; comment the calling convention at the top of each routine."
+      ],
+      "sensitiveHints": [
+        "stack and register discipline, privileged instructions, port I/O, atomics and locks"
+      ],
       "interactsWith": [
-        { "with": "c", "via": "calling convention", "contract": "headers declaring each symbol" }
+        {
+          "with": "c",
+          "via": "calling convention",
+          "contract": "headers declaring each symbol"
+        }
       ],
       "setupNotes": [
         "Do not mix GAS and NASM syntax in one tree unless the build already does; keep the dialect the directory uses.",
-        "A change that touches assembly always takes the full gate: reviewers cannot lean on a scanner."
+        "A change that touches assembly always takes the full gate: reviewers cannot lean on a scanner.",
+        "The gcc image carries GNU as; install nasm in your own pinned image if the tree uses NASM."
       ],
-      "seenIn": ["Bailey-Forbes-Flinstone"]
+      "seenIn": [
+        "Bailey-Forbes-Flinstone"
+      ],
+      "sandboxImage": "gcc:14"
     },
     {
       "id": "rust",
       "name": "Rust",
-      "layers": ["systems", "backend"],
-      "detect": { "files": ["Cargo.toml"], "extensions": [".rs"] },
+      "layers": [
+        "systems",
+        "backend"
+      ],
+      "detect": {
+        "files": [
+          "Cargo.toml"
+        ],
+        "extensions": [
+          ".rs"
+        ]
+      },
       "toolchain": {
         "install": [
           "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
@@ -135,9 +277,19 @@
         "cargo build --locked --features <each feature set the project ships, e.g. provider>"
       ],
       "security": {
-        "sast": { "tool": "codeql", "language": "rust", "buildMode": "none", "suite": "codeql/rust-queries:codeql-suites/rust-security-and-quality.qls" },
-        "sca": ["cargo audit", "cargo deny --locked check"],
-        "secrets": ["gitleaks detect --redact"],
+        "sast": {
+          "tool": "codeql",
+          "language": "rust",
+          "buildMode": "none",
+          "suite": "codeql/rust-queries:codeql-suites/rust-security-and-quality.qls"
+        },
+        "sca": [
+          "cargo audit",
+          "cargo deny --locked check"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": false
       },
       "style": [
@@ -146,26 +298,58 @@
         "Tests never write a secret as a literal; draw passphrases, PINs and nonces at run time from one test-secrets helper.",
         "Secrets are Zeroizing<..>; a test's assertion message never formats a Result, error or output that could hold one."
       ],
-      "sensitiveHints": ["unsafe blocks, FFI exports, key derivation, encryption, signature and quorum checks, any #[no_mangle]"],
+      "sensitiveHints": [
+        "unsafe blocks, FFI exports, key derivation, encryption, signature and quorum checks, any #[no_mangle]"
+      ],
       "interactsWith": [
-        { "with": "typescript", "via": "wasm32 build (wasm-bindgen / worker crate) loaded by the frontend or a Worker", "contract": "the generated .d.ts and a wasm build script; features that cannot combine are refused in build.rs" },
-        { "with": "c", "via": "cdylib/staticlib with a cbindgen header", "contract": "the header plus KQ_*_ABI_VERSION style constant; one archive carries all headers" },
-        { "with": "terraform", "via": "deploy of the Worker or service", "contract": "wrangler.toml / env vars, never secrets" }
+        {
+          "with": "typescript",
+          "via": "wasm32 build (wasm-bindgen / worker crate) loaded by the frontend or a Worker",
+          "contract": "the generated .d.ts and a wasm build script; features that cannot combine are refused in build.rs"
+        },
+        {
+          "with": "c",
+          "via": "cdylib/staticlib with a cbindgen header",
+          "contract": "the header plus KQ_*_ABI_VERSION style constant; one archive carries all headers"
+        },
+        {
+          "with": "terraform",
+          "via": "deploy of the Worker or service",
+          "contract": "wrangler.toml / env vars, never secrets"
+        }
       ],
       "setupNotes": [
         "Run the lint and test lines with --features for every shipped combination; a build that is clean without a feature can be broken with it.",
         "Wire-format codes, kind bytes and event codes are append-only; the review fails a renumbering (KeyQuorum).",
         "A feature that must not coexist (for example a provider host and the wasm lab) is refused in build.rs; keep that guard when adding features."
       ],
-      "seenIn": ["KeyQuorum", "Homework-Central"]
+      "seenIn": [
+        "KeyQuorum",
+        "Homework-Central"
+      ],
+      "sandboxImage": "rust:1-slim"
     },
     {
       "id": "go",
       "name": "Go",
-      "layers": ["backend", "systems"],
-      "detect": { "files": ["go.mod"], "extensions": [".go"] },
+      "layers": [
+        "backend",
+        "systems"
+      ],
+      "detect": {
+        "files": [
+          "go.mod"
+        ],
+        "extensions": [
+          ".go"
+        ]
+      },
       "toolchain": {
-        "install": ["install Go from https://go.dev/dl (match go.mod's go directive)", "go install golang.org/x/vuln/cmd/govulncheck@latest", "go install honnef.co/go/tools/cmd/staticcheck@latest"],
+        "install": [
+          "install Go from https://go.dev/dl (match go.mod's go directive)",
+          "go install golang.org/x/vuln/cmd/govulncheck@latest",
+          "go install honnef.co/go/tools/cmd/staticcheck@latest"
+        ],
         "verify": "go version"
       },
       "validate": [
@@ -176,26 +360,60 @@
         "go test -race ./..."
       ],
       "security": {
-        "sast": { "tool": "codeql", "language": "go", "buildMode": "autobuild" },
-        "sca": ["govulncheck ./..."],
-        "secrets": ["gitleaks detect --redact"],
+        "sast": {
+          "tool": "codeql",
+          "language": "go",
+          "buildMode": "autobuild"
+        },
+        "sca": [
+          "govulncheck ./..."
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": false
       },
-      "style": ["gofmt is law; exported names carry doc comments; errors are wrapped with %w, never swallowed."],
-      "sensitiveHints": ["net/http handlers, template/exec use, crypto/*, unsafe, goroutine leaks and shared state"],
-      "interactsWith": [
-        { "with": "typescript", "via": "HTTP/JSON or gRPC", "contract": "OpenAPI or .proto, generated clients" }
+      "style": [
+        "gofmt is law; exported names carry doc comments; errors are wrapped with %w, never swallowed."
       ],
-      "setupNotes": ["Run go test -race for any change touching goroutines or shared state."],
-      "seenIn": []
+      "sensitiveHints": [
+        "net/http handlers, template/exec use, crypto/*, unsafe, goroutine leaks and shared state"
+      ],
+      "interactsWith": [
+        {
+          "with": "typescript",
+          "via": "HTTP/JSON or gRPC",
+          "contract": "OpenAPI or .proto, generated clients"
+        }
+      ],
+      "setupNotes": [
+        "Run go test -race for any change touching goroutines or shared state."
+      ],
+      "seenIn": [],
+      "sandboxImage": "golang:1.23"
     },
     {
       "id": "csharp",
       "name": "C# / .NET",
-      "layers": ["backend"],
-      "detect": { "files": ["*.sln", "*.csproj", "Directory.Build.props"], "extensions": [".cs"] },
+      "layers": [
+        "backend",
+        "game"
+      ],
+      "detect": {
+        "files": [
+          "*.sln",
+          "*.csproj",
+          "Directory.Build.props"
+        ],
+        "extensions": [
+          ".cs"
+        ]
+      },
       "toolchain": {
-        "install": ["install the .NET SDK named in global.json (https://dot.net)", "dotnet tool restore   # if .config/dotnet-tools.json exists"],
+        "install": [
+          "install the .NET SDK named in global.json (https://dot.net)",
+          "dotnet tool restore   # if .config/dotnet-tools.json exists"
+        ],
         "verify": "dotnet --version"
       },
       "validate": [
@@ -205,9 +423,18 @@
         "dotnet test"
       ],
       "security": {
-        "sast": { "tool": "codeql", "language": "csharp", "buildMode": "command", "command": "dotnet build" },
-        "sca": ["dotnet list package --vulnerable --include-transitive"],
-        "secrets": ["gitleaks detect --redact"],
+        "sast": {
+          "tool": "codeql",
+          "language": "csharp",
+          "buildMode": "command",
+          "command": "dotnet build"
+        },
+        "sca": [
+          "dotnet list package --vulnerable --include-transitive"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": false
       },
       "style": [
@@ -215,26 +442,59 @@
         "Prefer pattern matching (switch expressions, property/relational patterns) over long if/else chains for closed-set decisions."
       ],
       "optInStyle": [
-        { "id": "explicit-types", "from": "Homework-Central", "rule": "No `var` and no `dynamic`: write explicit types for locals, foreach variables and pattern positions; pin it with csharp_style_var_* = false:error in .editorconfig and EnforceCodeStyleInBuild so a green build proves it. Do not even write the bare word var in prose." }
+        {
+          "id": "explicit-types",
+          "from": "Homework-Central",
+          "rule": "No `var` and no `dynamic`: write explicit types for locals, foreach variables and pattern positions; pin it with csharp_style_var_* = false:error in .editorconfig and EnforceCodeStyleInBuild so a green build proves it. Do not even write the bare word var in prose."
+        }
       ],
-      "sensitiveHints": ["authentication and authorization attributes, EF raw SQL, deserialization, file uploads, process start, SignalR hub methods"],
+      "sensitiveHints": [
+        "authentication and authorization attributes, EF raw SQL, deserialization, file uploads, process start, SignalR hub methods"
+      ],
       "interactsWith": [
-        { "with": "typescript", "via": "REST/JSON and SignalR to the SPA", "contract": "OpenAPI or a shared DTO file; the client types are regenerated or updated in the same change" },
-        { "with": "sql", "via": "EF Core migrations", "contract": "the migration set; raw SQL must be parameterized" }
+        {
+          "with": "typescript",
+          "via": "REST/JSON and SignalR to the SPA",
+          "contract": "OpenAPI or a shared DTO file; the client types are regenerated or updated in the same change"
+        },
+        {
+          "with": "sql",
+          "via": "EF Core migrations",
+          "contract": "the migration set; raw SQL must be parameterized"
+        }
       ],
       "setupNotes": [
         "CI rejects unparameterized raw SQL (FromSqlRaw / ExecuteSqlRaw / SqlQueryRaw); the Security seat greps for them every review.",
-        "Comment and documentation rules (when to comment, XML docs) belong in the project's own guide; the profile links it."
+        "Comment and documentation rules (when to comment, XML docs) belong in the project's own guide; the profile links it.",
+        "ASP.NET services and Unity/Godot-C# game code are all this entry; Unity needs the editor's own batchmode runner, which is NOT RUN in the sandbox."
       ],
-      "seenIn": ["Homework-Central"]
+      "seenIn": [
+        "Homework-Central"
+      ],
+      "sandboxImage": "mcr.microsoft.com/dotnet/sdk:8.0"
     },
     {
       "id": "java",
       "name": "Java",
-      "layers": ["backend"],
-      "detect": { "files": ["pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle"], "extensions": [".java"] },
+      "layers": [
+        "backend"
+      ],
+      "detect": {
+        "files": [
+          "pom.xml",
+          "build.gradle",
+          "build.gradle.kts",
+          "settings.gradle"
+        ],
+        "extensions": [
+          ".java"
+        ]
+      },
       "toolchain": {
-        "install": ["install a JDK matching the build's toolchain (https://adoptium.net)", "use ./gradlew or ./mvnw, not a global tool"],
+        "install": [
+          "install a JDK matching the build's toolchain (https://adoptium.net)",
+          "use ./gradlew or ./mvnw, not a global tool"
+        ],
         "verify": "java -version"
       },
       "validate": [
@@ -243,28 +503,60 @@
         "./gradlew test"
       ],
       "security": {
-        "sast": { "tool": "codeql", "language": "java-kotlin", "buildMode": "none" },
-        "sca": ["./gradlew dependencyCheckAnalyze   (or mvn org.owasp:dependency-check-maven:check)"],
-        "secrets": ["gitleaks detect --redact"],
+        "sast": {
+          "tool": "codeql",
+          "language": "java-kotlin",
+          "buildMode": "none"
+        },
+        "sca": [
+          "./gradlew dependencyCheckAnalyze   (or mvn org.owasp:dependency-check-maven:check)"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": false
       },
-      "style": ["Follow the configured formatter (spotless/checkstyle); no wildcard imports unless the project uses them."],
-      "sensitiveHints": ["deserialization, JNDI/reflection, SQL string building, XML parsers (XXE), Spring security config"],
-      "interactsWith": [
-        { "with": "typescript", "via": "REST/JSON", "contract": "OpenAPI" },
-        { "with": "kotlin", "via": "same JVM and build", "contract": "shared module" }
+      "style": [
+        "Follow the configured formatter (spotless/checkstyle); no wildcard imports unless the project uses them."
       ],
-      "setupNotes": ["Java and Kotlin share the CodeQL id java-kotlin; run it once."],
-      "seenIn": []
+      "sensitiveHints": [
+        "deserialization, JNDI/reflection, SQL string building, XML parsers (XXE), Spring security config"
+      ],
+      "interactsWith": [
+        {
+          "with": "typescript",
+          "via": "REST/JSON",
+          "contract": "OpenAPI"
+        },
+        {
+          "with": "kotlin",
+          "via": "same JVM and build",
+          "contract": "shared module"
+        }
+      ],
+      "setupNotes": [
+        "Java and Kotlin share the CodeQL id java-kotlin; run it once."
+      ],
+      "seenIn": [],
+      "sandboxImage": "eclipse-temurin:21-jdk"
     },
     {
       "id": "kotlin",
       "name": "Kotlin",
-      "layers": ["backend"],
-      "detect": { "extensions": [".kt"] },
+      "layers": [
+        "backend"
+      ],
+      "detect": {
+        "extensions": [
+          ".kt"
+        ]
+      },
       "toolchain": {
-        "install": ["JDK as for Java", "use the Gradle wrapper"],
-        "verify": "./gradlew --version"
+        "install": [
+          "JDK as for Java",
+          "use the Gradle wrapper"
+        ],
+        "verify": "kotlinc -version"
       },
       "validate": [
         "./gradlew build",
@@ -272,24 +564,62 @@
         "./gradlew test"
       ],
       "security": {
-        "sast": { "tool": "codeql", "language": "java-kotlin", "buildMode": "none" },
-        "sca": ["./gradlew dependencyCheckAnalyze"],
-        "secrets": ["gitleaks detect --redact"],
+        "sast": {
+          "tool": "codeql",
+          "language": "java-kotlin",
+          "buildMode": "none"
+        },
+        "sca": [
+          "./gradlew dependencyCheckAnalyze"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": false
       },
-      "style": ["ktlint/detekt rules from the repo; no !! on values that come from outside."],
-      "sensitiveHints": ["same as Java; coroutine cancellation and shared mutable state"],
-      "interactsWith": [{ "with": "java", "via": "same JVM", "contract": "shared module" }],
-      "setupNotes": ["Android modules need the Android SDK and the project's Gradle properties; report NOT RUN rather than guess."],
-      "seenIn": []
+      "style": [
+        "ktlint/detekt rules from the repo; no !! on values that come from outside."
+      ],
+      "sensitiveHints": [
+        "same as Java; coroutine cancellation and shared mutable state"
+      ],
+      "interactsWith": [
+        {
+          "with": "java",
+          "via": "same JVM",
+          "contract": "shared module"
+        }
+      ],
+      "setupNotes": [
+        "Android modules need the Android SDK and the project's Gradle properties; report NOT RUN rather than guess."
+      ],
+      "seenIn": [],
+      "sandboxImage": "eclipse-temurin:21-jdk"
     },
     {
       "id": "python",
       "name": "Python",
-      "layers": ["backend", "scripting"],
-      "detect": { "files": ["pyproject.toml", "requirements.txt", "setup.py", "Pipfile"], "extensions": [".py"] },
+      "layers": [
+        "backend",
+        "scripting"
+      ],
+      "detect": {
+        "files": [
+          "pyproject.toml",
+          "requirements.txt",
+          "setup.py",
+          "Pipfile"
+        ],
+        "extensions": [
+          ".py"
+        ]
+      },
       "toolchain": {
-        "install": ["python3 -m venv .venv && . .venv/bin/activate", "pip install -r requirements-dev.txt   (or: pip install -e '.[dev]')", "pip install ruff mypy pytest pip-audit bandit"],
+        "install": [
+          "python3 -m venv .venv && . .venv/bin/activate",
+          "pip install -r requirements-dev.txt   (or: pip install -e '.[dev]')",
+          "pip install ruff mypy pytest pip-audit bandit"
+        ],
         "verify": "python3 --version"
       },
       "validate": [
@@ -299,31 +629,73 @@
         "pytest -q"
       ],
       "security": {
-        "sast": { "tool": "codeql", "language": "python", "buildMode": "none" },
-        "sca": ["pip-audit", "bandit -r <package> -q"],
-        "secrets": ["gitleaks detect --redact"],
+        "sast": {
+          "tool": "codeql",
+          "language": "python",
+          "buildMode": "none"
+        },
+        "sca": [
+          "pip-audit",
+          "bandit -r <package> -q"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": false
       },
-      "style": ["ruff/black defaults unless the repo pins others; type-hint public functions; no bare except."],
-      "sensitiveHints": ["subprocess with shell=True, pickle/yaml.load, eval/exec, SQL string building, path joins from user input"],
+      "style": [
+        "ruff/black defaults unless the repo pins others; type-hint public functions; no bare except."
+      ],
+      "sensitiveHints": [
+        "subprocess with shell=True, pickle/yaml.load, eval/exec, SQL string building, path joins from user input"
+      ],
       "interactsWith": [
-        { "with": "typescript", "via": "HTTP (FastAPI/Flask/Django) to the SPA", "contract": "OpenAPI" },
-        { "with": "cpp", "via": "pybind11/ctypes", "contract": "the binding and its stubs" },
-        { "with": "shell", "via": "scripts that call each other", "contract": "documented CLI flags and exit codes" }
+        {
+          "with": "typescript",
+          "via": "HTTP (FastAPI/Flask/Django) to the SPA",
+          "contract": "OpenAPI"
+        },
+        {
+          "with": "cpp",
+          "via": "pybind11/ctypes",
+          "contract": "the binding and its stubs"
+        },
+        {
+          "with": "shell",
+          "via": "scripts that call each other",
+          "contract": "documented CLI flags and exit codes"
+        }
       ],
       "setupNotes": [
         "As a backend, use the full gate; as a script, keep it small and let ruff + a smoke run be the validation.",
         "Run untrusted checkouts with `python -I` so a planted module in the current directory is not imported."
       ],
-      "seenIn": ["Bailey-Forbes-Flinstone"]
+      "seenIn": [
+        "Bailey-Forbes-Flinstone"
+      ],
+      "sandboxImage": "python:3.12-slim"
     },
     {
       "id": "typescript",
       "name": "TypeScript",
-      "layers": ["web", "backend"],
-      "detect": { "files": ["tsconfig.json"], "extensions": [".ts", ".tsx"] },
+      "layers": [
+        "web",
+        "backend"
+      ],
+      "detect": {
+        "files": [
+          "tsconfig.json"
+        ],
+        "extensions": [
+          ".ts",
+          ".tsx"
+        ]
+      },
       "toolchain": {
-        "install": ["install Node per .nvmrc / .node-version / package.json engines", "npm ci   (use the lockfile's package manager: pnpm/yarn if present)"],
+        "install": [
+          "install Node per .nvmrc / .node-version / package.json engines",
+          "npm ci   (use the lockfile's package manager: pnpm/yarn if present)"
+        ],
         "verify": "node --version"
       },
       "validate": [
@@ -334,35 +706,74 @@
         "npm run build"
       ],
       "security": {
-        "sast": { "tool": "codeql", "language": "javascript-typescript", "buildMode": "none" },
-        "sca": ["npm audit --audit-level=high"],
-        "secrets": ["gitleaks detect --redact"],
+        "sast": {
+          "tool": "codeql",
+          "language": "javascript-typescript",
+          "buildMode": "none"
+        },
+        "sca": [
+          "npm audit --audit-level=high"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": false
       },
       "style": [
         "Use const, or let when reassigned; never var. Pin no-var and prefer-const as errors in eslint.config.js and run lint with --no-inline-config so a disable comment cannot hide them.",
         "No any unless the line says why; no innerHTML; no absolute paths in code that is mounted under a prefix."
       ],
-      "sensitiveHints": ["dangerouslySetInnerHTML/innerHTML, eval, postMessage origins, auth token storage, CORS, anything parsing a server reply"],
+      "sensitiveHints": [
+        "dangerouslySetInnerHTML/innerHTML, eval, postMessage origins, auth token storage, CORS, anything parsing a server reply"
+      ],
       "interactsWith": [
-        { "with": "csharp", "via": "REST/JSON and SignalR", "contract": "OpenAPI or shared DTOs; change both sides in one item" },
-        { "with": "rust", "via": "wasm module or Worker", "contract": "generated .d.ts and the wasm build script" },
-        { "with": "css", "via": "class names and design tokens", "contract": "the token file (design.md or tokens.css)" }
+        {
+          "with": "csharp",
+          "via": "REST/JSON and SignalR",
+          "contract": "OpenAPI or shared DTOs; change both sides in one item"
+        },
+        {
+          "with": "rust",
+          "via": "wasm module or Worker",
+          "contract": "generated .d.ts and the wasm build script"
+        },
+        {
+          "with": "css",
+          "via": "class names and design tokens",
+          "contract": "the token file (design.md or tokens.css)"
+        }
       ],
       "setupNotes": [
         "One CodeQL id (javascript-typescript) covers JS and TS; `--language=javascript` also works on older CLIs.",
         "Run commands from the package that owns them (frontend/, lab/, workers/); a monorepo has one lockfile per package.",
         "A browser app is verified by the Verifier seat's smoke run, not by unit tests alone."
       ],
-      "seenIn": ["Homework-Central", "KeyQuorum"]
+      "seenIn": [
+        "Homework-Central",
+        "KeyQuorum"
+      ],
+      "sandboxImage": "node:22-slim"
     },
     {
       "id": "javascript",
       "name": "JavaScript",
-      "layers": ["web", "backend"],
-      "detect": { "extensions": [".js", ".jsx", ".mjs", ".cjs"] },
+      "layers": [
+        "web",
+        "backend"
+      ],
+      "detect": {
+        "extensions": [
+          ".js",
+          ".jsx",
+          ".mjs",
+          ".cjs"
+        ]
+      },
       "toolchain": {
-        "install": ["install Node per .node-version / package.json engines", "npm ci"],
+        "install": [
+          "install Node per .node-version / package.json engines",
+          "npm ci"
+        ],
         "verify": "node --version"
       },
       "validate": [
@@ -372,51 +783,113 @@
         "node --test   (for projects using the built-in runner)"
       ],
       "security": {
-        "sast": { "tool": "codeql", "language": "javascript-typescript", "buildMode": "none" },
-        "sca": ["npm audit --audit-level=high"],
-        "secrets": ["gitleaks detect --redact"],
+        "sast": {
+          "tool": "codeql",
+          "language": "javascript-typescript",
+          "buildMode": "none"
+        },
+        "sca": [
+          "npm audit --audit-level=high"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": false
       },
-      "style": ["const or let, never var; ES modules unless the package says otherwise; no innerHTML."],
-      "sensitiveHints": ["same as TypeScript; Worker/edge handlers that read request headers and bodies"],
+      "style": [
+        "const or let, never var; ES modules unless the package says otherwise; no innerHTML."
+      ],
+      "sensitiveHints": [
+        "same as TypeScript; Worker/edge handlers that read request headers and bodies"
+      ],
       "interactsWith": [
-        { "with": "rust", "via": "wasm in a Worker", "contract": "the wasm build script and its generated glue" }
+        {
+          "with": "rust",
+          "via": "wasm in a Worker",
+          "contract": "the wasm build script and its generated glue"
+        }
       ],
       "setupNotes": [
         "Edge/Worker code (Cloudflare Workers and similar) has its own guard scripts and wrangler config: run them as part of validation and never put credentials in wrangler.toml [vars]."
       ],
-      "seenIn": ["KeyQuorum"]
+      "seenIn": [
+        "KeyQuorum"
+      ],
+      "sandboxImage": "node:22-slim"
     },
     {
       "id": "css",
       "name": "CSS / SCSS",
-      "layers": ["web"],
-      "detect": { "extensions": [".css", ".scss", ".less"] },
+      "layers": [
+        "web"
+      ],
+      "detect": {
+        "extensions": [
+          ".css",
+          ".scss",
+          ".less"
+        ]
+      },
       "toolchain": {
-        "install": ["npm i -D stylelint stylelint-config-standard"],
-        "verify": "npx stylelint --version"
+        "install": [
+          "npm i -D stylelint stylelint-config-standard"
+        ],
+        "verify": "stylelint --version"
       },
       "validate": [
         "npx stylelint \"**/*.{css,scss}\"",
         "run the frontend build and the Verifier smoke in light and dark themes"
       ],
-      "security": { "sast": null, "sca": [], "secrets": [], "unanalysed": true, "note": "Low risk; the review looks for url() with untrusted input and for leaked internal hostnames." },
-      "style": ["Use the project's design tokens (custom properties); do not hardcode colors, shadows or timings."],
+      "security": {
+        "sast": null,
+        "sca": [],
+        "secrets": [],
+        "unanalysed": true,
+        "note": "Low risk; the review looks for url() with untrusted input and for leaked internal hostnames."
+      },
+      "style": [
+        "Use the project's design tokens (custom properties); do not hardcode colors, shadows or timings."
+      ],
       "optInStyle": [
-        { "id": "token-only", "from": "Homework-Central", "rule": "Plain CSS with custom properties, no Tailwind, no CSS-in-JS; every visual value traces to a token in design.md; styling changes stay separate from component-structure changes." }
+        {
+          "id": "token-only",
+          "from": "Homework-Central",
+          "rule": "Plain CSS with custom properties, no Tailwind, no CSS-in-JS; every visual value traces to a token in design.md; styling changes stay separate from component-structure changes."
+        }
       ],
       "sensitiveHints": [],
-      "interactsWith": [{ "with": "typescript", "via": "class names and tokens", "contract": "the token file" }],
-      "setupNotes": ["Read the design doc before touching color, spacing or animation."],
-      "seenIn": ["Homework-Central"]
+      "interactsWith": [
+        {
+          "with": "typescript",
+          "via": "class names and tokens",
+          "contract": "the token file"
+        }
+      ],
+      "setupNotes": [
+        "Read the design doc before touching color, spacing or animation."
+      ],
+      "seenIn": [
+        "Homework-Central"
+      ],
+      "sandboxImage": "node:22-slim"
     },
     {
       "id": "shell",
       "name": "Shell (bash/sh)",
-      "layers": ["scripting"],
-      "detect": { "extensions": [".sh", ".bash"] },
+      "layers": [
+        "scripting"
+      ],
+      "detect": {
+        "extensions": [
+          ".sh",
+          ".bash"
+        ]
+      },
       "toolchain": {
-        "install": ["apt-get install -y shellcheck shfmt", "brew install shellcheck shfmt"],
+        "install": [
+          "apt-get install -y shellcheck shfmt",
+          "brew install shellcheck shfmt"
+        ],
         "verify": "shellcheck --version"
       },
       "validate": [
@@ -428,29 +901,58 @@
       "security": {
         "sast": null,
         "sca": [],
-        "secrets": ["gitleaks detect --redact"],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": true,
         "note": "CodeQL does not read shell scripts. The Security seat reviews quoting, eval, temp files, PATH and curl|sh by hand and says so."
       },
-      "style": ["set -euo pipefail; quote every expansion; pass untrusted text as an argument, never inside a command string; mktemp for temp files; no predictable /tmp names."],
-      "sensitiveHints": ["eval, unquoted expansions, curl | sh, rm -rf with a variable, sudo, writing under /tmp"],
+      "style": [
+        "set -euo pipefail; quote every expansion; pass untrusted text as an argument, never inside a command string; mktemp for temp files; no predictable /tmp names."
+      ],
+      "sensitiveHints": [
+        "eval, unquoted expansions, curl | sh, rm -rf with a variable, sudo, writing under /tmp"
+      ],
       "interactsWith": [
-        { "with": "powershell", "via": "same task on another OS", "contract": "one documented flag set and the same exit codes in both" },
-        { "with": "python", "via": "calls each other", "contract": "documented CLI flags and exit codes" }
+        {
+          "with": "powershell",
+          "via": "same task on another OS",
+          "contract": "one documented flag set and the same exit codes in both"
+        },
+        {
+          "with": "python",
+          "via": "calls each other",
+          "contract": "documented CLI flags and exit codes"
+        }
       ],
       "setupNotes": [
         "Keep scripts non-interactive and idempotent; the dev-stack scripts (run-dev.sh and run-dev.ps1) must stay in step.",
-        "Backstop scripts that grep for banned constructs (check-no-var.sh style) are CI code: a change to one takes the full gate."
+        "Backstop scripts that grep for banned constructs (check-no-var.sh style) are CI code: a change to one takes the full gate.",
+        "The shellcheck image is enough for linting; bash -n and a real run need a bash image of your own."
       ],
-      "seenIn": ["Bailey-Forbes-Flinstone", "Homework-Central"]
+      "seenIn": [
+        "Bailey-Forbes-Flinstone",
+        "Homework-Central"
+      ],
+      "sandboxImage": "koalaman/shellcheck-alpine:stable"
     },
     {
       "id": "powershell",
       "name": "PowerShell",
-      "layers": ["scripting"],
-      "detect": { "extensions": [".ps1", ".psm1"] },
+      "layers": [
+        "scripting"
+      ],
+      "detect": {
+        "extensions": [
+          ".ps1",
+          ".psm1"
+        ]
+      },
       "toolchain": {
-        "install": ["install PowerShell 7 (https://aka.ms/powershell)", "Install-Module PSScriptAnalyzer, Pester -Scope CurrentUser"],
+        "install": [
+          "install PowerShell 7 (https://aka.ms/powershell)",
+          "Install-Module PSScriptAnalyzer, Pester -Scope CurrentUser"
+        ],
         "verify": "pwsh --version"
       },
       "validate": [
@@ -458,20 +960,52 @@
         "Invoke-Pester   (if tests exist)",
         "run the script once with its documented flags in a throwaway directory"
       ],
-      "security": { "sast": null, "sca": [], "secrets": ["gitleaks detect --redact"], "unanalysed": true, "note": "No CodeQL support; review Invoke-Expression, -ExecutionPolicy Bypass, and string-built commands by hand." },
-      "style": ["Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; use approved verbs; splat long argument lists."],
-      "sensitiveHints": ["Invoke-Expression, Start-Process with built strings, downloaded scripts, credentials in plain text"],
-      "interactsWith": [{ "with": "shell", "via": "same task on another OS", "contract": "same flags and exit codes" }],
-      "setupNotes": ["Keep the .ps1 and .sh twins of a dev script in the same change."],
-      "seenIn": ["Homework-Central"]
+      "security": {
+        "sast": null,
+        "sca": [],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No CodeQL support; review Invoke-Expression, -ExecutionPolicy Bypass, and string-built commands by hand."
+      },
+      "style": [
+        "Set-StrictMode -Version Latest; $ErrorActionPreference = 'Stop'; use approved verbs; splat long argument lists."
+      ],
+      "sensitiveHints": [
+        "Invoke-Expression, Start-Process with built strings, downloaded scripts, credentials in plain text"
+      ],
+      "interactsWith": [
+        {
+          "with": "shell",
+          "via": "same task on another OS",
+          "contract": "same flags and exit codes"
+        }
+      ],
+      "setupNotes": [
+        "Keep the .ps1 and .sh twins of a dev script in the same change."
+      ],
+      "seenIn": [
+        "Homework-Central"
+      ],
+      "sandboxImage": "mcr.microsoft.com/powershell:lts-ubuntu-22.04"
     },
     {
       "id": "sql",
       "name": "SQL / migrations",
-      "layers": ["data"],
-      "detect": { "extensions": [".sql"] },
+      "layers": [
+        "data"
+      ],
+      "detect": {
+        "extensions": [
+          ".sql"
+        ]
+      },
       "toolchain": {
-        "install": ["pip install sqlfluff", "the project's migration tool (dotnet ef, sqlx, alembic, flyway, ...)"],
+        "install": [
+          "pip install sqlfluff",
+          "the project's migration tool (dotnet ef, sqlx, alembic, flyway, ...)"
+        ],
         "verify": "sqlfluff --version"
       },
       "validate": [
@@ -482,26 +1016,56 @@
       "security": {
         "sast": null,
         "sca": [],
-        "secrets": ["gitleaks detect --redact"],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": true,
         "note": "The analyser for the host language catches injection in code; SQL files are reviewed by hand for grants, defaults and data loss."
       },
-      "style": ["Parameterize every value; no string-built SQL; migrations are append-only and never edited after merge."],
-      "sensitiveHints": ["DROP/TRUNCATE/ALTER on populated tables, GRANT, default values on non-null columns, long locks"],
-      "interactsWith": [
-        { "with": "csharp", "via": "EF Core migrations", "contract": "the migration set" },
-        { "with": "rust", "via": "rusqlite / sqlx schema", "contract": "SCHEMA_VERSION and a refusal of newer databases" }
+      "style": [
+        "Parameterize every value; no string-built SQL; migrations are append-only and never edited after merge."
       ],
-      "setupNotes": ["A schema change is a wire/storage change: the review asks for the migration, the rollback story and the old-database test."],
-      "seenIn": ["Homework-Central", "KeyQuorum"]
+      "sensitiveHints": [
+        "DROP/TRUNCATE/ALTER on populated tables, GRANT, default values on non-null columns, long locks"
+      ],
+      "interactsWith": [
+        {
+          "with": "csharp",
+          "via": "EF Core migrations",
+          "contract": "the migration set"
+        },
+        {
+          "with": "rust",
+          "via": "rusqlite / sqlx schema",
+          "contract": "SCHEMA_VERSION and a refusal of newer databases"
+        }
+      ],
+      "setupNotes": [
+        "A schema change is a wire/storage change: the review asks for the migration, the rollback story and the old-database test."
+      ],
+      "seenIn": [
+        "Homework-Central",
+        "KeyQuorum"
+      ],
+      "sandboxImage": "python:3.12-slim"
     },
     {
       "id": "terraform",
       "name": "Terraform / HCL",
-      "layers": ["infra"],
-      "detect": { "extensions": [".tf", ".tfvars"] },
+      "layers": [
+        "infra"
+      ],
+      "detect": {
+        "extensions": [
+          ".tf",
+          ".tfvars"
+        ]
+      },
       "toolchain": {
-        "install": ["install Terraform at the version in .terraform-version / required_version", "brew install tflint; pip install checkov"],
+        "install": [
+          "install Terraform at the version in .terraform-version / required_version",
+          "brew install tflint; pip install checkov"
+        ],
         "verify": "terraform version"
       },
       "validate": [
@@ -511,24 +1075,63 @@
         "checkov -d .   (or trivy config .)"
       ],
       "security": {
-        "sast": { "tool": "checkov", "language": null, "buildMode": "none" },
-        "sca": ["terraform providers lock -platform=linux_amd64   (lockfile reviewed)"],
-        "secrets": ["gitleaks detect --redact"],
+        "sast": {
+          "tool": "checkov",
+          "language": null,
+          "buildMode": "none"
+        },
+        "sca": [
+          "terraform providers lock -platform=linux_amd64   (lockfile reviewed)"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": false
       },
-      "style": ["Providers pinned by .terraform.lock.hcl; no secrets in tfvars or state committed; the operator runs apply with their own credentials."],
-      "sensitiveHints": ["IAM and Access policies, public bucket/route exposure, rate limits and WAF rules, state backends"],
-      "interactsWith": [{ "with": "ci-workflows", "via": "plan/validate jobs", "contract": "the workflow that gates deploys" }],
-      "setupNotes": ["Never run apply from a seat; a plan is evidence, an apply is the operator's decision."],
-      "seenIn": ["KeyQuorum"]
+      "style": [
+        "Providers pinned by .terraform.lock.hcl; no secrets in tfvars or state committed; the operator runs apply with their own credentials."
+      ],
+      "sensitiveHints": [
+        "IAM and Access policies, public bucket/route exposure, rate limits and WAF rules, state backends"
+      ],
+      "interactsWith": [
+        {
+          "with": "ci-workflows",
+          "via": "plan/validate jobs",
+          "contract": "the workflow that gates deploys"
+        }
+      ],
+      "setupNotes": [
+        "Never run apply from a seat; a plan is evidence, an apply is the operator's decision."
+      ],
+      "seenIn": [
+        "KeyQuorum"
+      ],
+      "sandboxImage": "hashicorp/terraform:1.9"
     },
     {
       "id": "containers",
       "name": "Containers (Docker, Compose, Kubernetes, Helm)",
-      "layers": ["infra"],
-      "detect": { "files": ["Dockerfile", "docker-compose.yml", "docker-compose.yaml", "compose.yaml", "Chart.yaml"], "extensions": [".dockerfile"] },
+      "layers": [
+        "infra"
+      ],
+      "detect": {
+        "files": [
+          "Dockerfile",
+          "docker-compose.yml",
+          "docker-compose.yaml",
+          "compose.yaml",
+          "Chart.yaml"
+        ],
+        "extensions": [
+          ".dockerfile"
+        ]
+      },
       "toolchain": {
-        "install": ["install Docker or Podman", "brew install hadolint kubeconform helm trivy"],
+        "install": [
+          "install Docker or Podman",
+          "brew install hadolint kubeconform helm trivy"
+        ],
         "verify": "docker --version"
       },
       "validate": [
@@ -538,24 +1141,57 @@
         "helm lint <chart> && helm template <chart> | kubeconform -strict -"
       ],
       "security": {
-        "sast": { "tool": "trivy", "language": null, "buildMode": "none" },
-        "sca": ["trivy image <name>:test", "trivy config ."],
-        "secrets": ["gitleaks detect --redact"],
+        "sast": {
+          "tool": "trivy",
+          "language": null,
+          "buildMode": "none"
+        },
+        "sca": [
+          "trivy image <name>:test",
+          "trivy config ."
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": false
       },
-      "style": ["Pin base images by digest; run as a non-root user; no secrets in layers, ARG or ENV; multi-stage builds."],
-      "sensitiveHints": ["privileged containers, hostPath mounts, latest tags, secrets in env, exposed ports"],
-      "interactsWith": [{ "with": "ci-workflows", "via": "image build and scan jobs", "contract": "the workflow" }],
-      "setupNotes": ["Some projects ship no container on purpose (KeyQuorum is Cloudflare only); do not add one without a plan."],
-      "seenIn": []
+      "style": [
+        "Pin base images by digest; run as a non-root user; no secrets in layers, ARG or ENV; multi-stage builds."
+      ],
+      "sensitiveHints": [
+        "privileged containers, hostPath mounts, latest tags, secrets in env, exposed ports"
+      ],
+      "interactsWith": [
+        {
+          "with": "ci-workflows",
+          "via": "image build and scan jobs",
+          "contract": "the workflow"
+        }
+      ],
+      "setupNotes": [
+        "Some projects ship no container on purpose (KeyQuorum is Cloudflare only); do not add one without a plan.",
+        "No sandbox image: building images needs a container engine, and a container engine is never mounted into the sandbox. Run image builds on the host or in a VM with the human's OK."
+      ],
+      "seenIn": [],
+      "sandboxImage": null
     },
     {
       "id": "ci-workflows",
       "name": "CI workflows (GitHub Actions, Buildkite, GitLab)",
-      "layers": ["infra"],
-      "detect": { "paths": [".github/workflows", ".buildkite", ".gitlab-ci.yml"] },
+      "layers": [
+        "infra"
+      ],
+      "detect": {
+        "paths": [
+          ".github/workflows",
+          ".buildkite",
+          ".gitlab-ci.yml"
+        ]
+      },
       "toolchain": {
-        "install": ["brew install actionlint   (or download from github.com/rhysd/actionlint)"],
+        "install": [
+          "brew install actionlint   (or download from github.com/rhysd/actionlint)"
+        ],
         "verify": "actionlint -version"
       },
       "validate": [
@@ -564,18 +1200,1501 @@
         "dry-run any workflow script locally"
       ],
       "security": {
-        "sast": { "tool": "codeql", "language": "actions", "buildMode": "none" },
+        "sast": {
+          "tool": "codeql",
+          "language": "actions",
+          "buildMode": "none"
+        },
         "sca": [],
-        "secrets": ["gitleaks detect --redact"],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
         "unanalysed": false
       },
-      "style": ["Never echo secrets; pass untrusted text (PR titles, branch names) through env, not inline `${{ }}` in run:; a deploy credential is no broader than the job needs."],
-      "sensitiveHints": ["pull_request_target, workflow_run, self-hosted runners, write permissions, third-party actions"],
-      "interactsWith": [{ "with": "terraform", "via": "plan/validate jobs", "contract": "the stable check name a branch rule requires" }],
+      "style": [
+        "Never echo secrets; pass untrusted text (PR titles, branch names) through env, not inline `${{ }}` in run:; a deploy credential is no broader than the job needs."
+      ],
+      "sensitiveHints": [
+        "pull_request_target, workflow_run, self-hosted runners, write permissions, third-party actions"
+      ],
+      "interactsWith": [
+        {
+          "with": "terraform",
+          "via": "plan/validate jobs",
+          "contract": "the stable check name a branch rule requires"
+        }
+      ],
       "setupNotes": [
         "A required check keeps one stable name (for example `test`); a change to a workflow file always takes the full gate and is never review-bot exempt."
       ],
-      "seenIn": ["Bailey-Forbes-Flinstone", "KeyQuorum", "Homework-Central"]
+      "seenIn": [
+        "Bailey-Forbes-Flinstone",
+        "KeyQuorum",
+        "Homework-Central"
+      ],
+      "sandboxImage": "rhysd/actionlint:1.7.1"
+    },
+    {
+      "id": "html",
+      "name": "HTML",
+      "layers": [
+        "web"
+      ],
+      "detect": {
+        "extensions": [
+          ".html",
+          ".htm"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "npm i -D html-validate"
+        ],
+        "verify": "node --version"
+      },
+      "validate": [
+        "npx html-validate \"**/*.html\"",
+        "run the accessibility check the project uses (axe or pa11y) in the Verifier smoke",
+        "check links on the built site (linkinator or the framework's own)"
+      ],
+      "sandboxImage": "node:22-slim",
+      "security": {
+        "sast": null,
+        "sca": [],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "Semantic elements, one h1 per page, alt text on every image, no inline event handlers or inline scripts when a CSP is set."
+      ],
+      "sensitiveHints": [
+        "inline <script>, user content rendered without escaping, forms posting to external hosts, target=_blank without rel=noopener"
+      ],
+      "interactsWith": [
+        {
+          "with": "css",
+          "via": "classes and ids",
+          "contract": "the stylesheet and design tokens"
+        },
+        {
+          "with": "javascript",
+          "via": "DOM hooks (data- attributes, ids)",
+          "contract": "a documented list of hooks; tests select by role, not by class"
+        },
+        {
+          "with": "typescript",
+          "via": "component templates (JSX/templates)",
+          "contract": "props types"
+        },
+        {
+          "with": "php",
+          "via": "server-rendered templates",
+          "contract": "escaped output helpers only"
+        }
+      ],
+      "setupNotes": [
+        "Templates in a server framework (Blade, ERB, Razor, Jinja) are reviewed as that language for injection and as HTML for structure.",
+        "Set a Content-Security-Policy and test that it still allows the page to work."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "php",
+      "name": "PHP",
+      "layers": [
+        "backend",
+        "web"
+      ],
+      "detect": {
+        "files": [
+          "composer.json"
+        ],
+        "extensions": [
+          ".php"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install PHP 8.3+ and Composer (https://getcomposer.org)"
+        ],
+        "verify": "php --version"
+      },
+      "validate": [
+        "composer validate --strict",
+        "composer install --no-interaction --prefer-dist",
+        "vendor/bin/php-cs-fixer fix --dry-run --diff   (or vendor/bin/phpcs)",
+        "vendor/bin/phpstan analyse   (or vendor/bin/psalm)",
+        "vendor/bin/phpunit"
+      ],
+      "sandboxImage": "composer:2",
+      "security": {
+        "sast": {
+          "tool": "psalm",
+          "language": null,
+          "buildMode": "none",
+          "command": "vendor/bin/psalm --taint-analysis"
+        },
+        "sca": [
+          "composer audit"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": false
+      },
+      "style": [
+        "PSR-12; declare(strict_types=1) in every file; typed properties and return types; no @-suppression."
+      ],
+      "sensitiveHints": [
+        "unserialize, include/require with variables, eval, exec/system/shell_exec, SQL built by concatenation, file uploads, extract() on request data"
+      ],
+      "interactsWith": [
+        {
+          "with": "javascript",
+          "via": "JSON API or server-rendered pages",
+          "contract": "documented routes and response shapes"
+        },
+        {
+          "with": "typescript",
+          "via": "JSON API",
+          "contract": "OpenAPI or generated types"
+        },
+        {
+          "with": "sql",
+          "via": "PDO / Eloquent / Doctrine migrations",
+          "contract": "the migration set; prepared statements only"
+        },
+        {
+          "with": "html",
+          "via": "templates",
+          "contract": "auto-escaping template engine"
+        }
+      ],
+      "setupNotes": [
+        "Laravel and Symfony have their own console test and lint commands; put them in the profile instead of guessing.",
+        "Run composer with --no-scripts when inspecting an untrusted checkout."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "ruby",
+      "name": "Ruby",
+      "layers": [
+        "backend",
+        "scripting"
+      ],
+      "detect": {
+        "files": [
+          "Gemfile",
+          "*.gemspec"
+        ],
+        "extensions": [
+          ".rb"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install Ruby with rbenv or asdf per .ruby-version",
+          "gem install bundler"
+        ],
+        "verify": "ruby --version"
+      },
+      "validate": [
+        "bundle install",
+        "bundle exec rubocop",
+        "bundle exec rspec   (or bin/rails test)",
+        "bundle exec brakeman -q   (Rails apps)"
+      ],
+      "sandboxImage": "ruby:3.3-slim",
+      "security": {
+        "sast": {
+          "tool": "codeql",
+          "language": "ruby",
+          "buildMode": "none"
+        },
+        "sca": [
+          "bundle exec bundle-audit check --update"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": false
+      },
+      "style": [
+        "rubocop config from the repo; frozen_string_literal comment; no monkey patching of core classes."
+      ],
+      "sensitiveHints": [
+        "eval, send with user input, YAML.load, system/backticks, mass assignment, raw SQL fragments"
+      ],
+      "interactsWith": [
+        {
+          "with": "typescript",
+          "via": "JSON API (Rails) to the SPA",
+          "contract": "OpenAPI or serializers with types"
+        },
+        {
+          "with": "sql",
+          "via": "ActiveRecord migrations",
+          "contract": "db/schema.rb or structure.sql"
+        },
+        {
+          "with": "javascript",
+          "via": "asset pipeline / importmap",
+          "contract": "the bundler config"
+        }
+      ],
+      "setupNotes": [
+        "Rails: run db:migrate on an empty and a populated database before sign-off.",
+        "Gem versions are pinned by Gemfile.lock; a lockfile change is a dependency change."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "dart",
+      "name": "Dart / Flutter",
+      "layers": [
+        "web",
+        "backend"
+      ],
+      "detect": {
+        "files": [
+          "pubspec.yaml"
+        ],
+        "extensions": [
+          ".dart"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install the Dart or Flutter SDK per pubspec environment (https://dart.dev, https://flutter.dev)"
+        ],
+        "verify": "dart --version"
+      },
+      "validate": [
+        "dart pub get   (flutter pub get)",
+        "dart format --output=none --set-exit-if-changed .",
+        "dart analyze --fatal-infos   (flutter analyze)",
+        "dart test   (flutter test)"
+      ],
+      "sandboxImage": "dart:3.5",
+      "security": {
+        "sast": null,
+        "sca": [
+          "osv-scanner --lockfile=pubspec.lock"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "Effective Dart; analysis_options.yaml from the repo; null safety on; no dynamic without a comment."
+      ],
+      "sensitiveHints": [
+        "platform channels, WebView content, local storage of tokens, http without certificate checks"
+      ],
+      "interactsWith": [
+        {
+          "with": "kotlin",
+          "via": "platform channels (Android)",
+          "contract": "channel names and message codecs"
+        },
+        {
+          "with": "swift",
+          "via": "platform channels (iOS)",
+          "contract": "channel names and message codecs"
+        },
+        {
+          "with": "typescript",
+          "via": "Flutter web embedding or a shared API",
+          "contract": "OpenAPI"
+        }
+      ],
+      "setupNotes": [
+        "Flutter device and integration tests need an emulator or device: NOT RUN in the sandbox.",
+        "Flutter needs its own SDK image; the dart image covers pure Dart packages."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "scala",
+      "name": "Scala",
+      "layers": [
+        "backend",
+        "science"
+      ],
+      "detect": {
+        "files": [
+          "build.sbt"
+        ],
+        "extensions": [
+          ".scala"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install a JDK, then Coursier: cs setup (https://get-coursier.io)"
+        ],
+        "verify": "scala -version"
+      },
+      "validate": [
+        "sbt compile",
+        "sbt scalafmtCheckAll",
+        "sbt test",
+        "sbt \"scalafixAll --check\"   (if configured)"
+      ],
+      "sandboxImage": null,
+      "security": {
+        "sast": null,
+        "sca": [
+          "sbt dependencyCheck   (sbt-dependency-check plugin, if configured)"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "scalafmt config from the repo; no null, no var in domain code, exhaustive matches."
+      ],
+      "sensitiveHints": [
+        "Java deserialization, reflection, SQL interpolation, Akka/Pekko remoting config"
+      ],
+      "interactsWith": [
+        {
+          "with": "java",
+          "via": "same JVM and build",
+          "contract": "shared modules and Java-facing APIs"
+        },
+        {
+          "with": "kotlin",
+          "via": "same JVM",
+          "contract": "published artifacts"
+        },
+        {
+          "with": "sql",
+          "via": "Slick/Doobie/Quill",
+          "contract": "migrations"
+        }
+      ],
+      "setupNotes": [
+        "No official sbt image is pinned here: build a project image from eclipse-temurin with sbt and pin its digest, or run on the host with the human's OK.",
+        "Spark jobs need a cluster or local[*] session; keep tests on local mode."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "swift",
+      "name": "Swift",
+      "layers": [
+        "systems",
+        "backend"
+      ],
+      "detect": {
+        "files": [
+          "Package.swift"
+        ],
+        "extensions": [
+          ".swift"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install Swift (https://swift.org/install) or Xcode on macOS",
+          "brew install swiftlint"
+        ],
+        "verify": "swift --version"
+      },
+      "validate": [
+        "swift build",
+        "swift test",
+        "swiftlint --strict",
+        "swift format lint --recursive Sources Tests"
+      ],
+      "sandboxImage": "swift:6.0",
+      "security": {
+        "sast": {
+          "tool": "codeql",
+          "language": "swift",
+          "buildMode": "command",
+          "command": "swift build"
+        },
+        "sca": [
+          "osv-scanner --lockfile=Package.resolved"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": false
+      },
+      "style": [
+        "swift-format and SwiftLint configs from the repo; prefer value types; no force unwraps outside tests."
+      ],
+      "sensitiveHints": [
+        "Keychain use, App Transport Security exceptions, URL scheme handlers, unsafe pointers"
+      ],
+      "interactsWith": [
+        {
+          "with": "c",
+          "via": "C interop through module maps",
+          "contract": "the C header and module.modulemap"
+        },
+        {
+          "with": "cpp",
+          "via": "C++ interop (Swift 5.9+)",
+          "contract": "the bridging header or module"
+        },
+        {
+          "with": "dart",
+          "via": "Flutter platform channels",
+          "contract": "channel names"
+        },
+        {
+          "with": "kotlin",
+          "via": "shared logic (KMP) or API",
+          "contract": "the API contract"
+        }
+      ],
+      "setupNotes": [
+        "CodeQL for Swift needs macOS; the Linux image builds Foundation-only packages. UIKit/SwiftUI/Xcode builds are NOT RUN in the sandbox.",
+        "Objective-C code in a mixed project is reviewed under this entry; it has no entry of its own."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "perl",
+      "name": "Perl",
+      "layers": [
+        "scripting",
+        "backend"
+      ],
+      "detect": {
+        "files": [
+          "cpanfile"
+        ],
+        "extensions": [
+          ".pl",
+          ".pm"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install Perl 5.36+ and cpanm",
+          "cpanm Perl::Critic Perl::Tidy"
+        ],
+        "verify": "perl -v"
+      },
+      "validate": [
+        "perl -c <changed .pl/.pm files>",
+        "perlcritic --severity 3 <paths>",
+        "prove -lr t/"
+      ],
+      "sandboxImage": "perl:5.40",
+      "security": {
+        "sast": null,
+        "sca": [
+          "cpan-audit   (CPAN::Audit)"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "use strict; use warnings; in every file; three-argument open; no bareword filehandles."
+      ],
+      "sensitiveHints": [
+        "two-argument open, backticks and system with interpolation, eval of strings, taint-mode bypass"
+      ],
+      "interactsWith": [
+        {
+          "with": "shell",
+          "via": "scripts that call each other",
+          "contract": "documented flags and exit codes"
+        },
+        {
+          "with": "python",
+          "via": "text-processing pipelines",
+          "contract": "files or stdin/stdout formats"
+        },
+        {
+          "with": "sql",
+          "via": "DBI",
+          "contract": "parameterized placeholders only"
+        }
+      ],
+      "setupNotes": [
+        "Legacy scripts often lack tests: add a characterization test (run on sample input, compare output) before changing one."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "lua",
+      "name": "Lua",
+      "layers": [
+        "scripting",
+        "game"
+      ],
+      "detect": {
+        "extensions": [
+          ".lua"
+        ],
+        "files": [
+          "*.rockspec"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install Lua 5.4 or LuaJIT and luarocks",
+          "luarocks install luacheck busted",
+          "cargo install stylua --locked"
+        ],
+        "verify": "lua -v"
+      },
+      "validate": [
+        "luacheck .",
+        "stylua --check .",
+        "busted"
+      ],
+      "sandboxImage": null,
+      "security": {
+        "sast": null,
+        "sca": [],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "luacheck config from the repo; local by default, no accidental globals; stylua formatting."
+      ],
+      "sensitiveHints": [
+        "load/loadstring/dofile on external text, os.execute/io.popen, sandbox escapes in embedded scripts"
+      ],
+      "interactsWith": [
+        {
+          "with": "c",
+          "via": "embedding through the Lua C API",
+          "contract": "the registered function table and its argument checks"
+        },
+        {
+          "with": "cpp",
+          "via": "embedding (sol2, LuaBridge)",
+          "contract": "the binding file"
+        },
+        {
+          "with": "csharp",
+          "via": "MoonSharp/NLua scripting in game code",
+          "contract": "the exposed API"
+        },
+        {
+          "with": "shell",
+          "via": "build or deploy glue",
+          "contract": "flags and exit codes"
+        }
+      ],
+      "setupNotes": [
+        "For scripts embedded in a host (game engine, Neovim, nginx) the host binary is needed to run real tests: NOT RUN unless a headless mode exists.",
+        "No official image is pinned here; use the host's own CI image or a pinned custom one."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "gdscript",
+      "name": "GDScript (Godot)",
+      "layers": [
+        "game"
+      ],
+      "detect": {
+        "files": [
+          "project.godot"
+        ],
+        "extensions": [
+          ".gd"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "pip install \"gdtoolkit==4.*\"",
+          "download Godot 4.x (headless/Linux) from https://godotengine.org/download and put it on PATH as godot"
+        ],
+        "verify": "godot --version"
+      },
+      "validate": [
+        "gdformat --check <paths>",
+        "gdlint <paths>",
+        "godot --headless --path . --import   (once, builds the import cache)",
+        "godot --headless --path . -s addons/gut/gut_cmdln.gd -gexit   (GUT; or the GdUnit4 runner)"
+      ],
+      "sandboxImage": null,
+      "security": {
+        "sast": null,
+        "sca": [],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "gdformat and gdlint defaults; static typing on (typed vars and returns); signals over polling."
+      ],
+      "sensitiveHints": [
+        "loading user-supplied scenes/resources (they can run code), OS.execute, network peers trusted by default"
+      ],
+      "interactsWith": [
+        {
+          "with": "csharp",
+          "via": "Godot C# in the same project",
+          "contract": "the exposed node/script API"
+        },
+        {
+          "with": "cpp",
+          "via": "GDExtension",
+          "contract": "the .gdextension file and exported classes"
+        },
+        {
+          "with": "lua",
+          "via": "embedded scripting add-ons",
+          "contract": "the add-on API"
+        }
+      ],
+      "setupNotes": [
+        "Exports (Windows, Android, web) need export templates and are NOT RUN in the sandbox.",
+        "Pin the Godot version in the project and in CI: scene and resource formats change between minor versions."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "zig",
+      "name": "Zig",
+      "layers": [
+        "systems"
+      ],
+      "detect": {
+        "files": [
+          "build.zig"
+        ],
+        "extensions": [
+          ".zig"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install Zig from https://ziglang.org/download (match build.zig.zon minimum_zig_version)"
+        ],
+        "verify": "zig version"
+      },
+      "validate": [
+        "zig fmt --check .",
+        "zig build",
+        "zig build test",
+        "zig build -Doptimize=ReleaseSafe test"
+      ],
+      "sandboxImage": null,
+      "security": {
+        "sast": null,
+        "sca": [],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "zig fmt is law; errors are returned, not swallowed; allocators are passed in."
+      ],
+      "sensitiveHints": [
+        "allocator lifetime, @ptrCast/@intFromPtr, unchecked slices in ReleaseFast, C interop"
+      ],
+      "interactsWith": [
+        {
+          "with": "c",
+          "via": "@cImport and C ABI exports",
+          "contract": "the header and an ABI version constant"
+        },
+        {
+          "with": "wasm",
+          "via": "wasm32 targets",
+          "contract": "the exported function list"
+        }
+      ],
+      "setupNotes": [
+        "Zig is pre-1.0: pin the compiler version in the profile and in CI.",
+        "No official container image exists; use a pinned custom image."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "wasm",
+      "name": "WebAssembly",
+      "layers": [
+        "systems",
+        "web"
+      ],
+      "detect": {
+        "extensions": [
+          ".wat"
+        ],
+        "files": [
+          "wasm-pack.toml"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "cargo install wasm-tools wasm-pack --locked",
+          "brew install binaryen wabt"
+        ],
+        "verify": "wasm-tools --version"
+      },
+      "validate": [
+        "wasm-tools validate <module>.wasm",
+        "wasm-opt <in>.wasm -O2 -o <out>.wasm   (binaryen; compare size and run tests after)",
+        "wat2wasm <file>.wat -o /dev/null   (wabt)",
+        "run the module's tests under the project's runtime (wasmtime, or node)"
+      ],
+      "sandboxImage": null,
+      "security": {
+        "sast": null,
+        "sca": [],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "Export only what callers need; document every import and export in one file; keep the memory limit explicit."
+      ],
+      "sensitiveHints": [
+        "host imports that touch files or the network (WASI capabilities), memory growth, untrusted modules"
+      ],
+      "interactsWith": [
+        {
+          "with": "rust",
+          "via": "wasm32 target (wasm-bindgen, worker crate)",
+          "contract": "the generated .d.ts and the build script"
+        },
+        {
+          "with": "c",
+          "via": "clang/emscripten wasm32",
+          "contract": "exports list and the JS glue"
+        },
+        {
+          "with": "cpp",
+          "via": "emscripten",
+          "contract": "exports list and the JS glue"
+        },
+        {
+          "with": "zig",
+          "via": "wasm32-freestanding / wasi",
+          "contract": "the exported function list"
+        },
+        {
+          "with": "typescript",
+          "via": "loads and calls the module",
+          "contract": "the generated .d.ts"
+        }
+      ],
+      "setupNotes": [
+        "This entry is a build target, not a source language: the source language's own entry decides compile, lint and scan; here you validate the binary and its surface.",
+        "emcc and wasm-pack are usually missing in a plain sandbox: report NOT RUN rather than a pass."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "fortran",
+      "name": "Fortran",
+      "layers": [
+        "science",
+        "systems"
+      ],
+      "detect": {
+        "files": [
+          "fpm.toml"
+        ],
+        "extensions": [
+          ".f90",
+          ".f95",
+          ".f03",
+          ".f08"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install gfortran and fpm (https://fpm.fortran-lang.org)",
+          "pip install fprettify"
+        ],
+        "verify": "gfortran --version"
+      },
+      "validate": [
+        "fpm build",
+        "fpm test",
+        "fprettify --diff <files>",
+        "gfortran -Wall -Wextra -fcheck=all -g <files>   (debug run with runtime checks)"
+      ],
+      "sandboxImage": "gcc:14",
+      "security": {
+        "sast": null,
+        "sca": [],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "implicit none everywhere; explicit kinds (iso_fortran_env); free-form source."
+      ],
+      "sensitiveHints": [
+        "array bounds, integer overflow, interoperability with C pointers"
+      ],
+      "interactsWith": [
+        {
+          "with": "python",
+          "via": "f2py or ctypes",
+          "contract": "the wrapper and a tested example call"
+        },
+        {
+          "with": "c",
+          "via": "iso_c_binding",
+          "contract": "the C header and kind mappings"
+        },
+        {
+          "with": "julia",
+          "via": "ccall",
+          "contract": "the shared library symbol list"
+        }
+      ],
+      "setupNotes": [
+        "The gcc image carries gfortran but not fpm: add fpm in a pinned project image.",
+        "Numerical results are compared with a tolerance, never for equality."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "cobol",
+      "name": "COBOL",
+      "layers": [
+        "backend"
+      ],
+      "detect": {
+        "extensions": [
+          ".cob",
+          ".cbl",
+          ".cpy"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install GnuCOBOL (cobc): apt-get install gnucobol, brew install gnucobol"
+        ],
+        "verify": "cobc --version"
+      },
+      "validate": [
+        "cobc -x -Wall -o build/prog src/*.cbl",
+        "run the program with a fixed input file and compare the output file byte for byte",
+        "cobol-check   (if configured)"
+      ],
+      "sandboxImage": null,
+      "security": {
+        "sast": null,
+        "sca": [],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "Fixed or free format as the tree already uses; copybooks for every shared record layout; no GO TO in new code."
+      ],
+      "sensitiveHints": [
+        "file record layouts (silent truncation), packed decimal handling, JCL/batch credentials, embedded SQL"
+      ],
+      "interactsWith": [
+        {
+          "with": "sql",
+          "via": "embedded SQL / DB2 precompile",
+          "contract": "the copybook and table definitions"
+        },
+        {
+          "with": "java",
+          "via": "batch files or MQ messages exchanged with services",
+          "contract": "the record layout in a copybook plus a Java mapping test"
+        },
+        {
+          "with": "shell",
+          "via": "job scripts",
+          "contract": "documented parameters and return codes"
+        }
+      ],
+      "setupNotes": [
+        "GnuCOBOL is the free compiler; mainframe-only dialect features may not compile there: report NOT RUN for those, never a pass.",
+        "Treat a record layout like a wire format: append, never renumber or resize."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "r",
+      "name": "R",
+      "layers": [
+        "science"
+      ],
+      "detect": {
+        "files": [
+          "renv.lock",
+          "*.Rproj"
+        ],
+        "extensions": [
+          ".R",
+          ".Rmd"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install R (https://cran.r-project.org) and renv",
+          "R -q -e 'install.packages(c(\"lintr\",\"styler\",\"testthat\"))'"
+        ],
+        "verify": "R --version"
+      },
+      "validate": [
+        "Rscript -e 'renv::restore()'",
+        "Rscript -e 'lintr::lint_dir()'",
+        "Rscript -e 'styler::style_dir(dry = \"fail\")'",
+        "Rscript -e 'testthat::test_local()'",
+        "R CMD check .   (packages)"
+      ],
+      "sandboxImage": "rocker/r-ver:4.4",
+      "security": {
+        "sast": null,
+        "sca": [
+          "Rscript -e 'oysteR::audit_installed_r_pkgs()'"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "tidyverse style via styler/lintr; set seeds in every stochastic test; no setwd in packages."
+      ],
+      "sensitiveHints": [
+        "system()/shell(), eval(parse()), loading .RData/.rds from untrusted sources, Shiny inputs reaching queries"
+      ],
+      "interactsWith": [
+        {
+          "with": "python",
+          "via": "reticulate or exchanged Parquet/Arrow files",
+          "contract": "the file schema, versioned"
+        },
+        {
+          "with": "sql",
+          "via": "DBI",
+          "contract": "parameterized queries"
+        },
+        {
+          "with": "julia",
+          "via": "files or JuliaCall",
+          "contract": "the file schema"
+        }
+      ],
+      "setupNotes": [
+        "Notebooks (.Rmd) are code: render them in CI and diff the outputs only when they are deterministic.",
+        "renv.lock is the dependency record; a change to it is a dependency change."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "julia",
+      "name": "Julia",
+      "layers": [
+        "science"
+      ],
+      "detect": {
+        "files": [
+          "Project.toml"
+        ],
+        "extensions": [
+          ".jl"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install Julia via juliaup (https://julialang.org/install)"
+        ],
+        "verify": "julia --version"
+      },
+      "validate": [
+        "julia --project -e 'using Pkg; Pkg.instantiate()'",
+        "julia --project -e 'using JuliaFormatter; format(\".\"; verbose=true)' then git diff --exit-code",
+        "julia --project -e 'using Pkg; Pkg.test()'",
+        "run Aqua.jl and JET.jl checks if the project has them"
+      ],
+      "sandboxImage": "julia:1.10",
+      "security": {
+        "sast": null,
+        "sca": [],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "JuliaFormatter config from the repo; type-stable hot paths; no type piracy."
+      ],
+      "sensitiveHints": [
+        "eval/include on external text, ccall signatures, shelling out"
+      ],
+      "interactsWith": [
+        {
+          "with": "python",
+          "via": "PythonCall/PyCall",
+          "contract": "the Python API used"
+        },
+        {
+          "with": "c",
+          "via": "ccall to shared libraries",
+          "contract": "the C header and symbol list"
+        },
+        {
+          "with": "r",
+          "via": "files or RCall",
+          "contract": "the file schema"
+        }
+      ],
+      "setupNotes": [
+        "Precompilation makes the first run slow; cache ~/.julia in CI, not in the sandbox image.",
+        "Manifest.toml is committed for applications and not for libraries."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "haskell",
+      "name": "Haskell",
+      "layers": [
+        "science",
+        "backend"
+      ],
+      "detect": {
+        "files": [
+          "stack.yaml",
+          "*.cabal"
+        ],
+        "extensions": [
+          ".hs"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install GHCup (https://www.haskell.org/ghcup): ghc, cabal, hls",
+          "cabal install hlint ormolu"
+        ],
+        "verify": "ghc --version"
+      },
+      "validate": [
+        "cabal build all",
+        "cabal test all",
+        "ormolu --mode check $(git ls-files '*.hs')",
+        "hlint ."
+      ],
+      "sandboxImage": "haskell:9.8",
+      "security": {
+        "sast": null,
+        "sca": [
+          "cabal-audit   (or osv-scanner on cabal.project.freeze)"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "-Wall -Werror in CI; ormolu or fourmolu formatting from the repo; total functions, no partial head/fromJust."
+      ],
+      "sensitiveHints": [
+        "unsafePerformIO, FFI imports, Template Haskell reading files, deserialization"
+      ],
+      "interactsWith": [
+        {
+          "with": "c",
+          "via": "FFI imports/exports",
+          "contract": "the C header"
+        },
+        {
+          "with": "sql",
+          "via": "persistent/postgresql-simple/hasql",
+          "contract": "parameterized queries and migrations"
+        },
+        {
+          "with": "typescript",
+          "via": "JSON API (servant/yesod)",
+          "contract": "OpenAPI or generated types"
+        }
+      ],
+      "setupNotes": [
+        "Pin GHC and the package set (stack resolver or cabal freeze file) in the profile.",
+        "First builds take long; cache dist-newstyle outside the sandbox image."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "ocaml",
+      "name": "OCaml",
+      "layers": [
+        "science",
+        "systems"
+      ],
+      "detect": {
+        "files": [
+          "dune-project"
+        ],
+        "extensions": [
+          ".ml",
+          ".mli"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install opam (https://opam.ocaml.org), then opam switch create . --deps-only"
+        ],
+        "verify": "ocaml -version"
+      },
+      "validate": [
+        "opam install . --deps-only --with-test",
+        "dune build @check",
+        "dune build @fmt",
+        "dune runtest"
+      ],
+      "sandboxImage": "ocaml/opam:debian-ocaml-5.2",
+      "security": {
+        "sast": null,
+        "sca": [],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "ocamlformat config from the repo; .mli for every public module; exhaustive matches with no catch-all on variants you own."
+      ],
+      "sensitiveHints": [
+        "Obj.magic, Marshal on untrusted data, C stubs, unsafe array/string access"
+      ],
+      "interactsWith": [
+        {
+          "with": "c",
+          "via": "C stubs (ctypes or manual)",
+          "contract": "the stub file and its tests"
+        },
+        {
+          "with": "javascript",
+          "via": "js_of_ocaml / Melange",
+          "contract": "the exported bindings"
+        },
+        {
+          "with": "rust",
+          "via": "C ABI",
+          "contract": "header plus ABI version"
+        }
+      ],
+      "setupNotes": [
+        "The opam image is large: pin the tag and cache switches outside the sandbox."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "erlang",
+      "name": "Erlang",
+      "layers": [
+        "backend"
+      ],
+      "detect": {
+        "files": [
+          "rebar.config"
+        ],
+        "extensions": [
+          ".erl",
+          ".hrl"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install Erlang/OTP and rebar3 (https://rebar3.org)"
+        ],
+        "verify": "erl -version"
+      },
+      "validate": [
+        "rebar3 compile",
+        "rebar3 fmt --check   (erlfmt plugin)",
+        "rebar3 eunit",
+        "rebar3 ct",
+        "rebar3 xref",
+        "rebar3 dialyzer"
+      ],
+      "sandboxImage": "erlang:27",
+      "security": {
+        "sast": null,
+        "sca": [],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "erlfmt formatting; specs on exported functions; supervise every long-lived process."
+      ],
+      "sensitiveHints": [
+        "binary_to_term on untrusted data, os:cmd, distribution cookies and exposed epmd, ETS with public access"
+      ],
+      "interactsWith": [
+        {
+          "with": "elixir",
+          "via": "same BEAM",
+          "contract": "a shared OTP release and module/function names"
+        },
+        {
+          "with": "c",
+          "via": "NIFs and ports",
+          "contract": "the NIF header and failure behavior (a crash takes the VM down)"
+        },
+        {
+          "with": "sql",
+          "via": "epgsql/pgo",
+          "contract": "parameterized queries"
+        }
+      ],
+      "setupNotes": [
+        "Dialyzer is a type checker, not a security scanner; it does not change the unanalysed note.",
+        "Distributed nodes need a secret cookie from the environment, never from the repo."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "elixir",
+      "name": "Elixir",
+      "layers": [
+        "backend",
+        "web"
+      ],
+      "detect": {
+        "files": [
+          "mix.exs"
+        ],
+        "extensions": [
+          ".ex",
+          ".exs"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install Elixir/OTP via asdf or the official installer (https://elixir-lang.org/install.html)"
+        ],
+        "verify": "elixir --version"
+      },
+      "validate": [
+        "mix deps.get",
+        "mix format --check-formatted",
+        "mix compile --warnings-as-errors",
+        "mix credo --strict",
+        "mix test",
+        "mix dialyzer   (dialyxir)"
+      ],
+      "sandboxImage": "elixir:1.17",
+      "security": {
+        "sast": {
+          "tool": "sobelow",
+          "language": null,
+          "buildMode": "none",
+          "command": "mix sobelow --exit"
+        },
+        "sca": [
+          "mix hex.audit",
+          "mix deps.audit   (mix_audit)"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": false
+      },
+      "style": [
+        "mix format; @spec on public functions; pattern match in function heads; let it crash under a supervisor."
+      ],
+      "sensitiveHints": [
+        "String.to_atom on input, Code.eval_*, raw Ecto fragments, Phoenix params reaching queries, :erlang.binary_to_term"
+      ],
+      "interactsWith": [
+        {
+          "with": "erlang",
+          "via": "same BEAM",
+          "contract": "module and function names; OTP release"
+        },
+        {
+          "with": "typescript",
+          "via": "Phoenix JSON/LiveView/Channels to the SPA",
+          "contract": "OpenAPI or channel message schema"
+        },
+        {
+          "with": "sql",
+          "via": "Ecto migrations",
+          "contract": "the migration set"
+        }
+      ],
+      "setupNotes": [
+        "Sobelow covers Phoenix apps; plain OTP libraries have no scanner, so say so in the report."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "clojure",
+      "name": "Clojure / ClojureScript",
+      "layers": [
+        "science",
+        "backend"
+      ],
+      "detect": {
+        "files": [
+          "deps.edn",
+          "project.clj"
+        ],
+        "extensions": [
+          ".clj",
+          ".cljs",
+          ".cljc"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install the Clojure CLI (https://clojure.org/guides/install_clojure) or Leiningen",
+          "install clj-kondo"
+        ],
+        "verify": "clojure --version"
+      },
+      "validate": [
+        "clj-kondo --lint src test",
+        "clojure -M:cljfmt check   (or cljfmt check)",
+        "clojure -X:test   (or lein test)"
+      ],
+      "sandboxImage": "clojure:temurin-21-tools-deps",
+      "security": {
+        "sast": null,
+        "sca": [
+          "clojure -M:nvd   (nvd-clojure, if configured)"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "cljfmt and clj-kondo configs from the repo; data over macros; pure functions at the edges."
+      ],
+      "sensitiveHints": [
+        "read-string/eval on external text, Java interop reflection, SQL string building"
+      ],
+      "interactsWith": [
+        {
+          "with": "java",
+          "via": "JVM interop",
+          "contract": "the Java API called and its version"
+        },
+        {
+          "with": "javascript",
+          "via": "ClojureScript output",
+          "contract": "the shadow-cljs/cljs build config and npm deps"
+        },
+        {
+          "with": "sql",
+          "via": "next.jdbc/HoneySQL",
+          "contract": "parameterized queries"
+        }
+      ],
+      "setupNotes": [
+        "Other Lisps (Common Lisp, Scheme, Racket) are not separate entries: use this one for REPL-driven workflow notes and add a local entry if you need their toolchains."
+      ],
+      "seenIn": []
+    },
+    {
+      "id": "fsharp",
+      "name": "F#",
+      "layers": [
+        "science",
+        "backend"
+      ],
+      "detect": {
+        "files": [
+          "*.fsproj"
+        ],
+        "extensions": [
+          ".fs",
+          ".fsx"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install the .NET SDK (https://dot.net)",
+          "dotnet tool install fantomas"
+        ],
+        "verify": "dotnet --version"
+      },
+      "validate": [
+        "dotnet restore",
+        "dotnet fantomas --check .",
+        "dotnet build --warnaserror",
+        "dotnet test"
+      ],
+      "sandboxImage": "mcr.microsoft.com/dotnet/sdk:8.0",
+      "security": {
+        "sast": null,
+        "sca": [
+          "dotnet list package --vulnerable --include-transitive"
+        ],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language; the Security seat reviews it by hand and the report says so."
+      },
+      "style": [
+        "Fantomas formatting; warnings as errors; avoid null at module boundaries; make illegal states unrepresentable."
+      ],
+      "sensitiveHints": [
+        "System.Diagnostics.Process, Reflection, unsafe serializers (BinaryFormatter), raw SQL strings"
+      ],
+      "interactsWith": [
+        {
+          "with": "csharp",
+          "via": "same .NET runtime and solution",
+          "contract": "project references and public APIs"
+        },
+        {
+          "with": "typescript",
+          "via": "Fable compiles F# to JS",
+          "contract": "the Fable config and bindings"
+        },
+        {
+          "with": "sql",
+          "via": "Dapper/EF/FSharp.Data.SqlClient",
+          "contract": "migrations and parameterized queries"
+        }
+      ],
+      "setupNotes": [
+        "CodeQL does not support F#; the C# entry's scan covers only C# projects in the same solution."
+      ],
+      "seenIn": []
     }
   ]
 }

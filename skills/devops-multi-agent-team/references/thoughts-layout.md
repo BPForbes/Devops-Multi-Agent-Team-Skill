@@ -10,6 +10,12 @@ in every earlier commit.
 | `.devops/thoughts/non-finalized/` | **Gitignored** (keepfile only) | Open |
 | `.devops/thoughts/finalized/` | **Gitignored** | Done (local after QA) |
 
+The installer (or the MCP tool `ensure_gitignore`) writes and repairs a
+managed block in `.gitignore` between `# >>> devops-multi-agent-team` and
+`# <<< devops-multi-agent-team`: it ignores everything under
+`.devops/thoughts/` except `non-finalized/.gitkeep`, and leaves the committed
+`.devops/project.md` alone. Check with `git check-ignore -v <path>`.
+
 Keep `.devops/thoughts/non-finalized/.gitkeep`. Do not `git add`
 any other file under `.devops/thoughts/`.  Push JSON lives in `non-finalized/`
 ([push-json.md](push-json.md)).

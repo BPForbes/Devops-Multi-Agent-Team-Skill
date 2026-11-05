@@ -1,18 +1,37 @@
 {
   "name": "devops-multi-agent-team",
   "version": "0.1.0",
-  "private": true,
-  "description": "DevOps multi-agent team skill, agents, commands, language setup and Claude mod",
+  "description": "DevOps multi-agent team: skill, agents, commands, language and service setup, sandbox, MCP server and Claude mod",
   "type": "module",
   "bin": {
-    "devops-setup": "scripts/devops-setup.mjs"
+    "devops-setup": "scripts/devops-setup.mjs",
+    "devops-multi-agent-team-mcp": "mcp/server.mjs"
   },
   "scripts": {
     "check": "node scripts/check-languages.mjs",
-    "test": "node scripts/check-languages.mjs && node --test scripts/devops-setup.test.mjs && claude plugin validate . && claude plugin test ."
+    "test": "node scripts/check-languages.mjs && node --test scripts/devops-setup.test.mjs mcp/server.test.mjs && claude plugin validate . && claude plugin test ."
   },
   "engines": {
     "node": ">=18"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "files": [
+    "skills",
+    "agents",
+    "commands",
+    "hooks",
+    "types",
+    "mcp",
+    "scripts/devops-setup.mjs",
+    "scripts/check-languages.mjs",
+    "templates",
+    "languages.json",
+    "services.json",
+    "LANGUAGES.md",
+    "SERVICES.md",
+    ".claude-plugin",
+    ".mcp.json",
+    "LICENSE",
+    "README.md"
+  ]
 }

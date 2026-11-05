@@ -94,7 +94,8 @@ export const register: Register = on => {
     if (word === 'setup') {
       return {
         text: [
-          'Install the skill, agents, commands and the project profile into this project:',
+          'Easiest: ask me "set up the DevOps team in this project" (MCP server devops-multi-agent-team; I plan first and write only after you agree).',
+          'Or from a shell:',
           `  node ${$.plugin.root}/scripts/devops-setup.mjs install --dest . --target claude`,
           'Add --target cursor or both for Cursor; --dry-run to preview; --lang rust,typescript to choose.',
           'Then fill in the "Fill in by hand" section of .devops/project.md and commit it.',

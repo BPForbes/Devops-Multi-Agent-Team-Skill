@@ -42,6 +42,14 @@ Recreate with exact commands and exit codes. Write `repro-<topic>.md`. Repro fil
 `triage-<seat-id>.md`. Handoff `To: Coder`. The department's Researcher joins the
 Coder who picks it up ([department-pods.md](department-pods.md)).
 
+## The devops-multi-agent-team MCP server
+
+Tools: `list_languages`, `get_language`, `list_services`, `get_service`,
+`detect_project`, `status`, `install_devops_team`, `get_profile`,
+`ensure_gitignore`, `add_language`, `check_toolchain`, `sandbox_plan`. Prompts:
+`setup_project`, `add_language`. Write tools plan by default; see
+[services-and-sandbox.md](services-and-sandbox.md).
+
 ## Other `/` skills and MCPs (optional)
 
 Use whatever the host has installed and say so when a tool is missing;
