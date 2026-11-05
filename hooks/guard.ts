@@ -67,3 +67,8 @@ export function splitArgs(args: string): { word: string; rest: string } {
 export function branchNameOf(text: string): string | undefined {
   return /^[A-Za-z0-9][A-Za-z0-9._\/-]{0,99}$/.test(text) && !text.includes('..') ? text : undefined
 }
+
+/** The simple commands in a shell line, quoted text blanked, in order. */
+export function classifySegments(command: string): string[] {
+  return blankQuotes(command).split(/&&|\|\||;|\||\n|\(|\)|`|\$\(/).map(part => part.trim()).filter(part => part !== '')
+}

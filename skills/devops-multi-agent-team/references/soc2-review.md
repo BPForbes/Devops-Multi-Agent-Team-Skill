@@ -90,10 +90,10 @@ evidence (file:line, test, command output) that supports it.
 
 | Criterion | Look for |
 |-----------|----------|
-| CC6.1 Logical access | A check skipped, widened or decided by the caller; scope or identity binding removed; a trust decision taken from a cache or a name the sender chose |
+| CC6.1 Logical access | A check skipped, widened or decided by the caller; scope or identity binding removed; a trust decision taken from a cache or from a name the requester chose |
 | CC6.2 / CC6.3 Provisioning and removal | Revocation or rotation that leaves old access working |
-| CC6.6 System boundaries | New input from the network, a file or a letter without validation, size or time limits; names and paths from an untrusted peer; path traversal and symlinks |
-| CC6.7 Transmission and removal of information | Plaintext, keys or passphrases written or sent outside the sealed or owner-only path; secrets left in memory, logs or errors |
+| CC6.6 System boundaries | New input from the network, a file or a message without validation, size or time limits; names and paths from an untrusted peer; path traversal and symlinks |
+| CC6.7 Transmission and removal of information | Plaintext, keys or passphrases written or sent outside the encrypted or owner-only path; secrets left in memory, logs or errors |
 | CC6.8 Unauthorized or malicious software | New dependencies, build steps or scripts without audit coverage; code that runs untrusted input |
 | CC7.1 Vulnerability detection | Changes that bypass or weaken scanning, sanitizers or tests |
 | CC7.2 Monitoring | Security-relevant events (denials, failures to get entropy, tamper) swallowed silently; records that hold secrets |

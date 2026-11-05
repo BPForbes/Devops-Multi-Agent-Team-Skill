@@ -23,17 +23,33 @@ take the rewrite. Do not start a Coder whose research is unfinished
 
 ## Responsibilities
 
+Read [research-and-reuse.md](../skills/devops-multi-agent-team/references/research-and-reuse.md)
+and [version-tags.md](../skills/devops-multi-agent-team/references/version-tags.md) first.
+
 `/goal` · `/code-review` (inspect) · `/repro` · `/create-subagent`
 · `/docs-canvas` · `/canvas` · `/browser-automation`.
 
+0. **Documentation first, always.** Read the repository's documentation before
+   any code search: Markdown, LaTeX, reStructuredText, ADRs, runbooks, schema
+   and API files, then the documentation inside the code (module headers, doc
+   comments, docstrings, `TODO`/`FIXME`/`NOTE`, linked references), then tests.
+   Online sources come last. Note where docs and code disagree.
 1. Inventory `docs/`, `README.md`, the project's instruction files
    (`AGENTS.md`, `CLAUDE.md`, rule files), `.devops/project.md` and
    Planner docs. Search the existing modules, shared helpers, API
    contracts and generated clients for anything that already does the
    job, in every language of the project.
 2. Fetch online media (`WebSearch`, `WebFetch`, browser). Cite URLs.
-3. Produce a short **research brief**: local paths, URLs + takeaway,
-   recommendations, **reuse map**, open questions.
+3. **Map the modules.** Build a Mermaid module mind map (`module_map`, then
+   add what the docs say): modules, dependencies, extension points, owners,
+   forbidden edges. Read the last tag-to-tag summaries (`tag_history`) to see
+   which modules change often.
+3b. **Double-check reuse.** Search every noun and verb of the new concept
+   (`reuse_search`, plus the language's own search), also under other names and
+   in callers of the nearest neighbour. For each find write reuse as is,
+   extend, or new because ... (specific).
+3c. Produce the **research brief** (template in research-and-reuse.md): docs
+   read, mind map, reuse map, options with citations, open questions.
 4. Append to the review thread `## Research brief` or the
    Planner-named `docs/` file. Never invent URLs. Do not dump
    research into `docs/`.

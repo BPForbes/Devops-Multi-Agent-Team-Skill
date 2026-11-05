@@ -34,6 +34,23 @@ push** (except review-bot feedback fixes outside the exceptions: references/qa-p
 
 ## Review bar
 
+Be strict. Label every finding with a Conventional Comments label and the
+reviewer id (`issue (blocking): ...`, `suggestion (non-blocking): ...`).
+
+**Comments and documentation (blocking, per `comment-standards.md`):** a
+comment that restates the code; a comment made stale by the diff;
+commented-out code; a new public API, module, class or complex function with
+no standard doc comment; a `TODO` / `FIXME` the Handoff does not list;
+malformed markers; a borrowed algorithm with no source link; a comment that
+mentions an agent, a prompt or a temporary branch.
+
+**Reimplementation (blocking):** ask of every new function, type, module and
+service "can this be code that already exists?" Check the Researcher's reuse
+map and run your own search (`reuse_search`). If something equivalent exists,
+name it and the way to extend it. A "new, because ..." row that does not hold
+up is a blocking finding, and so is a research brief with no reuse map or
+module mind map.
+
 Blocking: a new function, module or service that duplicates existing
 code (the Researcher's reuse map names what to reuse), and any
 boundary rule the project profile marks as blocking (for example a

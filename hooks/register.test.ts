@@ -1,5 +1,11 @@
 import { expect, test } from 'claude-code/testing'
 
+const assert = {
+  ok: (value: unknown) => expect(Boolean(value)).toBe(true),
+  equal: (a: unknown, b: unknown) => expect(a).toBe(b),
+  deepEqual: (a: unknown, b: unknown) => expect(a).toEqual(b),
+}
+
 const QA_DIR = '/work/.devops/thoughts/non-finalized'
 
 /** The engine beneath the mod, for one test: a project root, (optionally) a QA note, and state in a Map. */
@@ -59,4 +65,55 @@ test('branch creation is refused until the person allows that name, and reads pa
 
   state.set('allowedBranches', ['topic'])
   expect((await $.tool.call({ tool: 'Bash', command: 'git checkout -b topic' })).isError).not.toBe(true)
+})
+
+function engineWithChecks(on: any, results: { isError: boolean }[]) {
+  const state = new Map<string, unknown>()
+  const written: string[] = []
+  on('state.get', (_: unknown, e: { key: string }) => ({ value: { value: state.get(e.key), version: 1 } }))
+  on('state.set', (_: unknown, e: { key: string; value: unknown }) => {
+    state.set(e.key, e.value)
+    return { value: { isSet: true, version: 2 } }
+  })
+  on('session.root', () => ({ value: '/work' }))
+  on('fs.exists', () => ({ value: true }))
+  on('fs.read', (_: unknown, e: { path: string }) => {
+    if (e.path.endsWith('languages.json')) return { value: JSON.stringify({ languages: [{ validate: ['cargo test --locked', 'npm run lint', 'pytest -q'] }] }) }
+    if (e.path.endsWith('project.md')) return { value: 'x\n- **Default branch / integration base:** `main`; **check retry cap** for auto-correction: `2`\n' }
+    if (e.path.endsWith('check-ledger.md')) return { value: written.join('') }
+    throw new Error('missing')
+  })
+  on('fs.write', (_: unknown, e: { path: string; text: string }) => {
+    written.length = 0
+    written.push(e.text)
+    return { value: undefined }
+  })
+  let call = 0
+  on('tool.call', () => ({ result: {}, isError: results[Math.min(call++, results.length - 1)].isError }))
+  return { state, written }
+}
+
+test('a failing check is recorded, nudges a fix, stops at the cap, and a pass clears it', async ($, on) => {
+  const { state, written } = engineWithChecks(on, [{ isError: true }, { isError: true }, { isError: false }])
+  const first = await $.tool.call({ tool: 'Bash', command: 'cd app && cargo test --locked' })
+  assert.ok(String(first.context).includes('attempt 1 of 2'))
+  assert.deepEqual(state.get('checkFailures'), { 'cargo test': 1 })
+
+  const second = await $.tool.call({ tool: 'Bash', command: 'cargo test' })
+  assert.ok(String(second.context).includes('Stop trying variations'))
+  assert.ok(written[0].includes('escalated'))
+
+  const passed = await $.tool.call({ tool: 'Bash', command: 'cargo test' })
+  assert.equal(passed.context, undefined)
+  assert.deepEqual(state.get('checkFailures'), {})
+  assert.ok(written[0].includes('verified'))
+})
+
+test('commands that are not known checks are left alone, and the monitor can be turned off', async ($, on) => {
+  const { state } = engineWithChecks(on, [{ isError: true }])
+  assert.equal((await $.tool.call({ tool: 'Bash', command: 'ls -la' })).context, undefined)
+  assert.equal((await $.tool.call({ tool: 'Bash', command: 'echo cargo test' })).context, undefined)
+  state.set('monitor', false)
+  assert.equal((await $.tool.call({ tool: 'Bash', command: 'cargo test' })).context, undefined)
+  assert.equal(state.get('checkFailures'), undefined)
 })

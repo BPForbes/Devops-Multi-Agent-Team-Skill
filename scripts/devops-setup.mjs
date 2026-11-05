@@ -93,6 +93,7 @@ export function validateLanguage(lang, ctx, { partial = false } = {}) {
     if (s?.sast && s.sast !== null) need(s.unanalysed !== true, 'a language with a scanner is not unanalysed')
     if (s?.sast?.tool === 'codeql') need(ctx.codeqlLanguages.includes(s.sast.language), `unknown CodeQL language ${s.sast.language}`)
   }
+  if (has('docs')) need(typeof lang.docs?.format === 'string' && typeof lang.docs?.lineComment === 'string' && typeof lang.docs?.check === 'string', 'docs needs format, lineComment and check (see LANGUAGES.md)')
   for (const key of ['style', 'sensitiveHints', 'setupNotes', 'seenIn']) if (key in lang) need(isStringList(lang[key]), `${key} must be a list of strings`)
   for (const edge of lang.interactsWith ?? []) need(edge && typeof edge.with === 'string' && typeof edge.via === 'string' && typeof edge.contract === 'string', 'interactsWith entries need with, via, contract')
   return problems
@@ -124,7 +125,7 @@ export function validateService(svc, ctx) {
 
 // ---------------------------------------------------------------- detect
 
-function walk(root) {
+export function walk(root) {
   const files = []
   const dirs = []
   const queue = [[root, 0]]
@@ -208,10 +209,10 @@ export function resolveDest(dest, roots) {
   return real
 }
 
-const lexists = p => { try { fs.lstatSync(p); return true } catch { return false } }
+export const lexists = p => { try { fs.lstatSync(p); return true } catch { return false } }
 
 /** Refuse any write whose real location is outside `root`, or that would replace a symbolic link. */
-function assertInside(root, target) {
+export function assertInside(root, target) {
   let probe = target
   while (!lexists(probe)) probe = path.dirname(probe)
   if (fs.lstatSync(probe).isSymbolicLink()) throw new Error(`refusing to write through a symbolic link: ${probe}`)
@@ -363,6 +364,7 @@ export function renderProfile(config, selected, dest, ctx = {}) {
     if (s.sast) {
       const extra = [s.sast.language && `language \`${s.sast.language}\``, s.sast.buildMode && `build mode \`${s.sast.buildMode}\``, s.sast.command && `build ${code(s.sast.command)}`, s.sast.suite && `suite \`${s.sast.suite}\``].filter(Boolean).join(', ')
       lines.push(`SAST: **${s.sast.tool}** (${extra})`)
+      if ((s.sast.commands ?? []).length > 0) lines.push(`Local run (set DB and SARIF outside the repository): ${s.sast.commands.map(code).join(' then ')}`)
     } else {
       lines.push('SAST: **none** — review by hand and say so in the report')
     }
@@ -372,6 +374,14 @@ export function renderProfile(config, selected, dest, ctx = {}) {
     if ((l.sensitiveHints ?? []).length > 0) lines.push(`Sensitive areas: ${l.sensitiveHints.join('; ')}`)
     return `### ${l.name}\n${bullets(lines)}`
   })
+
+  const codeqlNotes = selected.some(l => (l.security?.sast?.commands ?? []).length > 0) && (config.codeqlNotes ?? []).length > 0
+    ? `${bullets(config.codeqlNotes)}\n\n` : ''
+  const docs = section(selected, l => {
+    const d = l.docs ?? {}
+    return `### ${l.name}\n${bullets([`Doc format: ${d.format ?? '_not set_'}`, `Line comment marker: ${code(d.lineComment ?? '')}`, `Doc check: ${d.check ?? '_not set_'}`])}`
+  })
+  const presets = Object.entries(config.presets ?? {}).map(([id, p]) => `### Preset \`${id}\` (opt-in, from ${p.from})\n${bullets(p.rules)}`).join('\n\n')
 
   const style = section(selected, l => {
     const rules = [...(l.style ?? [])]
@@ -431,7 +441,9 @@ export function renderProfile(config, selected, dest, ctx = {}) {
     .replace('{{LANGUAGES}}', languages)
     .replace('{{DEPARTMENTS}}', departments)
     .replace('{{VALIDATION}}', validation)
-    .replace('{{SECURITY}}', security)
+    .replace('{{SECURITY}}', codeqlNotes + security)
+    .replace('{{DOCS}}', docs)
+    .replace('{{PRESETS}}', presets)
     .replace('{{SERVICES}}', services)
     .replace('{{SANDBOX}}', sandbox)
     .replace('{{STYLE}}', style)
@@ -476,7 +488,7 @@ export function addLocalLanguage(destInput, entry, { apply = false } = {}) {
   const exists = config.languages.some(l => l.id === entry?.id)
   const problems = validateLanguage(entry ?? {}, { layers: config.layers, codeqlLanguages: config.codeqlLanguages }, { partial: exists })
   if (!exists) {
-    for (const key of ['name', 'layers', 'detect', 'toolchain', 'validate', 'security', 'sandboxImage']) if (!(key in (entry ?? {}))) problems.push(`language ${entry?.id}: missing ${key}`)
+    for (const key of ['name', 'layers', 'detect', 'toolchain', 'validate', 'security', 'sandboxImage', 'docs']) if (!(key in (entry ?? {}))) problems.push(`language ${entry?.id}: missing ${key}`)
   }
   const known = new Set([...config.languages.map(l => l.id), entry?.id])
   for (const edge of entry?.interactsWith ?? []) if (!known.has(edge.with)) problems.push(`language ${entry?.id}: interactsWith unknown ${edge.with}`)
@@ -595,6 +607,14 @@ export function install({ dest: destInput, roots, target = 'both', lang = 'auto'
     copyTree(path.join(PACKAGE_ROOT, 'skills', 'devops-multi-agent-team'), path.join(dest, host, 'skills', 'devops-multi-agent-team'), opts, report)
     copyTree(path.join(PACKAGE_ROOT, 'agents'), path.join(dest, host, 'agents'), opts, report)
     copyTree(path.join(PACKAGE_ROOT, 'commands'), path.join(dest, host, 'commands'), opts, report)
+  }
+  for (const host of hosts) {
+    for (const rule of fs.readdirSync(path.join(PACKAGE_ROOT, 'rules')).filter(f => f.endsWith('.md'))) {
+      const body = fs.readFileSync(path.join(PACKAGE_ROOT, 'rules', rule), 'utf8')
+      const name = rule.replace(/\.md$/, '')
+      if (host === '.cursor') writeText(path.join(dest, host, 'rules', `${name}.mdc`), `---\ndescription: ${body.split('\n')[0].replace(/^#\s*/, '')}\nglobs:\n  - "**/*"\nalwaysApply: true\n---\n\n${body}`, opts, report)
+      else writeText(path.join(dest, host, 'rules', rule), body, opts, report)
+    }
   }
   for (const name of ['languages.json', 'services.json', 'LANGUAGES.md', 'SERVICES.md']) {
     copyFile(path.join(PACKAGE_ROOT, name), path.join(dest, '.devops', name), opts, report)

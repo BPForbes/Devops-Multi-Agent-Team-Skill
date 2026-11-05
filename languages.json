@@ -78,7 +78,11 @@
           "tool": "codeql",
           "language": "cpp",
           "buildMode": "command",
-          "command": "<the project build command>"
+          "command": "<the project build command>",
+          "commands": [
+            "codeql database create \"$DB\" --language=cpp --command=\"<build command>\"",
+            "codeql database analyze \"$DB\" codeql/cpp-queries:codeql-suites/cpp-security-and-quality.qls --format=sarif-latest --output=\"$SARIF\""
+          ]
         },
         "sca": [],
         "secrets": [
@@ -112,7 +116,12 @@
       "seenIn": [
         "Bailey-Forbes-Flinstone"
       ],
-      "sandboxImage": "gcc:14"
+      "sandboxImage": "gcc:14",
+      "docs": {
+        "format": "Doxygen comments (/** … */ or ///) on public functions, structs and headers",
+        "lineComment": "//",
+        "check": "doxygen with WARN_AS_ERROR=YES (or clang -Wdocumentation)"
+      }
     },
     {
       "id": "cpp",
@@ -149,7 +158,11 @@
           "tool": "codeql",
           "language": "cpp",
           "buildMode": "command",
-          "command": "cmake --build build"
+          "command": "cmake --build build",
+          "commands": [
+            "codeql database create \"$DB\" --language=cpp --command=\"<build command>\"",
+            "codeql database analyze \"$DB\" codeql/cpp-queries:codeql-suites/cpp-security-and-quality.qls --format=sarif-latest --output=\"$SARIF\""
+          ]
         },
         "sca": [],
         "secrets": [
@@ -185,7 +198,12 @@
         "Unreal Engine C++ builds with UnrealBuildTool and the engine installed; that is NOT RUN in the sandbox. Engine-independent game logic can be built with CMake as usual."
       ],
       "seenIn": [],
-      "sandboxImage": "gcc:14"
+      "sandboxImage": "gcc:14",
+      "docs": {
+        "format": "Doxygen comments on public classes and functions",
+        "lineComment": "//",
+        "check": "doxygen with WARN_AS_ERROR=YES (or clang -Wdocumentation)"
+      }
     },
     {
       "id": "asm",
@@ -243,7 +261,12 @@
       "seenIn": [
         "Bailey-Forbes-Flinstone"
       ],
-      "sandboxImage": "gcc:14"
+      "sandboxImage": "gcc:14",
+      "docs": {
+        "format": "a header comment per routine: purpose, calling convention, inputs, outputs, clobbered registers, stack use",
+        "lineComment": "; (GAS on x86 uses # or /* */; NASM uses ;)",
+        "check": "none: reviewed by hand"
+      }
     },
     {
       "id": "rust",
@@ -281,7 +304,11 @@
           "tool": "codeql",
           "language": "rust",
           "buildMode": "none",
-          "suite": "codeql/rust-queries:codeql-suites/rust-security-and-quality.qls"
+          "suite": "codeql/rust-queries:codeql-suites/rust-security-and-quality.qls",
+          "commands": [
+            "codeql database create \"$DB\" --language=rust --build-mode=none",
+            "codeql database analyze \"$DB\" codeql/rust-queries:codeql-suites/rust-security-and-quality.qls --format=sarif-latest --output=\"$SARIF\""
+          ]
         },
         "sca": [
           "cargo audit",
@@ -327,7 +354,12 @@
         "KeyQuorum",
         "Homework-Central"
       ],
-      "sandboxImage": "rust:1-slim"
+      "sandboxImage": "rust:1-slim",
+      "docs": {
+        "format": "rustdoc: /// on items, //! on modules and crates, with # Errors, # Panics and # Safety sections",
+        "lineComment": "//",
+        "check": "RUSTDOCFLAGS=\"-D warnings\" cargo doc --no-deps; #![warn(missing_docs)] for libraries"
+      }
     },
     {
       "id": "go",
@@ -363,7 +395,11 @@
         "sast": {
           "tool": "codeql",
           "language": "go",
-          "buildMode": "autobuild"
+          "buildMode": "autobuild",
+          "commands": [
+            "codeql database create \"$DB\" --language=go",
+            "codeql database analyze \"$DB\" codeql/go-queries:codeql-suites/go-security-and-quality.qls --format=sarif-latest --output=\"$SARIF\""
+          ]
         },
         "sca": [
           "govulncheck ./..."
@@ -390,7 +426,12 @@
         "Run go test -race for any change touching goroutines or shared state."
       ],
       "seenIn": [],
-      "sandboxImage": "golang:1.23"
+      "sandboxImage": "golang:1.23",
+      "docs": {
+        "format": "godoc: a comment directly above each exported name, starting with the name",
+        "lineComment": "//",
+        "check": "go vet; staticcheck (ST1000 family); revive exported rule"
+      }
     },
     {
       "id": "csharp",
@@ -427,7 +468,11 @@
           "tool": "codeql",
           "language": "csharp",
           "buildMode": "command",
-          "command": "dotnet build"
+          "command": "dotnet build",
+          "commands": [
+            "codeql database create \"$DB\" --language=csharp --command=\"dotnet build\"",
+            "codeql database analyze \"$DB\" codeql/csharp-queries:codeql-suites/csharp-security-and-quality.qls --format=sarif-latest --output=\"$SARIF\""
+          ]
         },
         "sca": [
           "dotnet list package --vulnerable --include-transitive"
@@ -471,7 +516,12 @@
       "seenIn": [
         "Homework-Central"
       ],
-      "sandboxImage": "mcr.microsoft.com/dotnet/sdk:8.0"
+      "sandboxImage": "mcr.microsoft.com/dotnet/sdk:8.0",
+      "docs": {
+        "format": "XML documentation (/// <summary>, <param>, <returns>, <exception>)",
+        "lineComment": "//",
+        "check": "<GenerateDocumentationFile>true</GenerateDocumentationFile> with CS1591 as an error for public APIs"
+      }
     },
     {
       "id": "java",
@@ -506,7 +556,11 @@
         "sast": {
           "tool": "codeql",
           "language": "java-kotlin",
-          "buildMode": "none"
+          "buildMode": "none",
+          "commands": [
+            "codeql database create \"$DB\" --language=java-kotlin --build-mode=none",
+            "codeql database analyze \"$DB\" codeql/java-kotlin-queries:codeql-suites/java-kotlin-security-and-quality.qls --format=sarif-latest --output=\"$SARIF\""
+          ]
         },
         "sca": [
           "./gradlew dependencyCheckAnalyze   (or mvn org.owasp:dependency-check-maven:check)"
@@ -538,7 +592,12 @@
         "Java and Kotlin share the CodeQL id java-kotlin; run it once."
       ],
       "seenIn": [],
-      "sandboxImage": "eclipse-temurin:21-jdk"
+      "sandboxImage": "eclipse-temurin:21-jdk",
+      "docs": {
+        "format": "Javadoc (/** … */ with @param, @return, @throws)",
+        "lineComment": "//",
+        "check": "javadoc -Xdoclint:all"
+      }
     },
     {
       "id": "kotlin",
@@ -567,7 +626,11 @@
         "sast": {
           "tool": "codeql",
           "language": "java-kotlin",
-          "buildMode": "none"
+          "buildMode": "none",
+          "commands": [
+            "codeql database create \"$DB\" --language=java-kotlin --build-mode=none",
+            "codeql database analyze \"$DB\" codeql/java-kotlin-queries:codeql-suites/java-kotlin-security-and-quality.qls --format=sarif-latest --output=\"$SARIF\""
+          ]
         },
         "sca": [
           "./gradlew dependencyCheckAnalyze"
@@ -594,7 +657,12 @@
         "Android modules need the Android SDK and the project's Gradle properties; report NOT RUN rather than guess."
       ],
       "seenIn": [],
-      "sandboxImage": "eclipse-temurin:21-jdk"
+      "sandboxImage": "eclipse-temurin:21-jdk",
+      "docs": {
+        "format": "KDoc (/** … */ with @param, @return, @throws)",
+        "lineComment": "//",
+        "check": "dokka; detekt UndocumentedPublicClass/Function"
+      }
     },
     {
       "id": "python",
@@ -632,7 +700,11 @@
         "sast": {
           "tool": "codeql",
           "language": "python",
-          "buildMode": "none"
+          "buildMode": "none",
+          "commands": [
+            "codeql database create \"$DB\" --language=python",
+            "codeql database analyze \"$DB\" codeql/python-queries:codeql-suites/python-security-and-quality.qls --format=sarif-latest --output=\"$SARIF\""
+          ]
         },
         "sca": [
           "pip-audit",
@@ -673,7 +745,12 @@
       "seenIn": [
         "Bailey-Forbes-Flinstone"
       ],
-      "sandboxImage": "python:3.12-slim"
+      "sandboxImage": "python:3.12-slim",
+      "docs": {
+        "format": "PEP 257 docstrings in triple quotes (Google or NumPy style, one style per project)",
+        "lineComment": "#",
+        "check": "ruff check --select D (pydocstyle rules) or pydocstyle"
+      }
     },
     {
       "id": "typescript",
@@ -709,7 +786,11 @@
         "sast": {
           "tool": "codeql",
           "language": "javascript-typescript",
-          "buildMode": "none"
+          "buildMode": "none",
+          "commands": [
+            "codeql database create \"$DB\" --language=javascript-typescript",
+            "codeql database analyze \"$DB\" codeql/javascript-typescript-queries:codeql-suites/javascript-typescript-security-and-quality.qls --format=sarif-latest --output=\"$SARIF\""
+          ]
         },
         "sca": [
           "npm audit --audit-level=high"
@@ -752,7 +833,12 @@
         "Homework-Central",
         "KeyQuorum"
       ],
-      "sandboxImage": "node:22-slim"
+      "sandboxImage": "node:22-slim",
+      "docs": {
+        "format": "TSDoc/JSDoc (/** … */ with @param, @returns, @throws)",
+        "lineComment": "//",
+        "check": "eslint-plugin-jsdoc or eslint-plugin-tsdoc; typedoc --treatWarningsAsErrors"
+      }
     },
     {
       "id": "javascript",
@@ -786,7 +872,11 @@
         "sast": {
           "tool": "codeql",
           "language": "javascript-typescript",
-          "buildMode": "none"
+          "buildMode": "none",
+          "commands": [
+            "codeql database create \"$DB\" --language=javascript-typescript",
+            "codeql database analyze \"$DB\" codeql/javascript-typescript-queries:codeql-suites/javascript-typescript-security-and-quality.qls --format=sarif-latest --output=\"$SARIF\""
+          ]
         },
         "sca": [
           "npm audit --audit-level=high"
@@ -815,7 +905,12 @@
       "seenIn": [
         "KeyQuorum"
       ],
-      "sandboxImage": "node:22-slim"
+      "sandboxImage": "node:22-slim",
+      "docs": {
+        "format": "JSDoc (/** … */ with @param, @returns, @throws)",
+        "lineComment": "//",
+        "check": "eslint-plugin-jsdoc"
+      }
     },
     {
       "id": "css",
@@ -871,7 +966,12 @@
       "seenIn": [
         "Homework-Central"
       ],
-      "sandboxImage": "node:22-slim"
+      "sandboxImage": "node:22-slim",
+      "docs": {
+        "format": "a short comment above each section and any non-obvious hack, naming the reason",
+        "lineComment": "/* … */",
+        "check": "stylelint (comment-empty-line-before)"
+      }
     },
     {
       "id": "shell",
@@ -934,7 +1034,12 @@
         "Bailey-Forbes-Flinstone",
         "Homework-Central"
       ],
-      "sandboxImage": "koalaman/shellcheck-alpine:stable"
+      "sandboxImage": "koalaman/shellcheck-alpine:stable",
+      "docs": {
+        "format": "a header comment with purpose, usage and exit codes; a comment on every non-obvious option",
+        "lineComment": "#",
+        "check": "shellcheck; shfmt -d"
+      }
     },
     {
       "id": "powershell",
@@ -988,7 +1093,12 @@
       "seenIn": [
         "Homework-Central"
       ],
-      "sandboxImage": "mcr.microsoft.com/powershell:lts-ubuntu-22.04"
+      "sandboxImage": "mcr.microsoft.com/powershell:lts-ubuntu-22.04",
+      "docs": {
+        "format": "comment-based help (.SYNOPSIS, .DESCRIPTION, .PARAMETER, .EXAMPLE) on every exported function",
+        "lineComment": "#",
+        "check": "PSScriptAnalyzer rule PSProvideCommentHelp"
+      }
     },
     {
       "id": "sql",
@@ -1047,7 +1157,12 @@
         "Homework-Central",
         "KeyQuorum"
       ],
-      "sandboxImage": "python:3.12-slim"
+      "sandboxImage": "python:3.12-slim",
+      "docs": {
+        "format": "a comment on each non-obvious query or migration step naming the reason; COMMENT ON for tables and columns where the engine supports it",
+        "lineComment": "--",
+        "check": "sqlfluff"
+      }
     },
     {
       "id": "terraform",
@@ -1107,7 +1222,12 @@
       "seenIn": [
         "KeyQuorum"
       ],
-      "sandboxImage": "hashicorp/terraform:1.9"
+      "sandboxImage": "hashicorp/terraform:1.9",
+      "docs": {
+        "format": "a description on every variable and output; comments only for why",
+        "lineComment": "#",
+        "check": "terraform-docs; tflint terraform_documented_variables / outputs"
+      }
     },
     {
       "id": "containers",
@@ -1173,7 +1293,12 @@
         "No sandbox image: building images needs a container engine, and a container engine is never mounted into the sandbox. Run image builds on the host or in a VM with the human's OK."
       ],
       "seenIn": [],
-      "sandboxImage": null
+      "sandboxImage": null,
+      "docs": {
+        "format": "a comment above each non-obvious instruction (why this base image, why this flag)",
+        "lineComment": "#",
+        "check": "hadolint"
+      }
     },
     {
       "id": "ci-workflows",
@@ -1203,7 +1328,11 @@
         "sast": {
           "tool": "codeql",
           "language": "actions",
-          "buildMode": "none"
+          "buildMode": "none",
+          "commands": [
+            "codeql database create \"$DB\" --language=actions",
+            "codeql database analyze \"$DB\" codeql/actions-queries:codeql-suites/actions-security-and-quality.qls --format=sarif-latest --output=\"$SARIF\""
+          ]
         },
         "sca": [],
         "secrets": [
@@ -1232,7 +1361,12 @@
         "KeyQuorum",
         "Homework-Central"
       ],
-      "sandboxImage": "rhysd/actionlint:1.7.1"
+      "sandboxImage": "rhysd/actionlint:1.7.1",
+      "docs": {
+        "format": "a name on every workflow, job and step; comments for why a permission or pin exists",
+        "lineComment": "#",
+        "check": "actionlint"
+      }
     },
     {
       "id": "html",
@@ -1299,7 +1433,12 @@
         "Templates in a server framework (Blade, ERB, Razor, Jinja) are reviewed as that language for injection and as HTML for structure.",
         "Set a Content-Security-Policy and test that it still allows the page to work."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "comments only for non-obvious structure or a required workaround; never commented-out markup",
+        "lineComment": "<!-- … -->",
+        "check": "html-validate"
+      }
     },
     {
       "id": "php",
@@ -1377,7 +1516,12 @@
         "Laravel and Symfony have their own console test and lint commands; put them in the profile instead of guessing.",
         "Run composer with --no-scripts when inspecting an untrusted checkout."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "PHPDoc (/** … */ with @param, @return, @throws)",
+        "lineComment": "//",
+        "check": "phpcs with the PEAR/PSR-5 doc sniffs, or phpstan"
+      }
     },
     {
       "id": "ruby",
@@ -1413,7 +1557,11 @@
         "sast": {
           "tool": "codeql",
           "language": "ruby",
-          "buildMode": "none"
+          "buildMode": "none",
+          "commands": [
+            "codeql database create \"$DB\" --language=ruby",
+            "codeql database analyze \"$DB\" codeql/ruby-queries:codeql-suites/ruby-security-and-quality.qls --format=sarif-latest --output=\"$SARIF\""
+          ]
         },
         "sca": [
           "bundle exec bundle-audit check --update"
@@ -1450,7 +1598,12 @@
         "Rails: run db:migrate on an empty and a populated database before sign-off.",
         "Gem versions are pinned by Gemfile.lock; a lockfile change is a dependency change."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "YARD (# @param, @return, @raise)",
+        "lineComment": "#",
+        "check": "yard stats --list-undoc; rubocop Style/Documentation"
+      }
     },
     {
       "id": "dart",
@@ -1518,7 +1671,12 @@
         "Flutter device and integration tests need an emulator or device: NOT RUN in the sandbox.",
         "Flutter needs its own SDK image; the dart image covers pure Dart packages."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "dartdoc: /// comments on public members, first line a one-sentence summary",
+        "lineComment": "//",
+        "check": "dart doc; public_member_api_docs lint"
+      }
     },
     {
       "id": "scala",
@@ -1586,7 +1744,12 @@
         "No official sbt image is pinned here: build a project image from eclipse-temurin with sbt and pin its digest, or run on the host with the human's OK.",
         "Spark jobs need a cluster or local[*] session; keep tests on local mode."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "Scaladoc (/** … */ with @param, @return, @throws)",
+        "lineComment": "//",
+        "check": "sbt doc with -Xfatal-warnings"
+      }
     },
     {
       "id": "swift",
@@ -1622,7 +1785,11 @@
           "tool": "codeql",
           "language": "swift",
           "buildMode": "command",
-          "command": "swift build"
+          "command": "swift build",
+          "commands": [
+            "codeql database create \"$DB\" --language=swift --command=\"swift build\"",
+            "codeql database analyze \"$DB\" codeql/swift-queries:codeql-suites/swift-security-and-quality.qls --format=sarif-latest --output=\"$SARIF\""
+          ]
         },
         "sca": [
           "osv-scanner --lockfile=Package.resolved"
@@ -1664,7 +1831,12 @@
         "CodeQL for Swift needs macOS; the Linux image builds Foundation-only packages. UIKit/SwiftUI/Xcode builds are NOT RUN in the sandbox.",
         "Objective-C code in a mixed project is reviewed under this entry; it has no entry of its own."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "DocC / Swift markup: /// with - Parameter:, - Returns:, - Throws:",
+        "lineComment": "//",
+        "check": "swift package generate-documentation; SwiftLint missing_docs"
+      }
     },
     {
       "id": "perl",
@@ -1732,7 +1904,12 @@
       "setupNotes": [
         "Legacy scripts often lack tests: add a characterization test (run on sample input, compare output) before changing one."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "POD (=head1, =head2, =item) in or after the code",
+        "lineComment": "#",
+        "check": "podchecker; Perl::Critic Documentation policies"
+      }
     },
     {
       "id": "lua",
@@ -1804,7 +1981,12 @@
         "For scripts embedded in a host (game engine, Neovim, nginx) the host binary is needed to run real tests: NOT RUN unless a headless mode exists.",
         "No official image is pinned here; use the host's own CI image or a pinned custom one."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "LDoc (--- with @param, @return)",
+        "lineComment": "--",
+        "check": "ldoc"
+      }
     },
     {
       "id": "gdscript",
@@ -1870,7 +2052,12 @@
         "Exports (Windows, Android, web) need export templates and are NOT RUN in the sandbox.",
         "Pin the Godot version in the project and in CI: scene and resource formats change between minor versions."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "## doc comments above classes, signals, exports and functions",
+        "lineComment": "#",
+        "check": "gdlint"
+      }
     },
     {
       "id": "zig",
@@ -1930,7 +2117,12 @@
         "Zig is pre-1.0: pin the compiler version in the profile and in CI.",
         "No official container image exists; use a pinned custom image."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "/// doc comments on declarations and //! on modules",
+        "lineComment": "//",
+        "check": "zig build-lib -femit-docs"
+      }
     },
     {
       "id": "wasm",
@@ -2007,7 +2199,12 @@
         "This entry is a build target, not a source language: the source language's own entry decides compile, lint and scan; here you validate the binary and its surface.",
         "emcc and wasm-pack are usually missing in a plain sandbox: report NOT RUN rather than a pass."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": ";; comments on each import and export saying what the host must provide or what it returns",
+        "lineComment": "(;; …)  line comments use ;;",
+        "check": "wasm-tools validate"
+      }
     },
     {
       "id": "fortran",
@@ -2077,7 +2274,12 @@
         "The gcc image carries gfortran but not fpm: add fpm in a pinned project image.",
         "Numerical results are compared with a tolerance, never for equality."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "FORD-style !> doc comments before procedures and modules",
+        "lineComment": "!",
+        "check": "ford"
+      }
     },
     {
       "id": "cobol",
@@ -2140,7 +2342,12 @@
         "GnuCOBOL is the free compiler; mainframe-only dialect features may not compile there: report NOT RUN for those, never a pass.",
         "Treat a record layout like a wire format: append, never renumber or resize."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "a comment block (*> in free format) at the top of each program naming its purpose, inputs, outputs and return codes",
+        "lineComment": "*>",
+        "check": "none: reviewed by hand"
+      }
     },
     {
       "id": "r",
@@ -2211,7 +2418,12 @@
         "Notebooks (.Rmd) are code: render them in CI and diff the outputs only when they are deterministic.",
         "renv.lock is the dependency record; a change to it is a dependency change."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "roxygen2 (#' with @param, @return, @export, @examples)",
+        "lineComment": "#",
+        "check": "devtools::document(); R CMD check (undocumented arguments)"
+      }
     },
     {
       "id": "julia",
@@ -2276,7 +2488,12 @@
         "Precompilation makes the first run slow; cache ~/.julia in CI, not in the sandbox image.",
         "Manifest.toml is committed for applications and not for libraries."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "docstrings in triple quotes above the definition, with a signature, Arguments and Examples",
+        "lineComment": "#",
+        "check": "Documenter.jl doctests"
+      }
     },
     {
       "id": "haskell",
@@ -2346,7 +2563,12 @@
         "Pin GHC and the package set (stack resolver or cabal freeze file) in the profile.",
         "First builds take long; cache dist-newstyle outside the sandbox image."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "Haddock (-- | on the line above, -- ^ after a field)",
+        "lineComment": "--",
+        "check": "cabal haddock"
+      }
     },
     {
       "id": "ocaml",
@@ -2412,7 +2634,12 @@
       "setupNotes": [
         "The opam image is large: pin the tag and cache switches outside the sandbox."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "odoc comments (** … *) on every value in the .mli",
+        "lineComment": "(* … *)",
+        "check": "dune build @doc"
+      }
     },
     {
       "id": "erlang",
@@ -2480,7 +2707,12 @@
         "Dialyzer is a type checker, not a security scanner; it does not change the unanalysed note.",
         "Distributed nodes need a secret cookie from the environment, never from the repo."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "edoc (%% @doc, @param, @returns) and -spec on exported functions",
+        "lineComment": "%%",
+        "check": "rebar3 edoc; dialyzer for specs"
+      }
     },
     {
       "id": "elixir",
@@ -2555,7 +2787,12 @@
       "setupNotes": [
         "Sobelow covers Phoenix apps; plain OTP libraries have no scanner, so say so in the report."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "@moduledoc and @doc with iex> doctests, and @spec on public functions",
+        "lineComment": "#",
+        "check": "mix docs; credo Readability.ModuleDoc; ExUnit doctests"
+      }
     },
     {
       "id": "clojure",
@@ -2625,7 +2862,12 @@
       "setupNotes": [
         "Other Lisps (Common Lisp, Scheme, Racket) are not separate entries: use this one for REPL-driven workflow notes and add a local entry if you need their toolchains."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "docstrings as the first element of def, defn and ns",
+        "lineComment": "; (;; for line comments)",
+        "check": "clj-kondo missing-docstring linter"
+      }
     },
     {
       "id": "fsharp",
@@ -2694,7 +2936,38 @@
       "setupNotes": [
         "CodeQL does not support F#; the C# entry's scan covers only C# projects in the same solution."
       ],
-      "seenIn": []
+      "seenIn": [],
+      "docs": {
+        "format": "XML documentation (/// <summary> …)",
+        "lineComment": "//",
+        "check": "--warnon:3390 (XML doc validation)"
+      }
     }
+  ],
+  "presets": {
+    "readable-code": {
+      "from": "Homework-Central",
+      "rules": [
+        "Prefer pattern matching (switch expressions, match, case) over long if/else chains for closed-set decisions.",
+        "Prefer fail-first control flow: validate and return or throw early, and keep the happy path unindented at the end of the function.",
+        "Prefer speakable names: rename abbreviations that cannot be said as words; conventional short forms (loop indices, ct for a cancellation token) are fine.",
+        "Prefer collection transforms (map/filter/reduce, LINQ Select/Where/Aggregate, iterator chains) when clearer; filter before looping over a subset; use explicit loops for multi-step side effects or performance-critical code.",
+        "Split functions with high cognitive complexity or deep nesting into cohesive subfunctions.",
+        "Name explicit types where the language allows implicit ones, when the project chooses (see the language's explicit-types preset)."
+      ]
+    },
+    "no-suppression": {
+      "from": "Homework-Central",
+      "rules": [
+        "Never silence a style or analysis rule to get green: no pragma/disable comments, NoWarn, SuppressMessage, nested config overrides or inline-config toggles for a rule the project pins as an error.",
+        "Back the pinned rules with a grep backstop script in CI (for example a check-no-var script) and run linters with inline config disabled, so a suppression cannot hide a violation."
+      ]
+    }
+  },
+  "codeqlNotes": [
+    "Set DB and SARIF to paths outside the repository (a temp directory); databases and SARIF never land in git.",
+    "A CodeQL result is 'satisfied' only when: the database was created for the affected language; the analysis completed; the SARIF was read; no unresolved finding introduced or materially affected by the change remains; and no query, path filter or workflow was weakened to get there.",
+    "Run CodeQL for every affected language, and always for changes to authentication, secrets, cryptography, HTTP handling, SQL/ORM, file uploads, command execution, deserialization, XSS/SSRF surfaces and security configuration.",
+    "Unaffected languages may be NOT APPLICABLE when CI does not require all of them."
   ]
 }

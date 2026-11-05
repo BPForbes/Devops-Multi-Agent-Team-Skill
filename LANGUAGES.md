@@ -358,10 +358,11 @@ Add an entry to `languages.json` (to change it everywhere) or to
   "toolchain": { "install": ["rbenv install"], "verify": "ruby --version" },
   "validate": ["bundle exec rubocop", "bundle exec rspec"],
   "security": {
-    "sast": { "tool": "codeql", "language": "ruby", "buildMode": "none" },
+    "sast": { "tool": "codeql", "language": "ruby", "buildMode": "none", "commands": ["codeql database create \"$DB\" --language=ruby", "codeql database analyze \"$DB\" codeql/ruby-queries:codeql-suites/ruby-security-and-quality.qls --format=sarif-latest --output=\"$SARIF\""] },
     "sca": ["bundle audit check --update"], "secrets": ["gitleaks detect --redact"],
     "unanalysed": false
   },
+  "docs": { "format": "YARD (# @param, @return, @raise)", "lineComment": "#", "check": "yard stats --list-undoc" },
   "style": ["rubocop defaults"],
   "sensitiveHints": ["eval, system, YAML.load"],
   "interactsWith": [{ "with": "typescript", "via": "JSON API", "contract": "OpenAPI" }],
@@ -371,6 +372,7 @@ Add an entry to `languages.json` (to change it everywhere) or to
 
 - `detect.files` entries may start with `*` to match a suffix (`*.csproj`);
   `detect.paths` are directories or files at a fixed path.
+- `docs` is required for a new language: the standard doc-comment `format`, the `lineComment` marker (used by TODO/FIXME/NOTE) and the `check` that validates it.
 - `security.sast` is `null` for a language no tool reads; set
   `unanalysed: true` so the report names it.
 - `optInStyle` rules are listed in the profile but are not default policy.

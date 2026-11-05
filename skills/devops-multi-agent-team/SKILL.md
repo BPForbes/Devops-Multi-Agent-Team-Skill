@@ -143,6 +143,28 @@ push either.
    One push). Check `git diff --stat <integration-base>...HEAD` for
    process files after any strip. Do not commit process notes.
 
+### Virtual PR and virtual git
+
+Work in progress lives in the **virtual PR**: the review thread, Push JSON,
+handoffs, research and QA notes under `.devops/thoughts/` (gitignored), and
+each Coder's code in a detached local worktree handed over by commit SHA.
+Nothing reaches the real branch, and no real PR is opened or updated, until
+Security is Clear and QA marks PASS; then the Orchestrator cherry-picks the
+approved SHAs, QA re-approves the integrated tree, and the Orchestrator pushes
+once after the human authorizes it. The full logic, invariants and the
+multi-branch merge rule: [virtual-git.md](references/virtual-git.md).
+
+### More rules every seat reads
+
+| Topic | File |
+|-------|------|
+| Documentation first, module mind map, reuse | [research-and-reuse.md](references/research-and-reuse.md) |
+| Comments and doc comments (Reviewers strict) | [comment-standards.md](references/comment-standards.md) |
+| Failed checks: monitor, auto-correct, stop | [monitoring.md](references/monitoring.md) |
+| Releases: tags as project history | [version-tags.md](references/version-tags.md) |
+| GitHub Advanced Security setup | [github-advanced-security.md](references/github-advanced-security.md) |
+| Containers, cloud, AI, VMs, sandbox | [services-and-sandbox.md](references/services-and-sandbox.md) |
+
 ## When to use
 
 CI/CD; containers/K8s; IaC (Terraform, Pulumi, Helm); deploy/rollback;
@@ -192,7 +214,8 @@ background subagents.
 
 | Agent file | Role | Primary tool |
 |------------|------|--------------|
-| `devops-researcher.md` | Documentation & Research | WebSearch / WebFetch / browser |
+| `devops-researcher.md` | Documentation & Research | docs first, module map, reuse search, tags |
+| `devops-coder.md` | Implementation | detached worktree, profile validation |
 | `devops-reviewer.md` | Pre-QA reviewers | review thread |
 | `devops-ci-engineer.md` | CI | Buildkite / GitHub Actions |
 | `devops-quality-engineer.md` | QA / publish gate | profile's validation + bug hunt |
@@ -216,15 +239,20 @@ Label every substantive reply with the active role, e.g. `[Planner]`; a spawned 
 
 - **Planner** — `/goal` when the human named X. Plans in
   `.devops/thoughts/non-finalized/`; durable docs in `docs/`.
-- **Researcher** — reuse map; inventory `docs/`; fetch online media;
-  then **join the Coder of the same department**.
+- **Researcher** — reads documentation first (Markdown, LaTeX, code
+  comments), maps the modules (Mermaid mind map), double-checks reuse and
+  writes the reuse map; online media last; then **join the Coder of the same
+  department** ([research-and-reuse.md](references/research-and-reuse.md)).
 - **Coder** — implement on a **skill side-branch** (the Coder's own
   detached git worktree off the integration SHA, no ref; never
   pushed; stage by explicit path; no shared-checkout commits until QA
   PASS). Claim shared files on `team-board.md` before editing. Write
   Push JSON, Coder→Reviewer `qa` comments, and a Handoff **before the
-  first review** ([side-work.md](references/side-work.md)).
-- **Reviewers** — compare Push JSON to the side-branch diff vs
+  first review** ([side-work.md](references/side-work.md)). Follow
+  [comment-standards.md](references/comment-standards.md) and extend existing
+  code instead of re-implementing it.
+- **Reviewers** — strict on comments and on re-implemented code (both
+  blocking); compare Push JSON to the side-branch diff vs
   `<integration-base>`; Handoff on send-back
   ([role-identity.md](references/role-identity.md)). Satisfied does
   **not** authorize a push.

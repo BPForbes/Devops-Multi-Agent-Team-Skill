@@ -27,7 +27,9 @@ See [thoughts-layout.md](thoughts-layout.md).
 
 ## Review round N (Reviewers)
 ### Request changes
-- [ ] `path` — finding (cite research/doc/URL; label the reviewer id)
+Use Conventional Comments: `<label> [decorations]: <subject>`; blocking items
+are `issue (blocking)`. Comments and reimplementation findings are blocking.
+- [ ] `path` — `issue (blocking): finding` (cite research/doc/URL; label the reviewer id)
 ### Questions / Suggestions (non-blocking)
 - …
 ### Reviewer sign-off

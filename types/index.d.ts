@@ -12,6 +12,10 @@ declare module 'claude-code' {
       pushAuthorized: boolean
       /** Branch names the person allowed with `/devops allow-branch NAME`. */
       allowedBranches: string[]
+      /** Whether failing validation commands start the bounded correction loop (monitoring.md). */
+      monitor: boolean
+      /** Consecutive failures per check key (for example "cargo test"); cleared by a pass. */
+      checkFailures: Record<string, number>
     }
   }
 }

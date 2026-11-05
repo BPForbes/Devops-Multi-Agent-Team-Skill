@@ -116,7 +116,20 @@ Verify: `wrangler --version`.
 Environment variable names: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 Only the human: wrangler deploy; wrangler secret put; wrangler delete; DNS, route or Access changes; Terraform apply.
 
-### Cloud and VM safety
+### Code hosting security (`security`)
+
+GitHub's own scanning and protection features, set up from the repository's files and from commands the human runs.
+
+#### `github-advanced-security` — GitHub Advanced Security
+
+Code scanning (CodeQL), secret scanning with push protection, Dependabot alerts and updates, dependency review and private vulnerability reporting.
+Setup: ask for the plan (`ghas_plan`); it generates `.github/workflows/codeql.yml`, `.github/workflows/dependency-review.yml`, `.github/dependabot.yml` and `SECURITY.md` for the languages and package managers found, and prints the settings commands in `.devops/ghas/commands.md`.
+Verify: `gh --version`.
+Environment variable names: `GH_TOKEN`, `GITHUB_TOKEN`.
+Only the human: every repository settings change, dismissing or deleting alerts, creating the ruleset, rotating a leaked secret. The server has no network access or credentials, so it cannot do them.
+Rules: choose the workflow file or default setup, never both; pin actions to SHAs; never weaken a query suite to get green. See `skills/devops-multi-agent-team/references/github-advanced-security.md`.
+
+## Cloud and VM safety
 
 - **Plan yes, apply never** from a seat. `terraform plan`, `what-if` and `--dry-run` are fine; the human runs apply.
 - Credentials are **scoped and short-lived**: SSO, impersonation or managed identity, never long-lived keys on disk.

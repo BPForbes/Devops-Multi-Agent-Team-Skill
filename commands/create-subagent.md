@@ -29,6 +29,7 @@ Spawn specialized roles. They run **asynchronously in pods**, not a linear queue
 | Role | Agent file |
 |------|------------|
 | Researcher | `devops-researcher.md` |
+| Coder | `devops-coder.md` |
 | Reviewer | `devops-reviewer.md` |
 | CI Engineer | `devops-ci-engineer.md` |
 | QA | `devops-quality-engineer.md` |

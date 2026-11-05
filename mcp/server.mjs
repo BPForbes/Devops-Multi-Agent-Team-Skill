@@ -7,8 +7,10 @@
 //     MCP roots, else its working directory), never "/" or the home folder, never through symlinks;
 //   - it writes only .cursor/, .claude/, .devops/ and .gitignore inside that project, and every
 //     write tool defaults to a plan (apply=false);
-//   - it runs one kind of program: "<tool> --version" checks for ids in the data files, with no
-//     shell, a bare PATH and a 5 s timeout. It never runs a command that appears in a language entry;
+//   - it runs two kinds of program, both with fixed argument lists, no shell and a bare environment:
+//     "<tool> --version" checks for ids in the data files (5 s), and read-only `git` commands (plus
+//     one local `git tag -a` on request) for the tag tools, with hooks off. Set DEVOPS_MCP_NO_GIT=1
+//     to disable the tag tools. It never runs a command that appears in a language entry;
 //   - it makes no network requests and never reads or returns a secret (env vars are reported as set/unset).
 
 import fs from 'node:fs'
@@ -18,6 +20,9 @@ import {
   PACKAGE_ROOT, addLocalLanguage, checkToolchain, detectLanguages, detectServices, ensureGitignore, install,
   loadLanguages, loadServices, renderProfile, resolveDest, sandboxArgv, status,
 } from '../scripts/devops-setup.mjs'
+import { ghasPlan } from '../scripts/devops-ghas.mjs'
+import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
+import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 
 const PKG = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'))
 const SUPPORTED = ['2025-06-18', '2025-03-26', '2024-11-05']
@@ -28,7 +33,8 @@ const INSTRUCTIONS = [
   'Sets up the DevOps multi-agent team (skill, agents, commands, per-language profile, services, sandbox) in a project.',
   'Flow: detect_project, then install_devops_team with apply=false and show the plan, then apply=true only after the user agrees.',
   'Any language can be used for any purpose; layers are only sorting tags. Use list_languages / get_language / add_language for languages not yet defined.',
-  'The server only writes .cursor/, .claude/, .devops/ and .gitignore inside the project and never runs project commands; sandbox_plan only prints a container command.',
+  'The server only writes .cursor/, .claude/, .devops/, .gitignore and (ghas_plan with apply) the .github security files and SECURITY.md inside the project, and never runs project commands; sandbox_plan only prints a container command; tag tools never push, move or delete a tag.',
+  'Researchers: read documentation first, then module_map and reuse_search before any code is written.',
 ].join(' ')
 
 // ------------------------------------------------------------------ roots
@@ -225,7 +231,62 @@ const TOOLS = [
       return sandboxArgv(loadServices(d).sandboxPolicy, { phase: args.phase ?? 'test', image: lang.sandboxImage, cmd: args.command, worktree, project: d, engine: args.engine })
     },
   },
+  {
+    name: 'module_map',
+    description: 'Research aid: the project\'s modules, their languages and the imports between them, as data and a Mermaid mind map. Use it to find extension points before writing new code. Read-only.',
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => moduleMap(projectDir(args), allowedRoots()),
+  },
+  {
+    name: 'reuse_search',
+    description: 'Research aid: where each term (or a spelling variant) already appears in code, comments and documentation (Markdown, LaTeX, ...), grouped as definition, doc or use. Run it for every noun and verb of a new concept before writing code. Secret-looking files are skipped and values redacted. Read-only.',
+    inputSchema: { type: 'object', properties: { dest, terms: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 12 } }, required: ['terms'], additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => reuseSearch(projectDir(args), args.terms, allowedRoots()),
+  },
+  {
+    name: 'tag_history',
+    description: 'Version tracking: read the git tags and report, between consecutive semver tags, commits, files, lines, top directories, languages and commit types, flag releases whose version step does not fit what changed, and show what is unreleased with a suggested bump. With save=true writes .devops/tags/history.json and reports tags new, moved or removed since the last snapshot. Local tags only (run git fetch --tags first, with the human\'s OK, for remote ones).',
+    inputSchema: { type: 'object', properties: { dest, limit: { type: 'integer', minimum: 1, maximum: 200 }, save: { type: 'boolean' } }, additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    run: args => {
+      gitAllowed()
+      return tagHistory(projectDir(args), { limit: Number.isInteger(args.limit) ? args.limit : 30, save: optionalBool(args, 'save', false), roots: allowedRoots() })
+    },
+  },
+  {
+    name: 'tag_plan',
+    description: 'Plan the next release tag from the latest semver tag and a bump (major, minor, patch) or an explicit version. Prints the commands; changes nothing. Pushing the tag is publishing and needs QA PASS and the human\'s go.',
+    inputSchema: { type: 'object', properties: { dest, bump: { type: 'string', enum: ['major', 'minor', 'patch'] }, version: { type: 'string' }, ref: { type: 'string' } }, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => {
+      gitAllowed()
+      return tagPlan(projectDir(args), { bump: args.bump, version: args.version, ref: args.ref, roots: allowedRoots() })
+    },
+  },
+  {
+    name: 'tag_create',
+    description: 'Create one annotated LOCAL tag at a commit (apply=true). Refuses an existing name, a non-semver name and any move or delete; never pushes.',
+    inputSchema: { type: 'object', properties: { dest, version: { type: 'string' }, message: { type: 'string', maxLength: 500 }, ref: { type: 'string' }, apply: { type: 'boolean' } }, required: ['version'], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    run: args => {
+      gitAllowed()
+      return tagCreate(projectDir(args), { version: args.version, message: args.message, ref: args.ref, apply: optionalBool(args, 'apply', false), roots: allowedRoots() })
+    },
+  },
+  {
+    name: 'ghas_plan',
+    description: 'Set up GitHub Advanced Security for this project: plan (and with apply=true write) .github/workflows/codeql.yml for the detected languages, dependency-review.yml, .github/dependabot.yml for the package managers found, SECURITY.md, plus .devops/ghas/commands.md (repository settings as gh commands for the HUMAN to run) and a ruleset template. Existing files are kept unless force=true. Changes nothing on GitHub.',
+    inputSchema: { type: 'object', properties: { dest, branch: { type: 'string', description: 'Default branch name (default main).' }, apply: { type: 'boolean' }, force: { type: 'boolean' } }, additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    run: args => ghasPlan(projectDir(args), { branch: typeof args.branch === 'string' ? args.branch : 'main', apply: optionalBool(args, 'apply', false), force: optionalBool(args, 'force', false), roots: allowedRoots() }),
+  },
 ]
+
+function gitAllowed() {
+  if (process.env.DEVOPS_MCP_NO_GIT === '1') throw new Error('the tag tools are disabled (DEVOPS_MCP_NO_GIT=1)')
+}
 
 /** Catalog reads need no project: use the first allowed root when there is one, else the package itself. */
 function projectDirOrPackage(args) {

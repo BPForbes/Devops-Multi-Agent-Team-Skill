@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Found } from '../types'
-import { branchNameOf, classify, splitArgs, verdictOf } from './guard'
+import { branchNameOf, classify, classifySegments, splitArgs, verdictOf } from './guard'
 
 const PLUGIN = 'devops-multi-agent-team'
 const THOUGHT_DIRS = ['.devops/thoughts/non-finalized', '.devops/thoughts/finalized']
@@ -15,6 +15,7 @@ const HELP = [
   '/devops push-reset   (you) withdraw that permission',
   '/devops allow-branch NAME   (you) allow creating that git branch',
   '/devops gates on|off (you) turn the push and branch gates on or off',
+  '/devops monitor on|off (you) turn the failed-check monitor on or off',
 ].join('\n')
 
 async function detect($: EngineInterface): Promise<Found[]> {
@@ -47,12 +48,77 @@ async function latestQaVerdict($: EngineInterface): Promise<{ verdict: 'PASS' | 
   return { verdict: verdictOf(text), file: newest.path }
 }
 
+
+const CHECK_BINARIES = new Set([
+  'make', 'cmake', 'ctest', 'npm', 'npx', 'pnpm', 'yarn', 'pytest', 'ruff', 'mypy', 'pyright', 'bundle', 'rubocop', 'composer',
+  'mix', 'rebar3', 'cabal', 'stack', 'dune', 'opam', 'sbt', 'gradle', './gradlew', 'mvn', './mvnw', 'fpm', 'eslint', 'tsc', 'prettier',
+  'jest', 'vitest', 'phpunit', 'hlint', 'shfmt', 'shellcheck', 'hadolint', 'tflint', 'checkov', 'trivy', 'gitleaks', 'actionlint',
+  'cargo', 'go', 'dotnet', 'python', 'python3', 'node', 'dart', 'flutter', 'swift', 'zig', 'terraform', 'clj-kondo', 'clojure', 'lein',
+  'luacheck', 'busted', 'stylua', 'gdformat', 'gdlint', 'Rscript', 'julia', 'sqlfluff', 'stylelint', 'html-validate', 'ormolu', 'bandit',
+  'pip-audit', 'govulncheck', 'staticcheck', 'clippy-driver', 'cppcheck', 'clang-tidy', 'codeql',
+])
+const DEFAULT_RETRY_CAP = 3
+
+/** "cargo test --locked" -> "cargo test"; "pytest -q" -> "pytest". Words that are flags or placeholders are not part of the key. */
+function checkKeyOf(words: string[]): string | undefined {
+  const first = words[0]
+  if (first === undefined || !CHECK_BINARIES.has(first)) return undefined
+  const second = words[1]
+  return second !== undefined && /^[a-z][a-z0-9:_-]*$/.test(second) ? `${first} ${second}` : first
+}
+
+/** The checks the profile's languages define, as keys like "cargo test" or "npm run". */
+async function knownChecks($: EngineInterface): Promise<Set<string>> {
+  const root = await $.session.root()
+  const text = await $.fs.read(`${root}/.devops/languages.json`).catch(() => $.fs.read(`${$.plugin.root}/languages.json`)).catch(() => '')
+  const keys = new Set<string>()
+  try {
+    const data = JSON.parse(typeof text === 'string' ? text : '') as { languages?: { validate?: string[] }[] }
+    for (const language of data.languages ?? []) {
+      for (const line of language.validate ?? []) {
+        const key = checkKeyOf(line.trim().split(/\s+/))
+        if (key !== undefined) keys.add(key)
+      }
+    }
+  } catch { /* no data file: nothing is monitored */ }
+  return keys
+}
+
+/** Which known check, if any, a Bash command runs. */
+async function checkRunBy($: EngineInterface, command: string): Promise<string | undefined> {
+  const known = await knownChecks($)
+  for (const segment of classifySegments(command)) {
+    const words = segment.split(/\s+/).filter(Boolean)
+    while (words.length > 0 && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]) || ['sudo', 'time', 'exec'].includes(words[0]))) words.shift()
+    const key = checkKeyOf(words)
+    if (key !== undefined && (known.has(key) || known.has(words[0]))) return key
+  }
+  return undefined
+}
+
+async function retryCap($: EngineInterface): Promise<number> {
+  const root = await $.session.root()
+  const text = await $.fs.read(`${root}/.devops/project.md`).catch(() => '')
+  const m = /check retry cap\*\* for auto-correction: `(\d+)`/.exec(typeof text === 'string' ? text : '')
+  const cap = m ? Number(m[1]) : DEFAULT_RETRY_CAP
+  return cap >= 1 && cap <= 10 ? cap : DEFAULT_RETRY_CAP
+}
+
+async function appendLedger($: EngineInterface, row: string): Promise<void> {
+  const root = await $.session.root()
+  if (!(await $.fs.exists(`${root}/.devops`).catch(() => false))) return
+  const file = `${root}/.devops/thoughts/non-finalized/check-ledger.md`
+  const current = await $.fs.read(file).catch(() => '')
+  const header = 'time (UTC) | check | where | exit/conclusion | attempt | class | first failing line | status\n'
+  await $.fs.write(file, (typeof current === 'string' && current !== '' ? current : header) + row + '\n')
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'devops',
       description: 'DevOps multi-agent team: languages, gates, QA verdict',
-      argumentHint: '[languages|setup|push-ok|push-reset|allow-branch NAME|gates on|off]',
+      argumentHint: '[languages|setup|push-ok|push-reset|allow-branch NAME|gates on|off|monitor on|off]',
     })
     const found = await detect($)
     await $.state.set({ plugin: 'devops-multi-agent-team', key: 'languages' } as const, found.map(f => f.id))
@@ -77,6 +143,7 @@ export const register: Register = on => {
         text: [
           `languages: ${languages.length === 0 ? '(none detected)' : languages.join(', ')}`,
           `gates: ${gates ? 'on' : 'OFF'}`,
+          `check monitor: ${((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) ? 'on' : 'OFF'}; failing checks now: ${Object.entries((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const)).value ?? {}).map(([k, n]) => `${k} x${n}`).join(', ') || 'none'}`,
           `latest QA note: ${qa.verdict ?? 'none'}${qa.file ? ` (${qa.file.split('/').pop()})` : ''}`,
           `push authorized by you: ${authorized ? 'yes (one push)' : 'no'}`,
           `branches you allowed: ${branches.length === 0 ? 'none' : branches.join(', ')}`,
@@ -123,6 +190,13 @@ export const register: Register = on => {
       await $.state.set({ plugin: 'devops-multi-agent-team', key: 'allowedBranches' } as const, [...new Set([...current, name])])
       return { text: `Creating the git branch "${name}" is allowed.` }
     }
+    if (word === 'monitor') {
+      const refused = personOnly()
+      if (refused) return refused
+      if (rest !== 'on' && rest !== 'off') return { text: 'Usage: /devops monitor on|off' }
+      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const, rest === 'on')
+      return { text: `Check monitor ${rest}.` }
+    }
     if (word === 'gates') {
       const refused = personOnly()
       if (refused) return refused
@@ -134,9 +208,9 @@ export const register: Register = on => {
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    if (((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true) === false) return next(e)
-    const actions = classify(e.command)
-    if (actions.length === 0) return next(e)
+    const gatesOn = ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true) !== false
+    const actions = gatesOn ? classify(e.command) : []
+    let consumeAuthorization = false
 
     for (const action of actions) {
       if (action.kind === 'branch') {
@@ -147,19 +221,42 @@ export const register: Register = on => {
         }
       }
     }
-    if (!actions.some(action => action.kind === 'publish')) return next(e)
+    if (actions.some(action => action.kind === 'publish')) {
+      const authorized = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const)).value ?? false
+      const qa = await latestQaVerdict($)
+      if (qa.verdict !== 'PASS') {
+        return { deny: `${PLUGIN}: ${actions.find(a => a.kind === 'publish')?.what} is refused. Only QA may give the OK to push: no qa-*.md note under .devops/thoughts says "Publish gate: PASS" (latest: ${qa.verdict ?? 'none'}).` }
+      }
+      if (!authorized) {
+        return { deny: `${PLUGIN}: QA recorded PASS, but the person has not authorized a push. Ask them to type /devops push-ok.` }
+      }
+      consumeAuthorization = true
+    }
 
-    const authorized = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const)).value ?? false
-    const qa = await latestQaVerdict($)
-    if (qa.verdict !== 'PASS') {
-      return { deny: `${PLUGIN}: ${actions.find(a => a.kind === 'publish')?.what} is refused. Only QA may give the OK to push: no qa-*.md note under .devops/thoughts says "Publish gate: PASS" (latest: ${qa.verdict ?? 'none'}).` }
-    }
-    if (!authorized) {
-      return { deny: `${PLUGIN}: QA recorded PASS, but the person has not authorized a push. Ask them to type /devops push-ok.` }
-    }
     const ran = await next(e)
-    if (ran.deny === undefined) await $.state.set({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const, false)
-    return ran
+    if (consumeAuthorization && ran.deny === undefined) await $.state.set({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const, false)
+    if (ran.deny !== undefined || ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) === false) return ran
+
+    // Monitor: a failing validation command starts the bounded correction loop (monitoring.md).
+    const check = await checkRunBy($, e.command)
+    if (check === undefined) return ran
+    const counts = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const)).value ?? {}
+    const stamp = new Date().toISOString()
+    if (ran.isError !== true) {
+      if (counts[check] === undefined) return ran
+      const { [check]: _cleared, ...rest } = counts
+      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const, rest)
+      await appendLedger($, `${stamp} | ${check} | local | 0 | ${counts[check]} | - | - | verified`)
+      return ran
+    }
+    const attempt = (counts[check] ?? 0) + 1
+    const cap = await retryCap($)
+    await $.state.set({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const, { ...counts, [check]: attempt })
+    await appendLedger($, `${stamp} | ${check} | local | non-zero | ${attempt} | unclassified | see tool output | ${attempt >= cap ? 'escalated' : 'open'}`)
+    const context = attempt >= cap
+      ? `${PLUGIN} monitor: "${check}" has failed ${attempt} times (cap ${cap}). Stop trying variations. Open triage-<seat-id>.md with the rows in .devops/thoughts/non-finalized/check-ledger.md and ask the person. Never skip, loosen or disable a test, rule or check to get green.`
+      : `${PLUGIN} monitor: "${check}" failed (attempt ${attempt} of ${cap}). Correct it per monitoring.md: record, classify (ours, existing, environment, flaky with evidence), reproduce in the sandbox, fix the cause on your side-branch, then re-run this same check. Never skip, loosen or disable a test, rule or check to get green.`
+    return { ...ran, context: [...(ran.context ?? []), context] }
   }).catch(($, e, next) =>
     next.called ? next(e) : { deny: `${PLUGIN}: its gate failed to evaluate, so ${e.command.slice(0, 60)} is refused.` },
   )

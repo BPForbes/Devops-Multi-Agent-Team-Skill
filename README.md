@@ -66,15 +66,24 @@ prompts) walks the same steps.
 | `add_language` | define a language that is not listed; validated, saved to `.devops/languages.local.json` |
 | `check_toolchain` | is each tool installed? (`<tool> --version` only; env vars reported as set/unset, never their values) |
 | `sandbox_plan` | prints the container command that runs a command for a language in the sandbox; runs nothing |
+| `module_map` | research: modules, languages and the imports between them as a Mermaid mind map |
+| `reuse_search` | research: where a term (or a spelling variant) already appears in code, comments and docs (Markdown, LaTeX, ...); secret files skipped |
+| `tag_history` | versions: how the project changed between git tags (commits, files, lines, directories, languages, commit types), unreleased work and a suggested bump; `save` keeps a snapshot in `.devops/tags/` |
+| `tag_plan`, `tag_create` | versions: plan the next semver tag; create one annotated local tag. Never pushes, moves or deletes a tag |
+| `ghas_plan` | GitHub Advanced Security: CodeQL, dependency review and Dependabot files for your languages and package managers, `SECURITY.md`, a ruleset template, and the settings commands for **you** to run |
 
 **How the server is sandboxed.** It works only inside the project folders it
 is allowed (`DEVOPS_MCP_ROOTS`, else the client's MCP roots, else its working
 directory), never `/` or your home folder, and not through symlinks. It writes
 only `.cursor/`, `.claude/`, `.devops/` and `.gitignore` there, and every write
-tool plans by default. The only program it ever runs is `<tool> --version` for
-an id in the data files (no shell, bare `PATH`, 5 s). It makes no network
-requests and never returns a secret. Commands inside language and service
-entries are guidance for the team; the server does not execute them.
+tool plans by default (`ghas_plan` also writes `.github/` security files and
+`SECURITY.md` when you say apply). It runs two kinds of program, both with fixed
+argument lists, no shell and a bare environment: `<tool> --version` for an id in
+the data files, and read-only `git` for the tag tools (hooks off; one local
+`git tag -a` on request; never a push, a tag move or a delete).
+`DEVOPS_MCP_NO_GIT=1` turns the tag tools off. It makes no network requests and
+never returns a secret. Commands inside language and service entries are
+guidance for the team; the server does not execute them.
 
 **Thought files stay out of git.** Installing adds a managed block to
 `.gitignore` that ignores everything under `.devops/thoughts/` except
@@ -100,6 +109,21 @@ The tests check this against real `git check-ignore`.
   secrets. Each language has an official `sandboxImage` (or `null` = host only
   with your OK). `.devops/sandbox.md` has the commands.
   Cloud and Kubernetes: seats plan, the human applies.
+
+## Rules built into the workflow
+
+| Rule | Where | Enforced by |
+|------|-------|-------------|
+| **Documentation first** (Markdown, LaTeX, code comments, then code, then the web) | `research-and-reuse.md`, researcher agent | Reviewers reject a brief without it |
+| **Module mind map + reuse map** before any Coder starts; "new, because ..." must hold up | `research-and-reuse.md`, `module_map`, `reuse_search` | Reviewers: re-implementation is a blocking finding; QA checks the brief |
+| **Comment standards** (intent not mechanics, no comment rot, no commented-out code, doc comments, TODO/FIXME/NOTE, sentences under 80 columns, source links) | `comment-standards.md`, `rules/comments.md`, per-language `docs` | Reviewers: strict and blocking; Conventional Comments labels |
+| **Virtual PR and virtual git** | `virtual-git.md`, `side-work.md` | the mod refuses push, PR and branch creation until QA PASS and your go |
+| **Failed checks are watched and corrected, then stop** | `monitoring.md`, the mod's monitor | records `check-ledger.md`, bounded retries (default 3), never loosens a check |
+| **Tags are the project history** | `version-tags.md`, `tag_*` tools | pushing a tag is gated like any push |
+| **GitHub Advanced Security** | `github-advanced-security.md`, `ghas_plan` | settings stay a human step |
+
+The installer also copies the reuse and comment rules into `.cursor/rules/`
+(always on) and `.claude/rules/`, and installs a Coder agent that follows them.
 
 ## How it fits together
 
@@ -145,6 +169,7 @@ The plugin provides the skill, agents, commands, the MCP server and the mod.
 
 | Hook | Does |
 |------|------|
+| `tool.call` Bash (monitor) | A command that matches a validation command in the language data (for example `cargo test`, `npm run lint`) and fails is recorded in `.devops/thoughts/non-finalized/check-ledger.md`, counted per check, and the result gets a reminder to reproduce, fix the cause and re-run; at the retry cap (default 3, set in `project.md`) it says stop and escalate. A pass clears the count. `/devops monitor off` (typed by you) turns it off. |
 | `session.start` | Runs `devops-setup detect --json`, shows `devops: rust+typescript` in the status line, registers `/devops`. |
 | `command.run` `/devops` | `status`, `languages`, `setup` (anyone); `push-ok`, `push-reset`, `allow-branch NAME`, `gates on|off` (only when **you** type them; an agent that runs the command is refused). |
 | `tool.call` Bash | Refuses `git push`, `gh pr create\|merge\|ready\|edit\|close\|reopen`, `gh release create` unless the newest `qa-*.md` under `.devops/thoughts/` has `Publish gate: PASS` **and** you ran `/devops push-ok` (consumed by that push). Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>`. Detached worktrees and reads pass. If the check itself fails, it refuses. |

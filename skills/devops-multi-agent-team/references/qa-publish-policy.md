@@ -29,6 +29,24 @@ both the producer's and the consumer's checks). Record each command and
 its exit code. A command that cannot run here is `NOT RUN`, never a
 pass.
 
+## Comments, reuse and CodeQL (checked before PASS)
+
+- **Comments:** no open `issue (blocking)` against `comment-standards.md`
+  (restating comments, stale comments, commented-out code, missing doc
+  comments, unlisted `TODO`/`FIXME`). The profile's doc check ran.
+- **Reuse:** the research brief has a module mind map and a reuse map, no
+  open blocking finding says new code duplicates existing code, and every
+  "new, because ..." row holds.
+- **Checks that failed along the way** (see [monitoring.md](monitoring.md))
+  are `verified` or `escalated` in the check ledger, and none was made to
+  pass by skipping, loosening or disabling a check.
+- **CodeQL is satisfied** only when: the database was created for each
+  affected language; the analysis completed; the SARIF was read; no
+  unresolved finding introduced or materially affected by the change remains;
+  and no query, path filter or workflow was weakened to get there. If it
+  could not run when required, do not claim a pass and do not publish; read
+  the pushed head's result instead and name it.
+
 ## QA final pass (required before PASS)
 
 After the required commands pass, QA looks over the change one last

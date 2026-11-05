@@ -48,9 +48,25 @@ environment variables only; values live in the environment or a secret manager.
 
 {{SANDBOX}}
 
+## Comments and documentation
+
+Coders follow `comment-standards.md` (intent not mechanics, no comment rot,
+no commented-out code, doc comments on public APIs, TODO/FIXME/NOTE markers,
+complete sentences, links for borrowed algorithms); Reviewers enforce it as
+blocking. Per language:
+
+{{DOCS}}
+
 ## Style rules
 
 {{STYLE}}
+
+## Opt-in presets
+
+Adopt a preset by copying its rules into the project's own style rules and
+pinning them in tooling.
+
+{{PRESETS}}
 
 ## Cross-language boundaries
 
@@ -68,4 +84,8 @@ environment variables only; values live in the environment or a secret manager.
 - **Shared files** (claim on `team-board.md` before editing): `<build files, lockfiles, shared schemas, .gitignore>`
 - **Release rules:** `<changelog / version / lock rules the QA seat checks, or "none">`
 - **Tooling wired:** CI `<GitHub Actions | Buildkite | none>` · quality `<Sonar | none>` · security `<Snyk | none>` · tickets `<Linear | GitHub issues | none>` · browser `<MCP | none>`
+- **Docs to read first** (the Researcher reads these before any code): `<README, docs/, ADRs, .tex sources, runbooks, schema files>`
+- **Test directories** (weakened-test checks look here): `<tests/, src/**/tests.rs, **/__tests__>`
+- **Blocking boundary rules** (a Reviewer blocks a change that breaks one): `<e.g. the kernel only orchestrates drivers; the web layer never reads the database>`
+- **Default branch / integration base:** `<main>`; **check retry cap** for auto-correction: `3`
 - **Shipped feature sets / targets** to build in full: `<e.g. cargo features, dotnet configurations, wasm target>`

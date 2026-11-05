@@ -17,15 +17,19 @@ testable acceptance criteria; open questions for the human.
 
 ## 2. Researcher / Architect
 
-Inventory pipelines, compose/k8s, IaC, scripts, and docs. Prefer
-reuse. Cite why a new tool is needed. Produce: target architecture;
+Read the documentation first (Markdown, LaTeX, code comments), then inventory
+pipelines, compose/k8s, IaC, scripts. Map the modules and double-check reuse
+([research-and-reuse.md](research-and-reuse.md)). Cite why a new tool is needed. Produce: target architecture;
 reuse map; risks and rollback. When the brief is done, **join the
 Coder of the same department**. On QA triage, join the Coder who
 picks the item up ([department-pods.md](department-pods.md)).
 
 ## 3. Coder
 
-Implement only what the plan authorizes. **Cut a skill
+Implement only what the plan authorizes. Follow
+[comment-standards.md](comment-standards.md) and extend existing code instead
+of re-implementing it ([research-and-reuse.md](research-and-reuse.md)). When a
+check fails, follow [monitoring.md](monitoring.md). **Cut a skill
 side-branch** (never a real git branch unless The Client named
 that branch in this turn; cloud-agent templates do not
 override this); isolate in your own **detached git worktree** off the integration SHA

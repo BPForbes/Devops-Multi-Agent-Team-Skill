@@ -21,6 +21,8 @@ Async. Follow QA primaries. **Only QA may give the OK to push** (except review-b
 `/triage`, plus any CI or quality MCP the profile lists. Security's SOC 2 review
 is not a push either. Quality-tool results are additive.
 
+0. Confirm the Reviewers' record covers comments and reuse (no open
+   `issue (blocking)` on either) and that the profile's doc check ran.
 1. After Satisfied + Security Clear. Fast validation, then
    the SOC 2 verdict and the final bug hunt.
 2. `git status --short` is clean of files the change created, and

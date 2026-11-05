@@ -56,13 +56,13 @@ function client({ env = {}, cwd = os.tmpdir(), capabilities = {}, onRequest } = 
   return ready()
 }
 
-test('initialize negotiates, lists 12 tools, prompts and resources', async () => {
+test('initialize negotiates, lists 18 tools, prompts and resources', async () => {
   const root = tmp()
   const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
   try {
     const tools = (await c.rpc('tools/list')).result.tools.map(t => t.name)
-    for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services']) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 12)
+    for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan']) assert.ok(tools.includes(name), name)
+    assert.equal(tools.length, 18)
     const writers = (await c.rpc('tools/list')).result.tools.filter(t => t.name === 'install_devops_team')
     assert.equal(writers[0].annotations.destructiveHint, false)
     assert.ok((await c.rpc('prompts/list')).result.prompts.some(p => p.name === 'setup_project'))
@@ -140,7 +140,7 @@ test('add_language validates, saves on apply, and the language then works anywhe
       id: 'elm', name: 'Elm', layers: ['web'], detect: { files: ['elm.json'], extensions: ['.elm'] },
       toolchain: { install: ['npm i -g elm elm-format elm-test'], verify: 'elm --version' },
       validate: ['elm make src/Main.elm --output=/dev/null', 'elm-format --validate src', 'elm-test'],
-      sandboxImage: 'node:22-slim', security: { sast: null, sca: [], secrets: ['gitleaks detect --redact'], unanalysed: true }, interactsWith: [{ with: 'javascript', via: 'ports', contract: 'the port names' }],
+      sandboxImage: 'node:22-slim', docs: { format: 'elm-format doc comments ({-| … -})', lineComment: '--', check: 'elm-review' }, security: { sast: null, sca: [], secrets: ['gitleaks detect --redact'], unanalysed: true }, interactsWith: [{ with: 'javascript', via: 'ports', contract: 'the port names' }],
     }
     const evil = { ...entry, toolchain: { install: ['x'], verify: 'sh -c "id"' } }
     const rejected = (await c.call('add_language', { entry: evil, apply: true })).json()
@@ -194,4 +194,30 @@ test('without DEVOPS_MCP_ROOTS the client\'s MCP roots decide', async () => {
     assert.ok(detected.languages.some(l => l.id === 'go'))
     assert.ok((await c.call('detect_project', { dest: elsewhere })).isError)
   } finally { c.close() }
+})
+
+test('research, tag and security tools work through chat and stay inside the folder', async () => {
+  const root = tmp({ 'src/parser.ts': 'export function parseHeader() {}\n', 'web/package.json': '{}', 'web/app.ts': '' })
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  try {
+    assert.match((await c.call('module_map')).json().mermaid, /^graph TD/)
+    const found = (await c.call('reuse_search', { terms: ['parse header'] })).json()
+    assert.ok(found.results[0].matches.some(m => m.kind === 'definition'))
+    assert.ok((await c.call('reuse_search', { terms: [] })).isError)
+
+    const plan = (await c.call('ghas_plan')).json()
+    assert.equal(plan.applied, false)
+    assert.ok(!fs.existsSync(path.join(root, '.github')))
+    assert.equal((await c.call('ghas_plan', { apply: true })).json().applied, true)
+    assert.ok(fs.existsSync(path.join(root, '.github/workflows/dependency-review.yml')))
+    assert.ok((await c.call('ghas_plan', { dest: os.tmpdir(), apply: true })).isError)
+
+    const notGit = await c.call('tag_history')
+    assert.ok(notGit.isError, 'not a repository')
+  } finally { c.close() }
+
+  const off = await client({ env: { DEVOPS_MCP_ROOTS: root, DEVOPS_MCP_NO_GIT: '1' } })
+  try {
+    assert.match((await off.call('tag_plan')).text, /disabled/)
+  } finally { off.close() }
 })
