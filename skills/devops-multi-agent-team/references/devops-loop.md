@@ -29,7 +29,9 @@ picks the item up ([department-pods.md](department-pods.md)).
 Implement only what the plan authorizes. Follow
 [comment-standards.md](comment-standards.md) and extend existing code instead
 of re-implementing it ([research-and-reuse.md](research-and-reuse.md)). When a
-check fails, follow [monitoring.md](monitoring.md). **Cut a skill
+check fails, follow [monitoring.md](monitoring.md). Before the Handoff run the
+comment audit and list the comments you keep in the Push JSON
+([comment-standards.md](comment-standards.md), section 7). **Cut a skill
 side-branch** (never a real git branch unless The Client named
 that branch in this turn; cloud-agent templates do not
 override this); isolate in your own **detached git worktree** off the integration SHA

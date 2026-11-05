@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Found } from '../types'
-import { branchNameOf, classify, classifySegments, splitArgs, verdictOf } from './guard'
+import { branchNameOf, classify, classifySegments, commitInfo, splitArgs, verdictOf } from './guard'
 
 const PLUGIN = 'devops-multi-agent-team'
 const THOUGHT_DIRS = ['.devops/thoughts/non-finalized', '.devops/thoughts/finalized']
@@ -16,6 +16,7 @@ const HELP = [
   '/devops allow-branch NAME   (you) allow creating that git branch',
   '/devops gates on|off (you) turn the push and branch gates on or off',
   '/devops monitor on|off (you) turn the failed-check monitor on or off',
+  '/devops comments warn|strict|off (you) comment audit on git commit: warn (default), refuse a commit with blocking findings, or off',
 ].join('\n')
 
 async function detect($: EngineInterface): Promise<Found[]> {
@@ -111,12 +112,32 @@ async function appendLedger($: EngineInterface, row: string): Promise<void> {
   await $.fs.write(file, (typeof current === 'string' && current !== '' ? current : header) + row + '\n')
 }
 
+type AuditSummary = { blocking: number; nonBlocking: number; findings: { file: string; line: number; remark: string }[] }
+
+async function auditCommit($: EngineInterface, stagesAll: boolean): Promise<AuditSummary | undefined> {
+  const root = await $.session.root()
+  const ran = await $.process
+    .run(['node', `${$.plugin.root}/scripts/devops-comments.mjs`, 'audit', '--dest', root, ...(stagesAll ? [] : ['--staged']), '--json'], { timeoutMs: 20000 })
+    .catch(() => undefined)
+  if (ran === undefined || ran.stdout === '') return undefined
+  try {
+    return JSON.parse(ran.stdout) as AuditSummary
+  } catch {
+    return undefined
+  }
+}
+
+function auditContext(audit: AuditSummary): string {
+  const first = audit.findings.slice(0, 6).map(f => `${f.file}:${f.line} ${f.remark}`).join(' | ')
+  return `${PLUGIN} comment audit: ${audit.blocking} blocking, ${audit.nonBlocking} non-blocking. Delete the comment, or rename or extract so the code says it; keep one only for a reason the code cannot show, and list it in the Push JSON comments. Questions and notes to a person go to the PR Q&A, never into code. ${first}`
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'devops',
       description: 'DevOps multi-agent team: languages, gates, QA verdict',
-      argumentHint: '[languages|setup|push-ok|push-reset|allow-branch NAME|gates on|off|monitor on|off]',
+      argumentHint: '[languages|setup|push-ok|push-reset|allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off]',
     })
     const found = await detect($)
     await $.state.set({ plugin: 'devops-multi-agent-team', key: 'languages' } as const, found.map(f => f.id))
@@ -188,6 +209,13 @@ export const register: Register = on => {
       await $.state.set({ plugin: 'devops-multi-agent-team', key: 'allowedBranches' } as const, [...new Set([...current, name])])
       return { text: `Creating the git branch "${name}" is allowed.` }
     }
+    if (word === 'comments') {
+      const refused = personOnly()
+      if (refused) return refused
+      if (rest !== 'warn' && rest !== 'strict' && rest !== 'off') return { text: 'Usage: /devops comments warn|strict|off' }
+      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const, rest)
+      return { text: `Comment audit on commit: ${rest}.` }
+    }
     if (word === 'monitor') {
       const refused = personOnly()
       if (refused) return refused
@@ -231,7 +259,15 @@ export const register: Register = on => {
       consumeAuthorization = true
     }
 
+    const commit = commitInfo(e.command)
+    const auditMode = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const)).value ?? 'warn'
+    const audit = commit.isCommit && auditMode !== 'off' ? await auditCommit($, commit.stagesAll) : undefined
+    if (audit !== undefined && auditMode === 'strict' && audit.blocking > 0) return { deny: auditContext(audit) }
+
     const ran = await next(e)
+    if (audit !== undefined && ran.deny === undefined && audit.blocking + audit.nonBlocking > 0) {
+      return { ...ran, context: [...(ran.context ?? []), auditContext(audit)] }
+    }
     if (consumeAuthorization && ran.deny === undefined) await $.state.set({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const, false)
     if (ran.deny !== undefined || ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) === false) return ran
 

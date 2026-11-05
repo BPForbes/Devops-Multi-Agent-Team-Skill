@@ -13,7 +13,8 @@ Work in progress lives in a **virtual PR**, not on the real branch:
 |------|-------|----------------------|
 | Review thread, Q&A, Handoffs | `.devops/thoughts/non-finalized/review-<seat-id>.md` | never |
 | Push JSON (what changed, hunk by hunk) | `push-<seat-id>.json` | never |
-| Research brief, reuse map, module mind map | `research-<seat-id>.md` | never |
+| Research brief, reuse map, module mind map, comment-worthy code | `research-<seat-id>.md` | never |
+| Line remarks, questions and notes between Coder and Reviewer | review thread `## Line remarks` and `## Q&A`, Push JSON `qa` | never (and never in code comments) |
 | QA verdict, triage, check ledger | `qa-…`, `triage-…`, `check-ledger.md` | never |
 | The Coder's code | a **detached git worktree** off the integration SHA (the "skill side-branch") | never |
 | Team board, seat registry, feedback ledger | fixed-name files in `non-finalized/` | never |

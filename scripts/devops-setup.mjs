@@ -75,6 +75,7 @@ export function validateLanguage(lang, ctx, { partial = false } = {}) {
     if (s?.sast && s.sast !== null) need(s.unanalysed !== true, 'a language with a scanner is not unanalysed')
     if (s?.sast?.tool === 'codeql') need(ctx.codeqlLanguages.includes(s.sast.language), `unknown CodeQL language ${s.sast.language}`)
   }
+  if (has('comments')) need(isStringList(lang.comments?.line) && Array.isArray(lang.comments?.block), 'comments needs line (list of markers) and block (list of [open, close])')
   if (has('docs')) need(typeof lang.docs?.format === 'string' && typeof lang.docs?.lineComment === 'string' && typeof lang.docs?.check === 'string', 'docs needs format, lineComment and check (see LANGUAGES.md)')
   for (const key of ['style', 'sensitiveHints', 'setupNotes', 'seenIn']) if (key in lang) need(isStringList(lang[key]), `${key} must be a list of strings`)
   for (const edge of lang.interactsWith ?? []) need(edge && typeof edge.with === 'string' && typeof edge.via === 'string' && typeof edge.contract === 'string', 'interactsWith entries need with, via, contract')
@@ -453,7 +454,7 @@ export function addLocalLanguage(destInput, entry, { apply = false } = {}) {
   const exists = config.languages.some(l => l.id === entry?.id)
   const problems = validateLanguage(entry ?? {}, { layers: config.layers, codeqlLanguages: config.codeqlLanguages }, { partial: exists })
   if (!exists) {
-    for (const key of ['name', 'layers', 'detect', 'toolchain', 'validate', 'security', 'sandboxImage', 'docs']) if (!(key in (entry ?? {}))) problems.push(`language ${entry?.id}: missing ${key}`)
+    for (const key of ['name', 'layers', 'detect', 'toolchain', 'validate', 'security', 'sandboxImage', 'docs', 'comments']) if (!(key in (entry ?? {}))) problems.push(`language ${entry?.id}: missing ${key}`)
   }
   const known = new Set([...config.languages.map(l => l.id), entry?.id])
   for (const edge of entry?.interactsWith ?? []) if (!known.has(edge.with)) problems.push(`language ${entry?.id}: interactsWith unknown ${edge.with}`)

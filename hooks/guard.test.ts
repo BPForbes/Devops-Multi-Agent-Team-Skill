@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { branchNameOf, classify, splitArgs, verdictOf } from './guard'
+import { branchNameOf, classify, commitInfo, splitArgs, verdictOf } from './guard'
 
 test('git push and gh pr publishing are found, however they are spelled', () => {
   expect(classify('git push origin HEAD')).toEqual([{ kind: 'publish', what: 'git push' }])
@@ -43,4 +43,13 @@ test('command arguments and branch names are parsed strictly', () => {
   expect(branchNameOf('a..b')).toBeUndefined()
   expect(branchNameOf('x; rm -rf /')).toBeUndefined()
   expect(branchNameOf('-bad')).toBeUndefined()
+})
+
+test('a commit is recognised, and whether it stages everything', () => {
+  expect(commitInfo('git commit -m "msg"')).toEqual({ isCommit: true, stagesAll: false })
+  expect(commitInfo('git add -A && git commit -m x')).toEqual({ isCommit: true, stagesAll: false })
+  expect(commitInfo('git commit -am "x"')).toEqual({ isCommit: true, stagesAll: true })
+  expect(commitInfo('git -C sub commit --all -m x')).toEqual({ isCommit: true, stagesAll: true })
+  expect(commitInfo('git status')).toEqual({ isCommit: false, stagesAll: false })
+  expect(commitInfo('echo "git commit"')).toEqual({ isCommit: false, stagesAll: false })
 })

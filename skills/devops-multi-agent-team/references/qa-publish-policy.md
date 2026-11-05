@@ -33,7 +33,10 @@ pass.
 
 - **Comments:** no open `issue (blocking)` against `comment-standards.md`
   (comments added only because code was added, restating or stale comments,
-  commented-out code, unlisted `TODO`/`FIXME`). The doc check ran only if the
+  commented-out code, notes or questions left in code, unlisted
+  `TODO`/`FIXME`). `comment_audit` on the final tree has no blocking finding,
+  every comment is in the Push JSON `comments` list, and every line remark in
+  the review thread is `fixed` or `declined` with a reason. The doc check ran only if the
   profile says the project publishes API docs.
 - **Reuse:** the research brief has a module mind map and a reuse map, no
   open blocking finding says new code duplicates existing code, and every

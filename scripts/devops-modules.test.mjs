@@ -161,3 +161,15 @@ test('a rule the project already has can be skipped, the other is still installe
   assert.ok(!fs.existsSync(path.join(dir, '.claude/rules/reuse-before-implement.md')))
   assert.ok(fs.existsSync(path.join(dir, '.cursor/rules/comments.mdc')))
 })
+
+test('the process puts notes in the PR and not in code, and gives Coders, Researchers and Reviewers their part', () => {
+  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+  const read = rel => fs.readFileSync(path.join(root, rel), 'utf8')
+  assert.match(read('skills/devops-multi-agent-team/references/comment-standards.md'), /Where each kind of information goes/)
+  assert.match(read('rules/comments.md'), /Never leave a question, remark or note to a person inside a comment/)
+  assert.match(read('agents/devops-coder.md'), /Default to zero new comments/)
+  assert.match(read('agents/devops-researcher.md'), /comment-worthy code/)
+  assert.match(read('agents/devops-reviewer.md'), /line remark/)
+  assert.match(read('skills/devops-multi-agent-team/references/review-thread-template.md'), /## Line remarks/)
+  assert.match(read('skills/devops-multi-agent-team/references/push-json.md'), /comment budget/)
+})

@@ -48,6 +48,11 @@ and [version-tags.md](../skills/devops-multi-agent-team/references/version-tags.
    (`reuse_search`, plus the language's own search), also under other names and
    in callers of the nearest neighbour. For each find write reuse as is,
    extend, or new because ... (specific).
+3b2. **Note the comment-worthy code** in the area the Coder will touch (non-obvious
+   contracts, invariants other modules rely on, workaround reasons with their issue,
+   borrowed algorithms with their link, security-sensitive spots) and the existing
+   comments that are wrong, stale, restate code or are commented-out code, each as
+   `path:line` with one clause. The Coder comments those places and no others.
 3c. Produce the **research brief** (template in research-and-reuse.md): docs
    read, mind map, reuse map, options with citations, open questions.
 4. Append to the review thread `## Research brief` or the

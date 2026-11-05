@@ -372,6 +372,7 @@ Add an entry to `languages.json` (to change it everywhere) or to
 
 - `detect.files` entries may start with `*` to match a suffix (`*.csproj`);
   `detect.paths` are directories or files at a fixed path.
+- `comments` is required for a new language: `line` (comment markers) and `block` (`[open, close]` pairs), plus `docstring: true` where triple-quoted strings document code. The comment audit reads diffs with it; the thresholds are `commentAudit` at the top of `languages.json`.
 - `docs` is required for a new language: the standard doc-comment `format`, the `lineComment` marker (used by TODO/FIXME/NOTE) and the `check` that validates it.
 - `security.sast` is `null` for a language no tool reads; set
   `unanalysed: true` so the report names it.

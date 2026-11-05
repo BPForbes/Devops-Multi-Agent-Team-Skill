@@ -46,7 +46,9 @@ Coder who picks it up ([department-pods.md](department-pods.md)).
 
 Tools: `list_languages`, `get_language`, `list_services`, `get_service`,
 `detect_project`, `status`, `install_devops_team`, `get_profile`,
-`ensure_gitignore`, `add_language`, `check_toolchain`, `sandbox_plan`. Prompts:
+`ensure_gitignore`, `add_language`, `check_toolchain`, `sandbox_plan`,
+`module_map`, `reuse_search`, `tag_history`, `tag_plan`, `tag_create`,
+`ghas_plan`, `comment_audit`. Prompts:
 `setup_project`, `add_language`. Write tools plan by default; see
 [services-and-sandbox.md](services-and-sandbox.md).
 

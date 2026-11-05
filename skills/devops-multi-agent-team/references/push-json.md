@@ -45,7 +45,14 @@ tree vs `<integration-base>`, not `git show HEAD` alone.
 Top-level keys: `topic`, `round`, `seat` (id of the seat that
 wrote this version), `authors` (seat ids of everyone who wrote
 the change), `to` (seat id or role), `notifies` (seat ids or
-roles), `closes`, `qa`, `files`. Example head:
+roles), `closes`, `qa`, `comments`, `files`.
+
+`comments` is the **comment budget**: one row per comment (or run of
+comment lines) the change adds, `{ "file", "line": "12" or "12-15", "why" }`,
+where `why` is what the code cannot say. `[]` means the change adds no
+comments, which is the default. A comment not listed is a blocking finding
+(`comment_audit` with `listed` checks it). Questions never go here or in code:
+use `qa`. Example head:
 `"seat": "coder-0a0a0a", "authors": ["coder-0a0a0a"],
 "to": "reviewer-0b0b0b"`. Reviewers use `authors`, unioned with the Handoff `Authors:`
 line ([role-identity.md](role-identity.md), Seat ids), for the

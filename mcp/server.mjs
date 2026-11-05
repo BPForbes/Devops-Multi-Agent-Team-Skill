@@ -12,6 +12,7 @@ import {
   PACKAGE_ROOT, addLocalLanguage, checkToolchain, detectLanguages, detectServices, ensureGitignore, install,
   loadLanguages, loadServices, renderProfile, resolveDest, sandboxArgv, status,
 } from '../scripts/devops-setup.mjs'
+import { commentAudit } from '../scripts/devops-comments.mjs'
 import { ghasPlan } from '../scripts/devops-ghas.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
@@ -260,6 +261,23 @@ const TOOLS = [
     run: args => {
       gitAllowed()
       return tagCreate(projectDir(args), { version: args.version, message: args.message, ref: args.ref, apply: optionalBool(args, 'apply', false), roots: allowedRoots() })
+    },
+  },
+  {
+    name: 'comment_audit',
+    description: 'Audit the comments a change adds (staged, working tree vs HEAD, or base...head) and return ready-to-paste Conventional Comments remarks: comments that restate the code, commented-out code, questions or notes to a person left in code, process notes, bare TODO/FIXME, signature-only doc lines, over-commented files, long prose. Coders run it before handoff; Reviewers use the findings as line remarks on the virtual PR. Pass `listed` (the Push JSON `comments` array) to also flag comments the Coder did not justify. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, base: { type: 'string' }, head: { type: 'string' }, staged: { type: 'boolean' },
+        listed: { type: 'array', maxItems: 500, items: { type: 'object', properties: { file: { type: 'string' }, line: { type: ['string', 'number'] }, why: { type: 'string' } }, required: ['file'] } },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => {
+      gitAllowed()
+      return commentAudit(projectDir(args), { base: args.base, head: args.head, staged: optionalBool(args, 'staged', false), listed: args.listed, roots: allowedRoots() })
     },
   },
   {

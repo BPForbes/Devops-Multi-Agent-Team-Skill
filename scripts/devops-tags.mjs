@@ -6,11 +6,11 @@ import { fileURLToPath } from 'node:url'
 import { assertInside, loadLanguages, resolveDest } from './devops-setup.mjs'
 
 const SEMVER = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/
-const REF = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/
+export const REF = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}(?:[~^]\d{0,3})*$/
 const CONTAINERS = new Set(['src', 'packages', 'crates', 'apps', 'services', 'lib', 'libs', 'internal', 'cmd', 'modules', 'projects'])
 
 /** Hooks, fsmonitor and external diff are off and the environment is bare, so a repository's own config cannot run anything. HOME is passed only when a tag needs an identity. */
-function git(dest, args, { identity = false } = {}) {
+export function git(dest, args, { identity = false } = {}) {
   const env = { PATH: process.env.PATH ?? '', GIT_TERMINAL_PROMPT: '0', GIT_PAGER: 'cat', GIT_CONFIG_NOSYSTEM: '1', LC_ALL: 'C' }
   if (identity && process.env.HOME) env.HOME = process.env.HOME
   const ran = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'diff.external=', '--no-pager', '-C', dest, ...args], { env, encoding: 'utf8', timeout: 20000, maxBuffer: 8 * 1024 * 1024, shell: false })

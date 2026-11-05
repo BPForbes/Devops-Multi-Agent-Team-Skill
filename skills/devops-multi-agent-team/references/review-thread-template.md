@@ -37,7 +37,18 @@ are `issue (blocking)`. Comments and reimplementation findings are blocking.
 |----------|---------|-------|
 | <reviewer-id> | Changes requested / Satisfied | … |
 
+## Line remarks (virtual PR)
+Reviewers leave remarks on specific lines here, never in the code. Over-commented
+lines, comments that restate code, and anything `comment_audit` finds that holds
+go in this table as Conventional Comments. The Coder deletes the comment or
+replies with the reason it stays; the Reviewer sets the status.
+| Where (`path:line`) | From | Remark (`label (decoration): subject`) | Status |
+|---------------------|------|-----------------------------------------|--------|
+| src/a.ts:12 | <reviewer-id> | issue (blocking): restates the code; delete it or rename `tmp`. | open / fixed / declined (reason) |
+
 ## Q&A (Coder ↔ Reviewer)
+Questions and notes between Coder and Reviewer live here and in Push JSON `qa`,
+not in comments in the code.
 | Id | From | To | Ask | Answer | Status |
 |----|------|----|-----|--------|--------|
 | q1 | <reviewer-id> | <coder-id> | … | | open |

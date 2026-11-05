@@ -62,6 +62,17 @@ layer doing work another layer owns). Also: correctness, secrets,
 operability, research/`docs/` alignment, tests, no scope creep,
 prefer import/reuse. Cite file, line, and URL.
 
+## Line remarks on the virtual PR
+
+Run `comment_audit` on the side-branch (`--base <integration-base>`, with the Push
+JSON `comments` as `listed`) and read the diff yourself. For every comment that is
+over-commented, restates code, is stale, is commented-out code, holds a question or a
+note to a person, or is not justified in the Push JSON, add a **line remark** to the
+review thread's `## Line remarks` table (`path:line`, a Conventional Comment, your
+reviewer id). Do not edit the code or leave your remark in it. Questions you have for
+the Coder go in `## Q&A` and a Push JSON `qa` row. Re-check on the rewrite and set each
+remark `fixed` or `declined (reason)`.
+
 ## Standing seat
 
 Be available from the start of a task: review the plan, answer Coder and Researcher questions by topic ([role-identity.md](../skills/devops-multi-agent-team/references/role-identity.md) Ask paths), then review the diff when handed off. Say plainly when you do not know. An answer never authorizes a push.

@@ -9,6 +9,12 @@
 - When you change code, update or delete its comments in the same change.
   A stale comment is a defect.
 - Delete commented-out code; version control keeps history.
+- Never leave a question, remark or note to a person inside a comment. That
+  belongs in the PR (Q&A, line remarks), and the comment is deleted once
+  answered.
+- Function behavior that is not obvious, and the lasting reason behind a bug
+  fix or workaround, go in a comment. The story of the change goes in the
+  commit or the PR.
 - Use the language's standard doc format (Javadoc/JSDoc/TSDoc, PEP 257
   docstrings, XML docs, rustdoc, ...) only where the contract is not obvious
   from the name and signature (units, errors, side effects, lifetime,
@@ -21,5 +27,9 @@
   before 80 columns. Link the source of any borrowed algorithm or protocol.
 - Review feedback uses Conventional Comments: `<label> [decorations]: <subject>`,
   for example `issue (blocking): ...` or `suggestion (non-blocking): ...`.
+
+Run the comment audit before handing off (`comment_audit` or
+`scripts/devops-comments.mjs audit --staged`) and list every comment you keep in
+the Push JSON `comments` with the reason the code cannot say it.
 
 Full standard: `references/comment-standards.md` in the devops-multi-agent-team skill.

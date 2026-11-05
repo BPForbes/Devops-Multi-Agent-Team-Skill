@@ -40,6 +40,20 @@ the Orchestrator. Thoughts stay **gitignored**.
   from the signature (or the project publishes API docs); `TODO:` / `FIXME:` /
   `NOTE:` only for real follow-up; complete sentences under 80 columns; a link
   for any borrowed algorithm. List new `TODO` / `FIXME` markers in the Handoff.
+- **Do not over-comment.** Default to zero new comments. Before any comment, try a
+  rename, an extracted function, a test. Comment only the places the research brief
+  marks as comment-worthy or where you have a reason the code cannot say. Put every
+  comment you keep in the Push JSON `comments` list with that reason.
+- **No notes or questions in code.** A question or a remark to a Reviewer goes in the
+  PR Q&A (`qa` row in the Push JSON, the review thread); never as a comment. Function
+  behavior that is not obvious and the lasting reason behind a bug fix or workaround
+  do go in a comment; the story of the change goes in the commit message.
+- **Self-audit before handoff:** run `comment_audit` (MCP) or
+  `node scripts/devops-comments.mjs audit --staged` and fix what it reports. The mod
+  runs it on `git commit`.
+- **Answer line remarks:** Reviewers leave remarks on specific lines in the review
+  thread. Delete the comment, or reply with the reason it stays; set nothing
+  `fixed` that you did not change.
 - Run the profile's validation commands in the sandbox (the doc check only if
   the profile says the project publishes API docs).
 - When a check fails, follow `monitoring.md`: reproduce, fix the cause, re-run,

@@ -57,14 +57,19 @@ Use all-caps markers, with the owner or issue when there is one:
 - `TODO:` an incomplete implementation or a feature to add later.
 - `FIXME:` a known bug, temporary workaround, or broken code needing
   attention.
-- `NOTE:` a subtle nuance, a performance bottleneck, or a security-sensitive
-  area.
+- `NOTE:` a durable fact about the code: a subtle nuance, a performance
+  bottleneck, or a security-sensitive area. Never addressed to a person.
 
+A marker never carries a question, a request or a conversation. Those go in
+the PR remarks (section 6).
 Markers are for real follow-up, not decoration. A `TODO` or `FIXME` the
 change introduces is listed in the Handoff. A
 `FIXME` on a known bug blocks QA PASS unless the human accepted it.
 
-## 4. Review feedback uses Conventional Comments
+## 4. Review feedback uses Conventional Comments, on the virtual PR
+
+Review feedback is written in the review thread (the virtual PR), never in the
+code.
 
 Format: `<label> [decorations]: <subject>` and then the detail.
 
@@ -87,6 +92,44 @@ Send-back).
 - Comments are written for a future reader: no mention of an AI agent, a
   prompt, a conversation, a ticket-only context, or temporary branch state.
 
+## 6. Where each kind of information goes
+
+| It is... | It goes in... |
+|----------|---------------|
+| What a function does when that is not obvious: its contract, units, ranges, errors, side effects, ordering | a **code comment** (doc comment) |
+| Why code looks the way it does and must stay that way: a constraint, an invariant, a trap, a workaround | a **code comment**, stating the lasting reason |
+| A bug fix whose reason the next reader needs so they do not undo it | a **code comment** stating what must stay true and why (with the issue number). The story of the fix ("fixed the bug where...") is not code |
+| A question for a Reviewer or Coder | the **PR Q&A** (review thread, Push JSON `qa`) |
+| A remark, an explanation for a reviewer, a note to a teammate or to your future self | the **PR remarks** (line remarks, Handoff) |
+| What changed and why in this change | the **commit message** and the PR description |
+| Follow-up work | an **issue**, with `TODO(#n)` in the code only when the spot needs the pointer |
+
+A note, a question or a remark is never left inside a comment. If you want a
+reviewer to look at a line, say so in the PR; delete the question from the
+code once it is answered.
+
+## 7. How Coders avoid over-commenting
+
+1. **Default to zero new comments.** The number of comments in a diff is never
+   a measure of quality.
+2. **Climb the ladder before commenting:** rename, extract a function, add a
+   test that pins the behaviour. Only then write a comment.
+3. **Comment budget.** Every comment the change adds is listed in the Push JSON
+   `comments` array with the reason the code cannot say it
+   ([push-json.md](push-json.md)). An unlisted comment is a blocking finding.
+4. **Self-audit before handoff.** Run the comment audit (MCP `comment_audit`,
+   or `node scripts/devops-comments.mjs audit --staged`). It flags comments
+   that restate code, commented-out code, questions or process notes left in
+   code, bare markers, signature-only doc lines, over-commented files and long
+   prose. The Claude mod runs it on `git commit` and reports the result
+   (`/devops comments strict` refuses a commit with blocking findings).
+5. **Use the research.** The Researcher marks the code that is comment-worthy
+   ([research-and-reuse.md](research-and-reuse.md)); comment those places and
+   not others.
+6. **Answer line remarks.** Reviewers leave remarks on over-commented lines in
+   the virtual PR. Delete the comment, or reply with the reason it stays; do not
+   argue in a comment.
+
 ## What a strict reviewer checks
 
 1. Does any comment restate the code? (`issue (blocking)`)
@@ -103,3 +146,5 @@ Send-back).
 6. Do comments follow the formatting rules, and do borrowed algorithms link
    their source?
 7. Would a better name remove the need for the comment? (`suggestion`)
+8. Is any question, remark or note to a person left in code? (`issue (blocking)`: move it to the PR Q&A and delete it.)
+9. Run `comment_audit` and post each finding that holds as a **line remark** on the virtual PR (`path:line`, a Conventional Comment); do not edit the code yourself.

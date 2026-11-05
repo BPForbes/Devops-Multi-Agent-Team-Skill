@@ -116,3 +116,48 @@ test('commands that are not known checks are left alone, and the monitor can be 
   assert.equal((await $.tool.call({ tool: 'Bash', command: 'cargo test' })).context, undefined)
   assert.equal(state.get('checkFailures'), undefined)
 })
+
+function engineWithAudit(on: any, audit: { blocking: number; nonBlocking: number; findings: { file: string; line: number; remark: string }[] }) {
+  const state = new Map<string, unknown>()
+  const calls: string[][] = []
+  on('state.get', (_: unknown, e: { key: string }) => ({ value: { value: state.get(e.key), version: 1 } }))
+  on('state.set', (_: unknown, e: { key: string; value: unknown }) => {
+    state.set(e.key, e.value)
+    return { value: { isSet: true, version: 2 } }
+  })
+  on('session.root', () => ({ value: '/work' }))
+  on('fs.exists', () => ({ value: false }))
+  on('fs.read', () => { throw new Error('missing') })
+  on('process.run', (_: unknown, e: { argv: string[] }) => {
+    calls.push(e.argv)
+    return { value: { exitCode: audit.blocking > 0 ? 1 : 0, stdout: JSON.stringify(audit), stderr: '' } }
+  })
+  on('tool.call', () => ({ result: {} }))
+  return { state, calls }
+}
+
+const ONE_BLOCKING = { blocking: 1, nonBlocking: 0, findings: [{ file: 'a.ts', line: 3, remark: 'issue (blocking): this restates what the code does.' }] }
+
+test('a commit is audited: the finding is added to the result, and the staged diff is used unless -a', async ($, on) => {
+  const { calls } = engineWithAudit(on, ONE_BLOCKING)
+  const ran = await $.tool.call({ tool: 'Bash', command: 'git commit -m "x"' })
+  assert.ok(String(ran.context).includes('comment audit: 1 blocking'))
+  assert.ok(String(ran.context).includes('a.ts:3'))
+  assert.ok(calls[0].includes('--staged'))
+  await $.tool.call({ tool: 'Bash', command: 'git commit -am "x"' })
+  assert.ok(!calls[1].includes('--staged'))
+})
+
+test('strict mode refuses a commit with blocking findings; off and clean commits pass', async ($, on) => {
+  const { state } = engineWithAudit(on, ONE_BLOCKING)
+  state.set('commentAudit', 'strict')
+  const denied = await $.tool.call({ tool: 'Bash', command: 'git commit -m "x"' })
+  assert.ok(denied.isError ?? denied.deny)
+  state.set('commentAudit', 'off')
+  assert.equal((await $.tool.call({ tool: 'Bash', command: 'git commit -m "x"' })).context, undefined)
+})
+
+test('a clean audit adds nothing', async ($, on) => {
+  engineWithAudit(on, { blocking: 0, nonBlocking: 0, findings: [] })
+  assert.equal((await $.tool.call({ tool: 'Bash', command: 'git commit -m "x"' })).context, undefined)
+})

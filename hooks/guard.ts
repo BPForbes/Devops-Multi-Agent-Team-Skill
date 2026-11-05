@@ -64,3 +64,14 @@ export function branchNameOf(text: string): string | undefined {
 export function classifySegments(command: string): string[] {
   return blankQuotes(command).split(/&&|\|\||;|\||\n|\(|\)|`|\$\(/).map(part => part.trim()).filter(part => part !== '')
 }
+
+export function commitInfo(command: string): { isCommit: boolean; stagesAll: boolean } {
+  for (const segment of classifySegments(command)) {
+    const words = segment.split(/\s+/).filter(Boolean)
+    while (words.length > 0 && (isAssignment(words[0]) || ['sudo', 'time', 'exec'].includes(words[0]))) words.shift()
+    if (words[0] !== 'git') continue
+    const { sub, rest } = gitSubcommand(words)
+    if (sub === 'commit') return { isCommit: true, stagesAll: rest.some(w => w === '--all' || /^-[a-zA-Z]*a[a-zA-Z]*$/.test(w)) }
+  }
+  return { isCommit: false, stagesAll: false }
+}

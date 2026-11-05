@@ -64,13 +64,29 @@ reason the existing code cannot be extended. Two functions never do the same
 thing. If a shared helper is missing, add it once in a shared place and point
 every caller at it.
 
-## 4. Brief template
+## 4. Note the comment-worthy code
+
+While reading, record where a comment *is* warranted in the area the Coder will
+touch, so the Coder comments those places and no others:
+
+- a non-obvious contract (units, ranges, errors, ordering, thread-safety);
+- an invariant or constraint that another module relies on;
+- a workaround for a bug or a platform quirk, with the issue it traces to;
+- an algorithm or protocol taken from an outside source (record the link);
+- a security-sensitive spot.
+
+Also record existing comments that are **wrong, stale, restate the code or are
+commented-out code** in that area, as candidates to delete (not as a license to
+sweep unrelated files). List them by `path:line` with one clause each.
+
+## 5. Brief template
 
 ```markdown
 # Research: <topic>   Seat: <researcher-id>   Department: <dept>
 ## Docs read (path, what it says, any disagreement with the code)
 ## Module mind map (Mermaid) + extension points
 ## Reuse map (term | searched where | found | reuse / extend / new because)
+## Comment-worthy code (path:line, why) and comments to delete (path:line, why)
 ## Options and recommendation (cited)
 ## Open questions for the human
 ```

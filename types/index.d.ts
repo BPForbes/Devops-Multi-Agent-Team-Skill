@@ -10,6 +10,7 @@ declare module 'claude-code' {
       pushAuthorized: boolean
       allowedBranches: string[]
       monitor: boolean
+      commentAudit: 'warn' | 'strict' | 'off'
       /** Cleared by a pass. */
       checkFailures: Record<string, number>
     }

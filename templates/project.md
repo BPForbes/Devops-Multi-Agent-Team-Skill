@@ -55,7 +55,9 @@ was added** (self-explanatory code gets none); intent not mechanics; no comment
 rot; no commented-out code; doc comments only where the contract is not obvious
 or where API docs are published; TODO/FIXME/NOTE only for real follow-up;
 complete sentences; links for borrowed algorithms. Reviewers enforce it as
-blocking. Does this project publish generated API docs? `<yes (which packages) | no>`.
+blocking, on the virtual PR as line remarks; questions and notes go in the PR Q&A,
+never in code. Coders run `comment_audit` before handoff and list the comments they
+keep in the Push JSON `comments`. Does this project publish generated API docs? `<yes (which packages) | no>`.
 Per language (the doc check applies only if the answer is yes):
 
 {{DOCS}}

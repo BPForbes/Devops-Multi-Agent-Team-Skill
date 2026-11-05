@@ -55,13 +55,13 @@ function client({ env = {}, cwd = os.tmpdir(), capabilities = {}, onRequest } = 
   return ready()
 }
 
-test('initialize negotiates, lists 18 tools, prompts and resources', async () => {
+test('initialize negotiates, lists 19 tools, prompts and resources', async () => {
   const root = tmp()
   const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
   try {
     const tools = (await c.rpc('tools/list')).result.tools.map(t => t.name)
-    for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan']) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 18)
+    for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit']) assert.ok(tools.includes(name), name)
+    assert.equal(tools.length, 19)
     const writers = (await c.rpc('tools/list')).result.tools.filter(t => t.name === 'install_devops_team')
     assert.equal(writers[0].annotations.destructiveHint, false)
     assert.ok((await c.rpc('prompts/list')).result.prompts.some(p => p.name === 'setup_project'))
@@ -139,7 +139,7 @@ test('add_language validates, saves on apply, and the language then works anywhe
       id: 'elm', name: 'Elm', layers: ['web'], detect: { files: ['elm.json'], extensions: ['.elm'] },
       toolchain: { install: ['npm i -g elm elm-format elm-test'], verify: 'elm --version' },
       validate: ['elm make src/Main.elm --output=/dev/null', 'elm-format --validate src', 'elm-test'],
-      sandboxImage: 'node:22-slim', docs: { format: 'elm-format doc comments ({-| … -})', lineComment: '--', check: 'elm-review' }, security: { sast: null, sca: [], secrets: ['gitleaks detect --redact'], unanalysed: true }, interactsWith: [{ with: 'javascript', via: 'ports', contract: 'the port names' }],
+      sandboxImage: 'node:22-slim', docs: { format: 'elm-format doc comments ({-| … -})', lineComment: '--', check: 'elm-review' }, comments: { line: ['--'], block: [['{-', '-}']] }, security: { sast: null, sca: [], secrets: ['gitleaks detect --redact'], unanalysed: true }, interactsWith: [{ with: 'javascript', via: 'ports', contract: 'the port names' }],
     }
     const evil = { ...entry, toolchain: { install: ['x'], verify: 'sh -c "id"' } }
     const rejected = (await c.call('add_language', { entry: evil, apply: true })).json()
@@ -219,4 +219,22 @@ test('research, tag and security tools work through chat and stay inside the fol
   try {
     assert.match((await off.call('tag_plan')).text, /disabled/)
   } finally { off.close() }
+})
+
+test('comment_audit works through chat on a staged change and is read-only', async () => {
+  const root = tmp({ 'src/a.ts': '// Increment i by 1\ni++\n// Not sure about this?\n' })
+  const { execFileSync } = await import('node:child_process')
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root })
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'init'], { cwd: root })
+  execFileSync('git', ['add', '-A'], { cwd: root })
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  try {
+    const result = (await c.call('comment_audit', { staged: true })).json()
+    assert.ok(result.blocking >= 2)
+    assert.ok(result.findings.some(f => f.rule === 'restates-code' && /^issue \(blocking\)/.test(f.remark)))
+    assert.ok(result.findings.some(f => f.rule === 'question'))
+    assert.ok((await c.call('comment_audit', { base: '--output=x' })).isError)
+  } finally { c.close() }
+  const off = await client({ env: { DEVOPS_MCP_ROOTS: root, DEVOPS_MCP_NO_GIT: '1' } })
+  try { assert.match((await off.call('comment_audit', { staged: true })).text, /disabled/) } finally { off.close() }
 })
