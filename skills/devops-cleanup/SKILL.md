@@ -35,7 +35,7 @@ named in the statement that exist, and what to leave alone), the **thresholds**
 win), the **constraints** (your own sentences about what must not change, plus
 the standing ones), and any sentence it did not understand. Show the brief to the
 person. Ask about anything in `unrecognized`; do not guess. A vague statement
-("tidy this up") or "follow clean code principles" uses all five scanned goals: comments, duplicates, split, constants and naming.
+("tidy this up") or "follow clean code principles" uses all six scanned goals: comments, duplicates, split, constants, naming and oop (type switches that close code to extension, children that refuse what their parent promises, functions named for two jobs).
 The standard being applied is [clean-code.md](../devops-multi-agent-team/references/clean-code.md); its thresholds are the defaults.
 
 ## The flow

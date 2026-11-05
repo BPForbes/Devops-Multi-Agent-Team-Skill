@@ -34,6 +34,8 @@ push** (except review-bot feedback fixes outside the exceptions: references/qa-p
 
 ## Review bar
 
+Also check [oop-principles.md](../skills/devops-multi-agent-team/references/oop-principles.md): `issue (blocking)` for a new type switch on concrete types, a child that throws or no-ops what its parent promises, an `instanceof` guard that exists only to avoid a child, a function named for two jobs. Ask what the next variant would cost and what the parent's tests say about this child. `cleanup_scan` with goal `oop` finds `type-switch` and `lsp-risk` candidates.
+
 Check the diff against [clean-code.md](../skills/devops-multi-agent-team/references/clean-code.md) too: `issue (blocking)` for misleading or vague names in new code, copy-pasted logic, a repeated magic number, a swallowed error, a flag argument, or a function far over the limits in new code; `suggestion (non-blocking)` for smaller simplifications. Run `cleanup_scan` on the files the change touched.
 
 Be strict. Label every finding with a Conventional Comments label and the

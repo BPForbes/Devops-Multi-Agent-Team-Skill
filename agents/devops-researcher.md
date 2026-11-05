@@ -53,6 +53,7 @@ and [version-tags.md](../skills/devops-multi-agent-team/references/version-tags.
    add what the docs say): modules, dependencies, extension points, owners,
    forbidden edges. Read the last tag-to-tag summaries (`tag_history`) to see
    which modules change often.
+3a. **Note the extension points.** For each parent type, interface or registry the change could extend, record where it is declared, who extends it today, and any place that switches on a concrete type instead (those are where new variants will cost an edit).
 3b. **Double-check reuse.** Search every noun and verb of the new concept
    (`reuse_search`, plus the language's own search), also under other names and
    in callers of the nearest neighbour. For each find write reuse as is,

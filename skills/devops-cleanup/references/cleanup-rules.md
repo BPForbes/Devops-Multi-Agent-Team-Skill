@@ -72,6 +72,17 @@ done; stop and say why.
   named option), with every caller updated in the same step.
 - Names follow clean-code.md: intention-revealing, no noise words, no misleading words, no `m_` prefixes.
 
+## Types and inheritance
+
+These steps can change a public API, so each is a separate step the person has approved, with tests first (and contract
+tests for a hierarchy). See oop-principles.md.
+
+- **Type switch:** replace a chain of checks on concrete types with a method on the parent that each child implements, or
+  with a lookup table. Add the new child or entry for each old branch; delete the branch only when the tests pass.
+- **Child that refuses what its parent promises:** move the operation to a narrower type or split the interface, so no
+  caller needs a type check. Do not "fix" it by adding a guard in callers.
+- **Multi-purpose function:** one helper per job, the old name kept as the orchestrating parent while it has callers.
+
 ## Dead code and names
 
 - Delete dead code only with proof: no references (`reuse_search`), not exported

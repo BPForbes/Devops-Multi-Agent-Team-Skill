@@ -41,7 +41,9 @@ the unreferenced items in "Beyond the four sources" as the team's own additions.
    `Manager`, `Util`, `Helper`), one-letter names outside tiny loops, or `m_`
    prefixes. Use one word per concept across the code. If a name needs a comment
    to explain it, rename it.
-2. **Small functions that do one thing.** A function has one reason to change and
+2. **Small, single-purpose functions.** A function does one thing; if it needs to do
+   more, it calls helper functions that each do one thing and only orchestrates
+   ([oop-principles.md](oop-principles.md)). A function has one reason to change and
    one level of abstraction. If you cannot name it in a few words it does too
    much; split it. Long, descriptive names beat short, cryptic ones. Keep to about
    30 lines or fewer, nesting of 3 or fewer, and as few parameters as you can:
@@ -70,7 +72,8 @@ the unreferenced items in "Beyond the four sources" as the team's own additions.
 9. **SOLID, where the code is object-oriented or has module boundaries.** One
    responsibility per type; open for extension, closed for modification; subtypes
    substitutable for their base; small, specific interfaces; depend on abstractions,
-   not concrete types.
+   not concrete types. Closed-for-modification and Liskov substitution are binding
+   rules with their own checks: [oop-principles.md](oop-principles.md).
 10. **Tested and refactored continuously.** Behavior has tests, the tests are clean
     too, and code is improved in small steps under version control, one kind of
     change per commit. Leave code a little cleaner than you found it, within the

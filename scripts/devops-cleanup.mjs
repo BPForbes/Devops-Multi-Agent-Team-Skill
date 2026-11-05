@@ -17,12 +17,13 @@ const STRUCTURAL = /^([{}()\[\];,]+|end|fi|done|esac|else|endif|endfunction|\)\s
 const GOALS = {
   comments: /\b(comments?|commented|docstrings?|noise|over-?comment\w*|annotations?)\b/,
   duplicates: /\b(duplicat\w*|dry|copy-?paste\w*|copies|copied|repeated|repeating|redundan\w*|same code|reimplement\w*|re-implement\w*|reuse)\b/,
-  split: /\b(split|large|long|big|huge|giant|helpers?|extract\w*|break(ing)? (it |them )?up|smaller|decompos\w*|too many lines|nest\w*|complex\w*)\b/,
+  split: /\b(split|large|long|big|huge|giant|helpers?|extract\w*|break(ing)? (it |them )?up|smaller|decompos\w*|too many lines|nest\w*|complex\w*|single[- ]purpose|single[- ]responsib\w*|one thing|does too much)\b/,
   dead: /\b(dead code|unused|unreachable|commented[- ]out)\b/,
   naming: /\b(rename\w*|naming|names?|readab\w*|vague|descriptive|meaningful|intention)\b/,
   constants: /\b(magic numbers?|constants?|hard-?coded|literals?)\b/,
+  oop: /\b(oop|solid|liskov|lsp|open[- ]closed|ocp|substitut\w+|polymorph\w+|inherit\w*|subclass\w*|subtype\w*|parent|child(?:ren)?|extensib\w*|extend\w*)\b/,
 }
-const ALL_GOALS = ['comments', 'duplicates', 'split', 'constants', 'naming']
+const ALL_GOALS = ['comments', 'duplicates', 'split', 'constants', 'naming', 'oop']
 
 /** Turn a plain-English cleanup statement into a brief: goals, scope, thresholds, constraints, and anything left over. */
 export function parseStatement(text, destInput, roots) {
@@ -162,6 +163,10 @@ const LOOP_NAMES = new Set(['i', 'j', 'k', 'n', 'x', 'y', 'z', 'e', '_'])
 const DECLARATION = /\b(?:let|const|var|val|int|long|short|double|float|bool|boolean|char|string|String|auto|def|fn|func|function|class|struct|interface)\s+([A-Za-z_]\w*)/g
 const CONSTANT_LINE = /\b(?:const|final|static|readonly|constexpr|enum)\b|^\s*#\s*define|^\s*[A-Z][A-Z0-9_]+\s*[:=]/
 const NUMBER = /(?<![\w.])(?:0x[0-9a-fA-F]+|\d+\.\d+|\d{2,}|[3-9])(?![\w.])/g
+const TYPE_CHECK = /\binstanceof\b|\bisinstance\s*\(|\bdynamic_cast\b|\.getClass\(\)|\bis\s+(?!None\b|True\b|False\b|not\b)[A-Z]\w*|\b(?:switch|match)\s*\(?\s*[\w.]*\.(?:type|kind|tag|class)\b/g
+const HERITAGE = /\bclass\s+\w+(?:<[^>]*>)?\s+(?:extends|implements)\b|^\s*class\s+\w+\(\s*\w+[^)]*\)\s*:|\bclass\s+\w+\s*:\s*(?:public|private|protected)?\s*\w+|\bimpl(?:<[^>]*>)?\s+\w+(?:<[^>]*>)?\s+for\b/
+const CLASS_DECLARATION = /\b(?:class|struct|interface|trait|impl)\s+\w+/
+const REFUSES = /\b(?:throw|raise)\b.*\b(?:Unsupported\w*|NotImplemented\w*|NotSupported\w*)\b|\b(?:throw|raise)\b.*['"`][^'"`]*(?:not supported|unsupported|not implemented|can't|cannot|can not)[^'"`]*['"`]|\b(?:unimplemented|todo)!\s*\(/i
 const FLAG_PARAM = /\b(?:bool|boolean|Boolean)\b|=\s*(?:true|false|True|False)\b|\b(?:flag|force|verbose|strict|(?:is|has|can|should|apply|enable|disable|use|with|include|skip)[A-Z_]\w*)\b/
 
 function magicNumbers(lines, markers, settings) {
@@ -197,6 +202,24 @@ function vagueNames(lines, markers, language) {
       else if (/^[a-z][A-Za-z0-9]*(?:Info|Data|Manager|Util|Utils|Helper|Stuff)$/.test(name) || /^[A-Z][A-Za-z0-9]*(?:Info|Data|Manager|Util|Utils|Helper|Stuff)$/.test(name)) why = 'a noise word (Info, Data, Manager, Util, Helper) adds no meaning; name what it is'
       if (why) found.push({ line: index + 1, name, why })
     }
+  })
+  return found
+}
+
+function refusedOverrides(lines, markers) {
+  const found = []
+  let inherits = false
+  let className = ''
+  let abstract = false
+  lines.forEach((raw, index) => {
+    const code = stripLineComment(raw, markers)
+    const declared = CLASS_DECLARATION.exec(code)
+    if (declared) {
+      inherits = HERITAGE.test(code)
+      abstract = /\babstract\b|\binterface\b|\btrait\b/.test(code)
+      className = /\b(?:class|struct|impl)\s+(?:<[^>]*>\s*)?(\w+)/.exec(code)?.[1] ?? ''
+    }
+    if (inherits && !abstract && REFUSES.test(raw)) found.push({ line: index + 1, className, text: raw.trim().slice(0, 100) })
   })
   return found
 }
@@ -268,7 +291,7 @@ export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude 
   const entries = []
   const candidates = []
   const unsupported = {}
-  const summary = { files: 0, linesScanned: 0, duplicateGroups: 0, duplicatedLines: 0, longFunctions: 0, deepFunctions: 0, manyParams: 0, flagArguments: 0, magicNumbers: 0, vagueNames: 0, commentBlocking: 0, commentNonBlocking: 0 }
+  const summary = { files: 0, linesScanned: 0, duplicateGroups: 0, duplicatedLines: 0, longFunctions: 0, deepFunctions: 0, manyParams: 0, flagArguments: 0, magicNumbers: 0, vagueNames: 0, multiPurpose: 0, typeSwitches: 0, lspRisks: 0, commentBlocking: 0, commentNonBlocking: 0 }
   const syntheticDiff = []
 
   for (const rel of files) {
@@ -288,11 +311,23 @@ export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude 
 
     if (goals.includes('duplicates')) entries.push({ rel, norm: normalizedLines(text, syntax) })
 
-    if (goals.includes('split')) {
+    if (goals.includes('split') || goals.includes('oop')) {
       const functions = BRACE_LANGUAGES.has(language) ? braceFunctions(lines, syntax.line, language) : language === 'python' ? pythonFunctions(lines) : null
       if (functions === null) unsupported[language] = (unsupported[language] ?? 0) + 1
       for (const fn of functions ?? []) {
         const body = lines.slice(fn.from - 1, fn.to)
+        if (goals.includes('oop')) {
+          const checks = body.reduce((n, l) => n + (stripLineComment(l, syntax.line).match(TYPE_CHECK) ?? []).length, 0)
+          if (checks >= 3) {
+            summary.typeSwitches += 1
+            candidates.push({ kind: 'type-switch', file: rel, from: fn.from, to: fn.to, name: fn.name, test: isTest, size: checks * 3, suggestion: `${fn.name} asks what type it was given ${checks} times, so every new type means editing it (closed against extension). Give the types a shared parent or interface with the operation on it and call that, or look the behavior up in a table or registry, so a new type adds code and changes none.`, effort: 'medium' })
+          }
+        }
+        if (!goals.includes('split')) continue
+        if (/[a-z0-9](?:And|Or)[A-Z]|_(?:and|or)_/.test(fn.name) && !/^(?:is|has|can|should|equals|contains|try)/i.test(fn.name)) {
+          summary.multiPurpose += 1
+          candidates.push({ kind: 'multi-purpose-name', file: rel, from: fn.from, to: fn.to, name: fn.name, test: isTest, size: 3, suggestion: `${fn.name} is named for two jobs. Make one function per job, each with its own name, and let a parent function call them in order if the pair is needed together.`, effort: 'low' })
+        }
         const codeLines = body.filter(l => l.trim() !== '' && !syntax.line.some(m => l.trim().startsWith(m))).length
         const params = countParams(fn.signature)
         const reasons = []
@@ -320,6 +355,14 @@ export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude 
       for (const e of magicNumbers(lines, syntax.line, settings)) {
         summary.magicNumbers += 1
         candidates.push({ kind: 'magic-number', file: rel, literal: e.literal, count: e.count, lines: e.lines, test: false, size: e.count, suggestion: `${e.literal} appears ${e.count} times with no name. Give it a named constant that says what it means, defined once, so a change is made in one place.`, effort: 'low' })
+      }
+    }
+
+    if (goals.includes('oop')) {
+      const refused = refusedOverrides(lines, syntax.line)
+      if (refused.length > 0) {
+        summary.lspRisks += refused.length
+        candidates.push({ kind: 'lsp-risk', file: rel, test: isTest, size: refused.length * 4, examples: refused.slice(0, 5).map(r => `${rel}:${r.line} ${r.className}: ${r.text}`), suggestion: 'A child that refuses an operation its parent promises cannot stand in for the parent (Liskov substitution). Move the operation to a narrower type (a FlyingBird under Bird), split the interface, or make both children share a smaller common parent, so callers never check the type. Run the parent\'s tests against every child.', effort: 'high' })
       }
     }
 
@@ -367,7 +410,7 @@ export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude 
     }
   }
 
-  const rank = c => (c.test ? 0.5 : 1) * (c.kind === 'duplicate-code' ? c.size * 2 : c.kind === 'long-function' ? c.size : c.kind === 'magic-number' || c.kind === 'vague-name' ? c.size * 0.8 : c.kind === 'flag-argument' ? 4 : (c.blocking ?? 0) * 5 + c.size)
+  const rank = c => (c.test ? 0.5 : 1) * (c.kind === 'duplicate-code' ? c.size * 2 : c.kind === 'long-function' ? c.size : c.kind === 'magic-number' || c.kind === 'vague-name' ? c.size * 0.8 : c.kind === 'flag-argument' ? 4 : ['type-switch', 'lsp-risk', 'multi-purpose-name'].includes(c.kind) ? c.size * 1.5 : (c.blocking ?? 0) * 5 + c.size)
   candidates.sort((a, b) => rank(b) - rank(a))
   return {
     dest, goals, scope: { paths, exclude }, thresholds: settings, summary,
@@ -392,7 +435,7 @@ export function snapshot(destInput, name, current, { save = false } = {}) {
   }
   const before = JSON.parse(fs.readFileSync(file, 'utf8'))
   const delta = {}
-  for (const key of ['duplicateGroups', 'duplicatedLines', 'longFunctions', 'deepFunctions', 'manyParams', 'flagArguments', 'magicNumbers', 'vagueNames', 'commentBlocking', 'commentNonBlocking']) {
+  for (const key of ['duplicateGroups', 'duplicatedLines', 'longFunctions', 'deepFunctions', 'manyParams', 'flagArguments', 'magicNumbers', 'vagueNames', 'multiPurpose', 'typeSwitches', 'lspRisks', 'commentBlocking', 'commentNonBlocking']) {
     const was = before.summary[key] ?? 0
     delta[key] = { before: was, after: current.summary[key], change: current.summary[key] - was }
   }

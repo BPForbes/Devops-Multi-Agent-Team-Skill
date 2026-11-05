@@ -294,12 +294,12 @@ const TOOLS = [
   },
   {
     name: 'cleanup_scan',
-    description: 'Find cleanup candidates in the project: duplicated blocks (with every location and the number of lines), functions over the length, nesting or parameter limits, flag arguments, magic numbers, vague names, and noisy or commented-out code, ranked by payoff, with a suggested refactor for each. Give `statement` to scan what a plain-English statement asks for, or `goals`/`paths`/`exclude`/`thresholds` directly. `save` stores the summary under a name in devops-skill/thoughts/non-final/; `compare` shows the change against a saved one (use it after the cleanup to prove the numbers improved and nothing got worse). Heuristic and read-only apart from `save`; it runs no program.',
+    description: 'Find cleanup candidates in the project: duplicated blocks (with every location and the number of lines), functions over the length, nesting or parameter limits, flag arguments, functions named for two jobs, magic numbers, vague names, type checks that make code closed to extension, overrides that refuse what the parent promises (Liskov), and noisy or commented-out code, ranked by payoff, with a suggested refactor for each. Give `statement` to scan what a plain-English statement asks for, or `goals`/`paths`/`exclude`/`thresholds` directly. `save` stores the summary under a name in devops-skill/thoughts/non-final/; `compare` shows the change against a saved one (use it after the cleanup to prove the numbers improved and nothing got worse). Heuristic and read-only apart from `save`; it runs no program.',
     inputSchema: {
       type: 'object',
       properties: {
         dest, statement: { type: 'string', maxLength: 2000 },
-        goals: { type: 'array', items: { type: 'string', enum: ['comments', 'duplicates', 'split', 'dead', 'constants', 'naming'] } },
+        goals: { type: 'array', items: { type: 'string', enum: ['comments', 'duplicates', 'split', 'dead', 'constants', 'naming', 'oop'] } },
         paths: { type: 'array', items: { type: 'string' }, maxItems: 40 }, exclude: { type: 'array', items: { type: 'string' }, maxItems: 40 },
         thresholds: { type: 'object', properties: { maxFunctionLines: { type: 'integer' }, maxNesting: { type: 'integer' }, maxParams: { type: 'integer' }, minDuplicateLines: { type: 'integer' } }, additionalProperties: false },
         limit: { type: 'integer', minimum: 1, maximum: 200 }, save: { type: 'string', description: 'Snapshot name to save (lower-case letters, digits, hyphens).' }, compare: { type: 'string', description: 'Snapshot name to compare with.' },
@@ -312,7 +312,7 @@ const TOOLS = [
       const brief = typeof args.statement === 'string' ? parseStatement(args.statement, dest, allowedRoots()) : undefined
       const safePaths = list => (Array.isArray(list) ? list : []).filter(p => typeof p === 'string' && /^[A-Za-z0-9._\/-]+$/.test(p) && !p.includes('..') && !p.startsWith('/'))
       const result = scanProject(dest, {
-        goals: args.goals ?? brief?.goals ?? ['comments', 'duplicates', 'split', 'constants', 'naming'],
+        goals: args.goals ?? brief?.goals ?? ['comments', 'duplicates', 'split', 'constants', 'naming', 'oop'],
         paths: [...(brief?.scope.paths ?? []), ...safePaths(args.paths)], exclude: [...(brief?.scope.exclude ?? []), ...safePaths(args.exclude)],
         thresholds: { ...(brief?.thresholds ?? {}), ...(args.thresholds ?? {}) }, limit: Number.isInteger(args.limit) ? args.limit : 40, roots: allowedRoots(),
       })

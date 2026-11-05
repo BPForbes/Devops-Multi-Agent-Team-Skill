@@ -41,8 +41,10 @@ test('a plain-English statement becomes goals, scope, thresholds and constraints
   assert.ok(only.scope.exclude.includes('tests'))
 
   const vague = parseStatement('tidy this up', dir)
-  assert.deepEqual(vague.goals, ['comments', 'duplicates', 'split', 'constants', 'naming'])
-  assert.deepEqual(parseStatement('Follow clean code principles in src.', dir).goals.length, 5)
+  assert.deepEqual(vague.goals, ['comments', 'duplicates', 'split', 'constants', 'naming', 'oop'])
+  assert.deepEqual(parseStatement('Follow clean code principles in src.', dir).goals.length, 6)
+  assert.deepEqual(parseStatement('Make sure subclasses can replace their parent and nothing is closed to extension.', dir).goals, ['oop'])
+  assert.ok(parseStatement('Every function should be single-purpose.', dir).goals.includes('split'))
   assert.deepEqual(parseStatement('Replace the magic numbers and give things better names.', dir).goals.sort(), ['constants', 'naming'])
   assert.equal(vague.defaultedGoals, true)
   assert.deepEqual(parseStatement('Remove duplicated code. The colors are ugly.', dir).unrecognized, ['The colors are ugly.'])
@@ -155,4 +157,46 @@ test('options objects, expression arrows and constants are not reported as flag 
   const scan = scanProject(dir, { goals: ['split', 'naming'] })
   assert.deepEqual(scan.candidates.filter(c => c.kind === 'flag-argument').map(c => c.name), [])
   assert.equal(scan.candidates.filter(c => c.kind === 'vague-name').length, 0)
+})
+
+test('the scan finds functions named for two jobs, type switches that close code to extension, and children that refuse what the parent promises', () => {
+  const dir = project({
+    'src/shapes.ts': [
+      'class Bird {',
+      '  fly() { return 1 }',
+      '}',
+      'class Penguin extends Bird {',
+      '  fly() {',
+      '    throw new Error("Penguins can\'t fly")',
+      '  }',
+      '}',
+      'function drawAll(shapes) {',
+      '  for (const shape of shapes) {',
+      '    if (shape instanceof Circle) shape.drawCircle()',
+      '    if (shape instanceof Square) shape.drawSquare()',
+      '    if (shape instanceof Triangle) shape.drawTriangle()',
+      '  }',
+      '}',
+      'function loadAndParse(path) {',
+      '  return path',
+      '}',
+      'function isEmptyOrBlank(text) {',
+      '  return text === ""',
+      '}',
+      '',
+    ].join('\n'),
+    'src/birds.py': 'class Base:\n    def fly(self):\n        raise NotImplementedError\n\nclass Ostrich(Base):\n    def fly(self):\n        raise NotImplementedError("ostriches cannot fly")\n\ndef save_and_notify(x):\n    return x\n\ndef route(a):\n    if isinstance(a, Car):\n        return 1\n    if isinstance(a, Bike):\n        return 2\n    if a is None:\n        return 0\n',
+    'src/abstract.java': 'abstract class Animal {\n  abstract void move();\n  void rest() { throw new UnsupportedOperationException("not supported"); }\n}\n',
+  })
+  const scan = scanProject(dir, { goals: ['oop', 'split'] })
+  const of = kind => scan.candidates.filter(c => c.kind === kind)
+  assert.ok(of('type-switch').some(c => c.name === 'drawAll'), 'three instanceof checks in one function')
+  assert.ok(!of('type-switch').some(c => c.name === 'route'), 'two checks and an `is None` are not a switch')
+  const lsp = of('lsp-risk').flatMap(c => c.examples).join('\n')
+  assert.match(lsp, /shapes\.ts:6 Penguin/)
+  assert.match(lsp, /birds\.py:7 Ostrich/)
+  assert.doesNotMatch(lsp, /Base|Animal/, 'a base or abstract class may refuse; a child may not')
+  const names = of('multi-purpose-name').map(c => c.name).sort()
+  assert.deepEqual(names, ['loadAndParse', 'save_and_notify'])
+  assert.ok(scan.summary.typeSwitches >= 1 && scan.summary.lspRisks === 2 && scan.summary.multiPurpose === 2)
 })
