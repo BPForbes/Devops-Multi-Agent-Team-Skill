@@ -83,6 +83,13 @@ tests for a hierarchy). See oop-principles.md.
   caller needs a type check. Do not "fix" it by adding a guard in callers.
 - **Multi-purpose function:** one helper per job, the old name kept as the orchestrating parent while it has callers.
 
+## With Lean
+
+Only when the person has said yes for this goal. For a step that rewrites a pure function, state
+`theorem old_eq_new : ∀ x, old x = new x` over a small Lean model of both versions and prove it, time-boxed. Record
+proved, disproved (the counterexample becomes a test) or tests only. A proof about the Lean model does not cover
+Python or Java code; their tests still run. See formal-check.md.
+
 ## Dead code and names
 
 - Delete dead code only with proof: no references (`reuse_search`), not exported

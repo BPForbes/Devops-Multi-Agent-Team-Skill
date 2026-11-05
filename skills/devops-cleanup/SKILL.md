@@ -70,6 +70,13 @@ parameter limits, flag arguments, magic numbers, vague names, and noisy or comme
    security change.
 6. Nobody pushes before QA's PASS and the person's go.
 
+## Lean (optional)
+
+If the person said yes to Lean for this goal ([formal-check.md](../devops-multi-agent-team/references/formal-check.md)),
+the plan adds an equivalence theorem for each step that changes a pure function, and the Cleaner proves it before
+the step counts as done. A step that cannot be proved in the time-box goes ahead on its tests and the plan says
+"tests only". Proofs never replace the tests, the Reviewers' check or QA's `compare`.
+
 ## What cleanup is not
 
 A feature, a bug fix, a performance change, a rename the person did not ask for,

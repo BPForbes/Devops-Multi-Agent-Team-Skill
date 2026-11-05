@@ -3269,6 +3269,88 @@
           ]
         ]
       }
+    },
+    {
+      "id": "lean",
+      "name": "Lean 4",
+      "layers": [
+        "science"
+      ],
+      "detect": {
+        "files": [
+          "lean-toolchain",
+          "lakefile.lean",
+          "lakefile.toml"
+        ],
+        "extensions": [
+          ".lean"
+        ]
+      },
+      "toolchain": {
+        "install": [
+          "install elan, the Lean toolchain manager (https://github.com/leanprover/elan); the project's lean-toolchain file pins the version",
+          "lake --version"
+        ],
+        "verify": "lean --version"
+      },
+      "validate": [
+        "lake build",
+        "lake test   (only if the project defines a test driver)"
+      ],
+      "sandboxImage": null,
+      "security": {
+        "sast": null,
+        "sca": [],
+        "secrets": [
+          "gitleaks detect --redact"
+        ],
+        "unanalysed": true,
+        "note": "No scanner reads this language and a lakefile is code that runs at build time; the Security seat reviews lakefiles and dependency revisions in lake-manifest.json by hand and the report says so."
+      },
+      "style": [
+        "Follow Mathlib style when the project depends on Mathlib; theorem and lemma names state what they prove; no sorry or admit in merged code (a proof is either done or not claimed); prefer small lemmas over one long tactic block."
+      ],
+      "sensitiveHints": [
+        "lakefile.lean (arbitrary code at build), @[extern] and @[implemented_by] (code that the proof does not cover), unsafe declarations, IO actions reading the network or files"
+      ],
+      "interactsWith": [
+        {
+          "with": "c",
+          "via": "Lean compiles to C; @[extern] and @[export] cross the C ABI",
+          "contract": "the C header and the exported symbol names"
+        },
+        {
+          "with": "python",
+          "via": "the compiled C library called through ctypes or cffi",
+          "contract": "the C signatures; a proof about the Lean code does not cover the Python caller"
+        },
+        {
+          "with": "java",
+          "via": "the compiled C library called through JNI or the Foreign Function & Memory API",
+          "contract": "the C signatures; a proof about the Lean code does not cover the Java caller"
+        }
+      ],
+      "setupNotes": [
+        "Lean 4 has no official backend for Python or Java: it emits C. A proof is evidence about the Lean model; the code in the target language still needs its own tests (see references/formal-check.md).",
+        "lake fetches dependencies over the network; run it in the sandbox with network only for the hosts the profile allows, and pin Mathlib by revision.",
+        "Mathlib builds are large: use its cache (lake exe cache get) outside the sandbox image."
+      ],
+      "docs": {
+        "format": "doc comments (/-- ... -/ before a declaration, /-! ... -/ for a module)",
+        "lineComment": "--",
+        "check": "only if the project publishes docs: the doc-gen4 dependency"
+      },
+      "comments": {
+        "line": [
+          "--"
+        ],
+        "block": [
+          [
+            "/-",
+            "-/"
+          ]
+        ]
+      }
     }
   ],
   "presets": {

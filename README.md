@@ -5,7 +5,7 @@ commands, plus:
 
 1. **A language setup file** ([`languages.json`](languages.json), explained in
    [`LANGUAGES.md`](LANGUAGES.md)) that says what build, test, lint, scan and
-   style mean for 39 languages and how they interact, plus a services file
+   style mean for 40 languages and how they interact, plus a services file
    ([`services.json`](services.json)) for Docker, cloud, AI and VMs and a
    sandbox policy, installable through chat with an MCP server.
 2. **A Claude mod** (`hooks/`) that detects the languages in the open project,
@@ -19,7 +19,7 @@ commands, plus:
 | `skills/devops-multi-agent-team/` | The skill: `SKILL.md` and `references/` (seat ids, pods, side worktrees, Push JSON, QA policy, SOC 2 review, templates). Language-neutral. |
 | `agents/` | Nine role prompts: researcher, reviewer, CI, quality (QA), security, ticket lead, verifier, integrator, communicator. |
 | `commands/` | `/goal`, `/create-subagent`, `/code-review`, `/repro`, `/triage`. |
-| `languages.json`, `LANGUAGES.md` | The language setup file (39 languages) and its guide. |
+| `languages.json`, `LANGUAGES.md` | The language setup file (40 languages) and its guide. |
 | `services.json`, `SERVICES.md` | Docker, cloud, AI and VM services, the sandbox policy, and their guide. |
 | `mcp/server.mjs` | The MCP server for installing and managing through chat. |
 | `templates/project.md` | Skeleton of the per-project profile (`.devops/project.md`). |
@@ -66,7 +66,7 @@ prompts) walks the same steps.
 
 | Tool | Does |
 |------|------|
-| `list_languages`, `get_language` | the 39 languages, each with install, validation, security tools, style and how it interacts with the others |
+| `list_languages`, `get_language` | the 40 languages, each with install, validation, security tools, style and how it interacts with the others |
 | `list_services`, `get_service` | Docker, Podman, devcontainers, Kubernetes, AWS, GCP, Azure, Cloudflare, Claude, GPT, Gemini, Ollama, Multipass, Lima, Vagrant, QEMU |
 | `detect_project`, `status` | what the project's files show; what is installed |
 | `install_devops_team` | skill, agents, commands for Cursor and/or Claude, `.devops/` data, profile, sandbox doc, `.gitignore` block (plan unless `apply=true`) |
@@ -110,7 +110,7 @@ which holds the committed profile `.devops/project.md`. The tests check this aga
 
 ## Languages, services and the sandbox
 
-- [`LANGUAGES.md`](LANGUAGES.md) / `languages.json`: 39 languages (C, C++,
+- [`LANGUAGES.md`](LANGUAGES.md) / `languages.json`: 40 languages (C, C++,
   assembly, Rust, Zig, Go, Swift, C#, F#, Java, Kotlin, Scala, Clojure, Python,
   Ruby, PHP, Perl, Elixir, Erlang, Haskell, OCaml, R, Julia, Fortran, COBOL,
   TypeScript, JavaScript, HTML, CSS, Dart, Lua, GDScript, WebAssembly, shell,

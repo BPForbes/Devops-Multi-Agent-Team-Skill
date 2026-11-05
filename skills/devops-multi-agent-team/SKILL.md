@@ -124,7 +124,11 @@ push either.
    `devops-skill/thoughts/non-final/review-<seat-id>.md`. An omitted or
    wrong hunk is a finding.
 4. Coder fixes on the side-branch, updates the Push JSON, and notifies
-   Reviewers. Either side may Push again until **Satisfied**.
+   Reviewers. Either side may Push again until **Satisfied**. If a thread
+   reaches the profile's `Formal check rounds` (default 3) still disputing
+   what pure code does and Lean is present, ask the person once: "Use Lean
+   to check it? (yes/no)"; a plain yes turns it on for this goal
+   ([formal-check.md](references/formal-check.md)).
    Satisfied does **not** authorize a push.
 5. Then **Security**: a full review on every change (except review-bot
    feedback fixes) ([soc2-review.md](references/soc2-review.md)),
@@ -161,6 +165,7 @@ multi-branch merge rule: [virtual-git.md](references/virtual-git.md).
 | Topic | File |
 |-------|------|
 | **Clean code** (names, small functions, DRY with care, no magic numbers, simplicity) | [clean-code.md](references/clean-code.md) |
+| **Formal check with Lean 4** (optional; asked at a review-round count; used by cleanup while on) | [formal-check.md](references/formal-check.md) |
 | **Clean-code topics** (error handling, boundaries, unit tests, Law of Demeter, special case, feature envy, overengineering) | [clean-code-topics.md](references/clean-code-topics.md) |
 | **Single purpose, closed for modification, Liskov substitution** (with the Shape and Bird examples) | [oop-principles.md](references/oop-principles.md) |
 | Documentation first, module mind map, reuse | [research-and-reuse.md](references/research-and-reuse.md) |

@@ -24,6 +24,7 @@ Async. You never push, open a PR or create a branch. **Ask** by topic through th
 3. One step at a time, one kind of change per step: comments, duplicates, extraction or dead code. Run the validation after
    **every** step. If it turns red, revert the step; one retry; then ask.
 4. Apply `oop-principles.md` where the plan lists it: split multi-purpose functions into helpers; replace a type switch with polymorphism or a table; restructure a hierarchy so children can replace their parent. The last two can change a public API, so each is its own step with tests first and the person's approval.
+4a. If Lean is on for this goal, prove the equivalence theorem the plan names for each pure-function step, time-boxed; otherwise record "tests only" ([formal-check.md](../skills/devops-multi-agent-team/references/formal-check.md)).
 4b. Apply `clean-code.md`: intention-revealing names (rename only what the statement asked for), named constants for repeated literals, flag arguments split into two functions. Duplicates: call code that already exists; otherwise keep one implementation and replace the copies with calls. Split
    large functions into well-named private helpers and early returns. Keep signatures, ordering, errors, side effects.
 5. Comments: delete restating comments, commented-out code, process notes and questions; keep the ones that say why. Add

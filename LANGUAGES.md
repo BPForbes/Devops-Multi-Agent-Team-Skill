@@ -76,7 +76,7 @@ shared contract.
 | **infra** | Terraform, containers, CI workflows | pipelines, deploys, environments | a workflow weakened to get green; secrets in `vars`; a deploy token broader than needed |
 | **data** | SQL, migrations | schema and queries | an edited migration; a destructive change with no rollback |
 | **game** | C#, C++, GDScript, Lua | engine, game logic and engine scripting | engine-only steps (editor, export templates) reported as passes instead of `NOT RUN`; assets committed as binaries without a size budget |
-| **science** | Python, R, Julia, Haskell, OCaml, Clojure, F#, Fortran | numerical and functional-first work, notebooks | non-deterministic results compared for equality; notebooks that only run on one person's machine; an unpinned environment |
+| **science** | Python, R, Julia, Haskell, OCaml, Clojure, F#, Fortran, Lean 4 | numerical and functional-first work, notebooks | non-deterministic results compared for equality; notebooks that only run on one person's machine; an unpinned environment |
 
 ### Boundary rules (they apply to every pair)
 
@@ -317,6 +317,8 @@ Install: install the Clojure CLI (https://clojure.org/guides/install_clojure) or
 
 #### `fsharp` — F#
 Install: install the .NET SDK (https://dot.net). Validate: `dotnet restore`; `dotnet fantomas --check .`; `dotnet build --warnaserror`. No scanner reads it: reviewed by hand and reported as not analysed. Sandbox image `mcr.microsoft.com/dotnet/sdk:8.0`. CodeQL does not support F#; the C# entry's scan covers only C# projects in the same solution.
+#### `lean` — Lean 4
+Install: install elan (https://github.com/leanprover/elan); the `lean-toolchain` file pins the version. Validate: `lake build`; `lake test` if a test driver exists. No scanner reads it and a lakefile runs code at build time: reviewed by hand and reported as not analysed. No sandbox image: install elan in the sandbox. Lean compiles to C and has no Python or Java backend, so a proof is evidence about the Lean model, not about code in another language. Used mainly as an optional formal check ([formal-check.md](skills/devops-multi-agent-team/references/formal-check.md)); `no sorry` in merged code.
 
 ## Stripped from the requested list
 

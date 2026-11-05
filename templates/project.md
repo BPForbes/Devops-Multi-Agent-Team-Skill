@@ -91,6 +91,7 @@ pinning them in tooling.
 - **Tooling wired:** CI `<GitHub Actions | Buildkite | none>` · quality `<Sonar | none>` · security `<Snyk | none>` · tickets `<Linear | GitHub issues | none>` · browser `<MCP | none>`
 - **Story catalog:** project code `<XX>`, baseline `<branch sha>`, linked catalogs `<other repos' .devops/stories paths>`, issue tracker `<GitHub issues>`
 - **Cleanup thresholds** (defaults in `languages.json` `cleanup`, from `clean-code.md`; change here when the project wants different ones): function lines `30`, nesting `3`, parameters `4`, duplicate block `6` lines, repeated literal `2`
+- **Formal check rounds** (review rounds on one thread before the Orchestrator offers Lean, if Lean is present): `3`
 - **Extension points** (the parents, interfaces or registries new behavior must plug into, and where children are listed): `<...>`
 - **Project conventions beyond clean-code.md** (naming, structure, formatter and linter commands): `<...>`
 - **Docs to read first** (the Researcher reads these before any code): `<README, docs/, ADRs, .tex sources, runbooks, schema files>`
