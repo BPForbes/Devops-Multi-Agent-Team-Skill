@@ -123,16 +123,19 @@ output and `devops-skill/thoughts/` are skipped.
 The `project-mindmap` skill ([SKILL.md](../../project-mindmap/SKILL.md)) and the
 `project-mindmap` rule cover this. For any question about the project:
 
-1. **Quick scan**: `mindmap_overview` (or `/devops map`, or
-   `.devops/mindmap/OVERVIEW.md`; with the Claude mod it is already in the
-   session prompt). Answer from it when it is enough.
+No command is needed: the person asks in plain words ("what is this
+project?", "how does `total` work?", "refresh the map") and the
+`project-mindmap` skill picks the tool.
+
+1. **Quick scan**: `mindmap_overview` (or `.devops/mindmap/OVERVIEW.md`; with
+   the Claude mod it is already in the session prompt). Answer from it when it is enough.
 2. **Specifics**: `mindmap_tree` on the node ("how does X work?": its
    documentation, note, children and the documentation of what it calls and
-   what calls it) or `mindmap_query` (or `/devops map TEXT`), then open a file
+   what calls it) or `mindmap_query`, then open a file
    only at the line range given.
 3. **Freshness**: the overview says how many files changed since the save; read
    those directly and offer `mindmap_build` with `save=true`
-   (`/devops map refresh`).
+   when the person asks for it.
 
 No roles, thought files or gates are involved, and the tools write nothing
 unless asked to save.

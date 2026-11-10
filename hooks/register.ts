@@ -20,20 +20,7 @@ const HELP = [
   '/devops gates on|off (you) turn the push and branch gates on or off',
   '/devops monitor on|off (you) turn the failed-check monitor on or off',
   '/devops comments warn|strict|off (you) comment audit on git commit: warn (default), refuse a commit with blocking findings, or off',
-  '/devops map          the project at a glance, from the mind map (works without the DevOps team)',
-  '/devops map refresh  rebuild and save the mind map (.devops/mindmap/)',
-  '/devops map how NAME how a function, file or module works: its docs, note and links',
-  '/devops map TEXT     find functions, files and docs whose name contains TEXT',
 ].join('\n')
-
-async function mindmap($: EngineInterface, args: string[]): Promise<string> {
-  const root = await $.session.root()
-  const ran = await $.process
-    .run(['node', `${$.plugin.root}/scripts/devops-mindmap.mjs`, ...args, '--dest', root], { timeoutMs: 30000 })
-    .catch(() => undefined)
-  if (ran === undefined) return 'The mind map script could not be run (is node on the PATH?).'
-  return ran.exitCode === 0 ? ran.stdout.trim() : `devops-mindmap failed: ${ran.stderr.trim().slice(0, 300)}`
-}
 
 async function detect($: EngineInterface): Promise<Found[]> {
   const root = await $.session.root()
@@ -153,7 +140,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'devops',
       description: 'DevOps multi-agent team: languages, gates, QA verdict',
-      argumentHint: '[map [refresh|how NAME|TEXT]|languages|setup|push-ok|push-reset|allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off]',
+      argumentHint: '[languages|setup|push-ok|push-reset|allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off]',
     })
     const found = await detect($)
     await $.state.set({ plugin: 'devops-multi-agent-team', key: 'languages' } as const, found.map(f => f.id))
@@ -184,14 +171,6 @@ export const register: Register = on => {
           `branches you allowed: ${branches.length === 0 ? 'none' : branches.join(', ')}`,
         ].join('\n'),
       }
-    }
-    if (word === 'map') {
-      if (rest === '') return { text: await mindmap($, ['overview']) }
-      if (rest === 'refresh') return { text: await mindmap($, ['build', '--save']) }
-      const how = /^how\s+([\w.$/#-]{1,200})$/.exec(rest)
-      if (how) return { text: await mindmap($, ['tree', '--node', how[1], '--depth', '1']) }
-      if (!/^[\w.$/-]{2,80}$/.test(rest)) return { text: 'Usage: /devops map [refresh|TEXT], TEXT being a name or path fragment (letters, digits, . _ $ / -).' }
-      return { text: await mindmap($, ['query', '--search', rest]) }
     }
     if (word === 'languages') {
       const found = await detect($)
@@ -326,7 +305,7 @@ export const register: Register = on => {
       ? [{
           id: `${PLUGIN}:mindmap`,
           text: [
-            'Project mind map (quick scan, generated; use it with or without the DevOps team). For a question about this project, answer from it first; for how something works use the mindmap_tree MCP tool (or /devops map how NAME), for other specifics mindmap_query or /devops map TEXT, and open files only at the line ranges they give. It can be out of date: mindmap_status (or /devops map) says which files changed; read those directly.',
+            'Project mind map (quick scan, generated; no command needed, with or without the DevOps team). When the person asks about this project in plain words, answer from it first; for how something works use the mindmap_tree MCP tool, for other specifics mindmap_query, and open files only at the line ranges they give. It can be out of date: mindmap_status says which files changed; read those directly, and when the person asks to refresh the map, call mindmap_build with save=true.',
             overview.length > MAX_OVERVIEW_CHARS ? overview.slice(0, MAX_OVERVIEW_CHARS) + '\n[cut; full text in .devops/mindmap/OVERVIEW.md]' : overview,
           ].join('\n\n'),
           scope: 'session' as const,
@@ -343,7 +322,7 @@ export const register: Register = on => {
         ? 'Read .devops/project.md before planning: it lists the validation and security commands per language.'
         : 'No .devops/project.md yet: /devops setup shows how to create it.',
       'Only QA may give the OK to push; git push, gh pr create|merge and creating a git branch are refused until QA records "Publish gate: PASS" and the person runs /devops push-ok.',
-      mindmapSection.length === 0 ? 'No mind map saved yet: /devops map refresh (or mindmap_build with save=true) builds one for quick answers about the project.' : undefined,
+      mindmapSection.length === 0 ? 'No mind map saved yet: when the person asks about the project or asks for a map, mindmap_build with save=true builds one.' : undefined,
     ].filter(Boolean).join(' ')
 
     return { sections: [...composed.sections, { id: `${PLUGIN}:context`, text, scope: 'session' as const }, ...mindmapSection] }

@@ -7,8 +7,9 @@ description: >-
   what calls or imports what, which docs explain a part, and whether something
   already exists before writing it. Use in plain chat for "what is this repo",
   "explain the structure", "where is X defined", "who uses X", "what does this
-  module do", "which libraries do we use", onboarding and orientation questions,
-  and /mindmap.
+  module do", "which libraries do we use", "how does X work", "map this
+  project", "refresh the map", "note how X works", onboarding and orientation
+  questions. No command is needed: the person asks in plain words.
 ---
 
 # Project mind map (plain chat)
@@ -18,6 +19,17 @@ functions with line ranges, call links, libraries and possible duplicates
 ([mind-map.md](../devops-multi-agent-team/references/mind-map.md) has the detail).
 In plain chat it replaces reading the tree: no team, no roles, no thought files,
 no gates. You answer the person directly.
+
+The person never needs a command. Read what they ask in plain words and pick
+the step:
+
+| They say something like | Do |
+|-------------------------|----|
+| "what is this project?", "give me an overview", "how is it laid out?" | step 1 |
+| "how does `total` work?", "explain the cart module" | step 3, `mindmap_tree` |
+| "where is X defined?", "who calls X?", "what uses lodash?", "find anything about routes" | step 3, `mindmap_query` |
+| "map this project", "refresh the map", "the map is out of date" | step 5, build and save |
+| "remember that X works like ...", "note how X works" | Adding documentation, below |
 
 ## Steps
 
@@ -39,12 +51,11 @@ no gates. You answer the person directly.
    **Other specifics** with `mindmap_query`, one question at a time:
    `symbol` (definition, signature, line range, callers, callees, tests, docs),
    `file`, `module`, `library`, or `search` for a name or path fragment.
-   `/devops map TEXT` does the search from the chat.
 4. **Read narrowly.** Open a file only to answer what the map cannot (the body
    of a function, a value), and only at the line range the map gives.
 5. **Freshness.** The overview says how many files changed since the map was
    saved. When the question touches one of them, read it directly. Offer to
-   refresh (`mindmap_build` with `save=true`, or `/devops map refresh`); it
+   refresh (`mindmap_build` with `save=true`); it
    writes only `.devops/mindmap/`. With no saved map, the tools build one in
    memory and write nothing.
 

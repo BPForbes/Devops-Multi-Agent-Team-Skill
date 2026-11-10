@@ -32,12 +32,6 @@ do not push. Orchestrator pushes only after QA PASS. Agent table:
 **Do not edit** product code. Probes:
 [thoughts-layout.md](thoughts-layout.md).
 
-## `/mindmap`
-
-Build, check or query the repository mind map ([mind-map.md](mind-map.md)):
-no argument checks `mindmap_status` and rebuilds when stale; a name, path,
-module or library answers from `mindmap_query`.
-
 ## `/repro`
 
 Recreate with exact commands and exit codes. Write `repro-<topic>.md`. Repro files are process output.
