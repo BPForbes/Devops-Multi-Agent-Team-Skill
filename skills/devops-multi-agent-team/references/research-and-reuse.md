@@ -38,9 +38,12 @@ is a finding, not something to quietly resolve.
 
 Every research brief carries a **module mind map**: a Mermaid diagram of the
 modules the change could touch, how they depend on each other, and where
-each could be extended. Build it from evidence, not memory: the MCP tool
-`module_map` (or `devops-research module-map`) lists modules, languages and
-the imports between them; add what you learn from the docs.
+each could be extended. Build it from evidence, not memory: start from the
+repository mind map ([mind-map.md](mind-map.md): `.devops/mindmap/MINDMAP.md`,
+`mindmap_status`, `mindmap_query`), which already holds the docs, modules,
+imports, functions, call links and libraries; the MCP tool `module_map` (or
+`devops-research module-map`) gives the module graph alone. Add what you learn
+from the docs. Read source files only at the line ranges the map gives.
 
 ```mermaid
 graph TD
@@ -59,8 +62,9 @@ reach into another).
 
 Before the brief is done, search for each noun and verb of the new concept:
 
-- exact and near-exact names (`reuse_search` over the project, plus the
-  language's own search),
+- exact and near-exact names (`mindmap_query` with `symbol` and `search`,
+  `reuse_search` over the project, plus the language's own search),
+- the mind map's **Possible duplicates** in the area of the change,
 - the same behaviour under another name (look at callers of the nearest
   neighbour),
 - shared helpers, base classes, registries and generated clients,

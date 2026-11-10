@@ -18,6 +18,7 @@ import { parseStatement, scanProject, snapshot } from '../scripts/devops-cleanup
 import { formalCheck } from '../scripts/devops-formal.mjs'
 import { ghasPlan } from '../scripts/devops-ghas.mjs'
 import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, parseStory } from '../scripts/devops-stories.mjs'
+import { buildMindMap, mindMapQuery, mindMapStatus } from '../scripts/devops-mindmap.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 
@@ -34,6 +35,7 @@ const INSTRUCTIONS = [
   'Any language can be used for any purpose; layers are only sorting tags. Use list_languages / get_language / add_language for languages not yet defined.',
   'The server only writes .cursor/, .claude/, .devops/, devops-skill/ (thought files and cleanup snapshots), .gitignore and (ghas_plan with apply) the .github security files and SECURITY.md inside the project, and never runs project commands; sandbox_plan only prints a container command; tag tools never push, move or delete a tag.',
   'Researchers: read documentation first, then module_map and reuse_search before any code is written.',
+  'Every seat: before opening source files, read .devops/mindmap/MINDMAP.md (or call mindmap_build), call mindmap_status to learn which files changed since it was saved, and ask mindmap_query for definitions, signatures, line ranges, callers, importers, tests, docs and libraries instead of re-reading files to find them.',
 ].join(' ') + '\n\n' + SETUP_SCRIPT
 
 let clientRoots = []
@@ -231,6 +233,34 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
     annotations: { readOnlyHint: true },
     run: args => moduleMap(projectDir(args), allowedRoots()),
+  },
+  {
+    name: 'mindmap_build',
+    description: 'The repository mind map, so seats stop re-reading files to rediscover structure: documentation (title, summary, headings, links), modules (files, languages, dependencies both ways, libraries, key exports), every code file (hash, imports, importers, libraries, tests, docs) and its functions, classes and types (signature and line range), call links between functions, libraries (declared in which manifest, used by which files, undeclared or unused) and names defined in more than one file (possible duplicate implementations). Returns a compact Markdown summary; with save=true writes .devops/mindmap/mindmap.json and .devops/mindmap/MINDMAP.md. Heuristic (no compiler). Runs no program.',
+    inputSchema: { type: 'object', properties: { dest, save: { type: 'boolean' }, full: { type: 'boolean', description: 'Also return the whole map as data (large; prefer mindmap_query).' } }, additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    run: args => {
+      const result = buildMindMap(projectDir(args), { roots: allowedRoots(), save: optionalBool(args, 'save', false) })
+      return { dest: result.dest, counts: result.map.counts, saved: result.saved ?? null, summary: result.summary, ...(optionalBool(args, 'full', false) ? { map: result.map } : {}) }
+    },
+  },
+  {
+    name: 'mindmap_status',
+    description: 'Compare the saved mind map with the files on disk: which code and doc files changed, were added or were removed, and which modules they belong to. Re-read only those files; trust the map for the rest. Read-only.',
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => mindMapStatus(projectDir(args), { roots: allowedRoots() }),
+  },
+  {
+    name: 'mindmap_query',
+    description: 'Ask the mind map one question instead of reading files: `symbol` (where it is defined, its signature and line range, callers, callees, tests, docs; a warning when defined twice), `file` (symbols with line ranges, imports, importers, libraries, tests, docs, calls in and out), `module` (files, dependencies both ways, libraries, exports), `library` (manifest, version, files using it) or `search` (names, paths and doc titles containing the text). Uses the saved map unless fresh=true. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, symbol: { type: 'string' }, file: { type: 'string' }, module: { type: 'string' }, library: { type: 'string' }, search: { type: 'string' }, fresh: { type: 'boolean' }, limit: { type: 'integer', minimum: 1, maximum: 200 } },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => mindMapQuery(projectDir(args), { symbol: args.symbol, file: args.file, module: args.module, library: args.library, search: args.search, fresh: optionalBool(args, 'fresh', false), limit: Number.isInteger(args.limit) ? args.limit : 30 }, { roots: allowedRoots() }),
   },
   {
     name: 'reuse_search',

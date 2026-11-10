@@ -38,6 +38,11 @@ for anything. It is built by `scripts/devops-setup.mjs install` from
 installed project; per-project tweaks go in `.devops/languages.local.json`)
 and edited by hand afterwards.
 
+- **Then the repository mind map** ([mind-map.md](references/mind-map.md)):
+  `mindmap_status`, re-read only the files it lists as changed, read
+  `.devops/mindmap/MINDMAP.md`, and ask `mindmap_query` for definitions,
+  line ranges, callers, importers, tests, docs and libraries instead of
+  opening files to find them. No saved map: `mindmap_build` with `save=true`.
 - **No profile:** say so, run `node <plugin>/scripts/devops-setup.mjs
   detect`, show the human the result and ask before installing one.
   Do not guess commands from memory.
@@ -173,6 +178,7 @@ multi-branch merge rule: [virtual-git.md](references/virtual-git.md).
 | **Clean-code topics** (error handling, boundaries, unit tests, Law of Demeter, special case, feature envy, overengineering) | [clean-code-topics.md](references/clean-code-topics.md) |
 | **Single purpose, closed for modification, Liskov substitution** (with the Shape and Bird examples) | [oop-principles.md](references/oop-principles.md) |
 | Documentation first, module mind map, reuse | [research-and-reuse.md](references/research-and-reuse.md) |
+| **Repository mind map** (docs, modules, imports, functions, calls, libraries, possible duplicates; read before opening files) | [mind-map.md](references/mind-map.md), `mindmap_*` tools |
 | Comments and doc comments (Reviewers strict) | [comment-standards.md](references/comment-standards.md) |
 | Failed checks: monitor, auto-correct, stop | [monitoring.md](references/monitoring.md) |
 | Releases: tags as project history | [version-tags.md](references/version-tags.md) |
@@ -230,7 +236,7 @@ background subagents.
 
 | Agent file | Role | Primary tool |
 |------------|------|--------------|
-| `devops-researcher.md` | Documentation & Research | docs first, module map, reuse search, tags |
+| `devops-researcher.md` | Documentation & Research | docs first, mind map, module map, reuse search, tags |
 | `devops-coder.md` | Implementation | detached worktree, profile validation |
 | `devops-reviewer.md` | Pre-QA reviewers | review thread |
 | `devops-ci-engineer.md` | CI | Buildkite / GitHub Actions |

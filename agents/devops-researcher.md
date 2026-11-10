@@ -50,8 +50,12 @@ and [version-tags.md](../skills/devops-multi-agent-team/references/version-tags.
    contracts and generated clients for anything that already does the
    job, in every language of the project.
 2. Find online resources (`WebSearch`, `WebFetch`, browser): official docs, specs, the library's own repository and changelog. Prefer primary sources, cite each URL with the date read, and check it fits this project's versions.
-3. **Map the modules.** Build a Mermaid module mind map (`module_map`, then
-   add what the docs say): modules, dependencies, extension points, owners,
+3. **Map the modules.** Start from the repository mind map
+   ([mind-map.md](../skills/devops-multi-agent-team/references/mind-map.md)):
+   `mindmap_status` (re-read only what changed), `MINDMAP.md`, then
+   `mindmap_query` for symbols, files, modules and libraries instead of
+   reading files to find them. Build the brief's Mermaid module mind map from it
+   (`module_map` for the module graph alone, then add what the docs say): modules, dependencies, extension points, owners,
    forbidden edges. Read the last tag-to-tag summaries (`tag_history`) to see
    which modules change often.
 3a. **Note the extension points.** For each parent type, interface or registry the change could extend, record where it is declared, who extends it today, and any place that switches on a concrete type instead (those are where new variants will cost an edit).

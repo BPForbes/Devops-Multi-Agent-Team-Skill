@@ -18,12 +18,13 @@ commands, plus:
 |------|------|
 | `skills/devops-multi-agent-team/` | The skill: `SKILL.md` and `references/` (seat ids, pods, side worktrees, Push JSON, QA policy, SOC 2 review, templates). Language-neutral. |
 | `agents/` | Nine role prompts: researcher, reviewer, CI, quality (QA), security, ticket lead, verifier, integrator, communicator. |
-| `commands/` | `/goal`, `/create-subagent`, `/code-review`, `/repro`, `/triage`. |
+| `commands/` | `/goal`, `/create-subagent`, `/code-review`, `/repro`, `/triage`, `/mindmap`. |
 | `languages.json`, `LANGUAGES.md` | The language setup file (40 languages) and its guide. |
 | `services.json`, `SERVICES.md` | Docker, cloud, AI and VM services, the sandbox policy, and their guide. |
 | `mcp/server.mjs` | The MCP server for installing and managing through chat. |
 | `templates/project.md` | Skeleton of the per-project profile (`.devops/project.md`). |
 | `scripts/devops-setup.mjs` | `list`, `detect`, `profile`, `install`, `status`, `check`, `sandbox`. No dependencies, Node 18+. |
+| `scripts/devops-mindmap.mjs` | The repository mind map: `build [--save]`, `status`, `query`. Writes `.devops/mindmap/`. |
 | `hooks/`, `types/`, `.claude-plugin/` | The Claude mod and plugin manifest. |
 
 ## Install through chat (MCP)
@@ -76,6 +77,7 @@ prompts) walks the same steps.
 | `check_toolchain` | is each tool installed? (`<tool> --version` only; env vars reported as set/unset, never their values) |
 | `sandbox_plan` | prints the container command that runs a command for a language in the sandbox; runs nothing |
 | `module_map` | research: modules, languages and the imports between them as a Mermaid mind map |
+| `mindmap_build`, `mindmap_status`, `mindmap_query` | the repository mind map every seat reads before opening files: docs (title, summary, links), modules, file imports and importers, functions and classes with signatures and line ranges, call links, libraries (declared vs used), tests and docs per file, and names defined twice; `status` lists only the files changed since it was saved; `query` answers one question (symbol, file, module, library, search) so files are not re-read to find it |
 | `reuse_search` | research: where a term (or a spelling variant) already appears in code, comments and docs (Markdown, LaTeX, ...); secret files skipped |
 | `tag_history` | versions: how the project changed between git tags (commits, files, lines, directories, languages, commit types), unreleased work and a suggested bump; `save` keeps a snapshot in `.devops/tags/` |
 | `tag_plan`, `tag_create` | versions: plan the next semver tag; create one annotated local tag. Never pushes, moves or deletes a tag |
@@ -133,6 +135,7 @@ which holds the committed profile `.devops/project.md`. The tests check this aga
 | Rule | Where | Enforced by |
 |------|-------|-------------|
 | **Documentation first** (Markdown, LaTeX, code comments, then code, then the web) | `research-and-reuse.md`, researcher agent | Reviewers reject a brief without it |
+| **Repository mind map** read before opening source files: re-read only what `mindmap_status` says changed, look up definitions, callers and libraries with `mindmap_query`, read files only at the line ranges it gives; fewer tokens and no second copy of a function | [`mind-map.md`](skills/devops-multi-agent-team/references/mind-map.md), `mindmap_*` tools | Coders refresh it before handoff; Reviewers: a name it shows defined elsewhere is a re-implementation finding; QA: nothing stale for the changed files |
 | **Module mind map + reuse map** before any Coder starts; "new, because ..." must hold up | `research-and-reuse.md`, `module_map`, `reuse_search` | Reviewers: re-implementation is a blocking finding; QA checks the brief |
 | **Clean code** (intention-revealing names, small single-purpose functions, DRY with care, no magic numbers, simplicity over cleverness, SOLID where it fits) | `clean-code.md`, `rules/clean-code.md` | Coders write to it; Reviewers label violations; `cleanup_scan` finds magic numbers, vague names, flag arguments, long or deep functions and duplicates |
 | **Formal check with Lean 4** (`formal-check.md`; optional, asked per goal) | `formal-check.md`, `proof-writeup-template.md`, `scripts/devops-formal.mjs` | When on: Researchers pick formal targets, Coders write Lean and a write-up for advanced logic, Reviewers check statement and trace, QA runs the Lean gate |
