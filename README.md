@@ -25,14 +25,21 @@ commands, plus:
 | `mcp/server.mjs` | The MCP server for installing and managing through chat. |
 | `templates/project.md` | Skeleton of the per-project profile (`.devops/project.md`). |
 | `scripts/devops-setup.mjs` | `list`, `detect`, `profile`, `install`, `status`, `check`, `sandbox`. No dependencies, Node 18+. |
-| `scripts/devops-mindmap.mjs` | The repository mind map: `overview`, `build [--save]`, `status`, `query`. Writes only `.devops/mindmap/`, and only with `--save`. |
+| `scripts/devops-mindmap.mjs` | The repository mind map: `overview`, `tree`, `note`, `build [--save]`, `status`, `query`. Writes only `.devops/mindmap/`, and only with `--save`. |
 | `hooks/`, `types/`, `.claude-plugin/` | The Claude mod and plugin manifest. |
 
 ## Repository mind map: with or without the team
 
-`.devops/mindmap/` holds a generated map of the project: `OVERVIEW.md` (a quick
-scan of about forty lines), `MINDMAP.md` (modules, docs, hubs, libraries,
-possible duplicates) and `mindmap.json` (behind `mindmap_query`). Build it with
+`.devops/mindmap/` holds a map of the project built as a **tree with cross
+links** (project > module > file > class > function, documentation > doc >
+section, libraries; linked by imports, calls, uses, documents, links, tests).
+**Documentation is part of it**: each node carries its doc comment or
+docstring, file header or README, the doc sections that name it, and a
+hand-written note from `NOTES.md`. Files: `OVERVIEW.md` (a quick scan),
+`MINDMAP.md` (the tree with documentation, docs to code, modules, libraries,
+possible duplicates), `graph.json` (nodes and edges), `mindmap.json` (behind
+`mindmap_query`) and `NOTES.md` (yours, never overwritten). "How does X work?"
+is `mindmap_tree` on X. Build it with
 `mindmap_build save=true`, `/devops map refresh` or
 `node scripts/devops-mindmap.mjs build --save`; it takes well under a second.
 
@@ -96,6 +103,7 @@ prompts) walks the same steps.
 | `check_toolchain` | is each tool installed? (`<tool> --version` only; env vars reported as set/unset, never their values) |
 | `sandbox_plan` | prints the container command that runs a command for a language in the sandbox; runs nothing |
 | `module_map` | research: modules, languages and the imports between them as a Mermaid mind map |
+| `mindmap_tree`, `mindmap_note` | the mind map as a tree (project > module > file > class > function; documentation > folder > doc > section; libraries) with cross links (imports, calls, uses, documents, links, tests); `tree` opens any node with its doc comment, README or doc sections and note, and its neighbours' docs, to explain how it works; `note` writes hand-made documentation for a node into `.devops/mindmap/NOTES.md` |
 | `mindmap_overview` | the project at a glance in about forty lines (what it is, size, where it starts, how it runs, its parts, docs to read first, main libraries, what to watch out for); for plain chat, no team needed |
 | `mindmap_build`, `mindmap_status`, `mindmap_query` | the full repository mind map (the Researcher owns it in a team run): docs (title, summary, links), modules, file imports and importers, functions and classes with signatures and line ranges, call links, libraries (declared vs used), tests and docs per file, and names defined twice; `status` lists only the files changed since it was saved; `query` answers one question (symbol, file, module, library, search) so files are not re-read to find it |
 | `reuse_search` | research: where a term (or a spelling variant) already appears in code, comments and docs (Markdown, LaTeX, ...); secret files skipped |
@@ -221,7 +229,7 @@ The plugin provides the skill, agents, commands, the MCP server and the mod.
 | `tool.call` Bash (monitor) | A command that matches a validation command in the language data (for example `cargo test`, `npm run lint`) and fails is recorded in `devops-skill/thoughts/non-final/check-ledger.md`, counted per check, and the result gets a reminder to reproduce, fix the cause and re-run; at the retry cap (default 3, set in `project.md`) it says stop and escalate. A pass clears the count. `/devops monitor off` (typed by you) turns it off. |
 | `prompt.compose` (mind map) | When `.devops/mindmap/OVERVIEW.md` exists, adds it to the session prompt, so plain chat knows the project at a glance with no tool call, with or without a DevOps profile. |
 | `session.start` | Runs `devops-setup detect --json`, shows `devops: rust+typescript` in the status line, registers `/devops`. |
-| `command.run` `/devops` | `status`, `languages`, `setup`, `map` (overview), `map refresh`, `map TEXT` (search) (anyone); `push-ok`, `push-reset`, `allow-branch NAME`, `gates on|off` (only when **you** type them; an agent that runs the command is refused). |
+| `command.run` `/devops` | `status`, `languages`, `setup`, `map` (overview), `map refresh`, `map how NAME` (tree node with its docs), `map TEXT` (search) (anyone); `push-ok`, `push-reset`, `allow-branch NAME`, `gates on|off` (only when **you** type them; an agent that runs the command is refused). |
 | `tool.call` Bash | Refuses `git push`, `gh pr create\|merge\|ready\|edit\|close\|reopen`, `gh release create` unless the newest `qa-*.md` under `devops-skill/thoughts/` has `Publish gate: PASS` **and** you ran `/devops push-ok` (consumed by that push). Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>`. Detached worktrees and reads pass. If the check itself fails, it refuses. |
 | `prompt.compose` | Adds a short session section naming the detected languages and pointing at `.devops/project.md`. |
 

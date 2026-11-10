@@ -11,6 +11,10 @@ export const MINDMAP_DIR = path.join('.devops', 'mindmap')
 const MAP_FILE = 'mindmap.json'
 const SUMMARY_FILE = 'MINDMAP.md'
 const OVERVIEW_FILE = 'OVERVIEW.md'
+const GRAPH_FILE = 'graph.json'
+/** Hand-written; never generated, so it survives every rebuild. */
+const NOTES_FILE = 'NOTES.md'
+const MAX_DOC = 280
 const ENTRY_FILE = /(^|\/)(main\.(go|rs|py|c|cc|cpp|java|kt|cs|swift|zig|dart|ts|js|mjs)|__main__\.py|manage\.py|Program\.cs|(index|app|server|cli)\.(ts|tsx|js|mjs|py|rb|php))$/
 const FORMAT = 1
 const MAX_FILE_BYTES = 256 * 1024
@@ -88,6 +92,100 @@ function isExported(language, line, name, indent) {
   return true
 }
 
+const HASH_COMMENTS = new Set(['python', 'ruby', 'shell', 'perl', 'r', 'julia', 'elixir', 'powershell', 'terraform', 'gdscript', 'nim', 'crystal'])
+const DASH_COMMENTS = new Set(['sql', 'lua', 'haskell', 'ada', 'elm'])
+const NOT_DOCUMENTATION = /copyright|licen[cs]e|spdx|eslint|prettier|@ts-|noqa|type:\s*ignore|^\s*(todo|fixme|hack|xxx)\b|^-\*-|^!/i
+
+function lineComment(language) {
+  if (HASH_COMMENTS.has(language)) return /^\s*#(?![!\[]|include)\s?(.*)$/
+  if (DASH_COMMENTS.has(language)) return /^\s*--+\s?(.*)$/
+  return /^\s*\/\/[\/!]?\s?(.*)$/
+}
+
+/** The first paragraph of a comment, without markers or @tags, cut to whole sentences. */
+export function cleanDoc(raw) {
+  const kept = []
+  for (const line of raw.split('\n')) {
+    const text = line.replace(/^\s*\*+\s?/, '').trim()
+    if (/^[@:]\w|^\.\.\s|^(Args|Arguments|Parameters|Params|Returns|Raises|Throws|Example|Examples):?$/i.test(text)) break
+    if (text === '' && kept.length > 0) break
+    if (text !== '') kept.push(text)
+  }
+  const joined = kept.join(' ').replace(/\{@link\s+([^}]+)\}/g, '$1').replace(/\s+/g, ' ').trim()
+  if (joined === '' || NOT_DOCUMENTATION.test(joined) || /^[-=*#~_]{3,}$/.test(joined)) return undefined
+  if (joined.length <= MAX_DOC) return joined
+  const cut = joined.slice(0, MAX_DOC)
+  const stop = cut.lastIndexOf('. ')
+  return stop > 60 ? cut.slice(0, stop + 1) : cut.replace(/\s+\S*$/, '') + ' ...'
+}
+
+/** The documentation comment that ends right above line `index`, skipping decorators and attributes. */
+function docAbove(lines, index, language) {
+  let i = index - 1
+  while (i >= 0 && /^\s*(@[\w.]+|#\[|\[\w)/.test(lines[i])) i -= 1
+  if (i < 0 || lines[i].trim() === '') return undefined
+  let raw
+  if (/\*\/\s*$/.test(lines[i]) && !HASH_COMMENTS.has(language)) {
+    let j = i
+    while (j >= 0 && !/\/\*/.test(lines[j])) j -= 1
+    if (j < 0 || i - j > 80) return undefined
+    raw = lines.slice(j, i + 1).join('\n').replace(/^\s*\/\*+!?/, '').replace(/\*+\/\s*$/, '')
+  } else {
+    const style = lineComment(language)
+    const block = []
+    while (i >= 0 && style.test(lines[i])) { block.unshift(lines[i].match(style)[1]); i -= 1 }
+    if (block.length === 0) return undefined
+    raw = block.join('\n')
+  }
+  return cleanDoc(raw)
+}
+
+const DOCSTRING_OPEN = /^\s*[rubRUB]?("{3}|'{3})(.*)$/
+
+/** A docstring as the first statement of the block whose header starts at line `index` (Python and friends). */
+function docstringAfter(lines, index) {
+  let i = index
+  while (i < lines.length && i < index + 20 && !/:\s*(#.*)?$/.test(lines[i])) i += 1
+  i += 1
+  while (i < lines.length && lines[i].trim() === '') i += 1
+  return docstringAt(lines, i)
+}
+
+function docstringAt(lines, i) {
+  const open = lines[i]?.match(DOCSTRING_OPEN)
+  if (!open) return undefined
+  const quote = open[1]
+  if (open[2].includes(quote)) return cleanDoc(open[2].slice(0, open[2].indexOf(quote)))
+  const body = [open[2]]
+  for (let j = i + 1; j < lines.length && j < i + 200; j++) {
+    if (lines[j].includes(quote)) { body.push(lines[j].slice(0, lines[j].indexOf(quote))); break }
+    body.push(lines[j])
+  }
+  return cleanDoc(body.join('\n'))
+}
+
+/** What a file says about itself: a module docstring, a `// Package` comment, or a header comment not tied to the first declaration. */
+export function fileDocOf(text, language, symbols = []) {
+  const lines = text.split('\n')
+  if (language === 'go') {
+    const pkg = lines.findIndex(line => /^package\s+\w+/.test(line))
+    return pkg === -1 ? undefined : docAbove(lines, pkg, language)
+  }
+  let k = 0
+  while (k < lines.length && (lines[k].trim() === '' || /^#!|^\s*['"]use strict['"]|^\s*#\s*-\*-|^\s*\/\/\s*@ts-|^\s*<\?php/.test(lines[k]))) k += 1
+  if (HASH_COMMENTS.has(language)) { const ds = docstringAt(lines, k); if (ds) return ds }
+  let end = k
+  if (/^\s*\/\*/.test(lines[k] ?? '') && !HASH_COMMENTS.has(language)) {
+    while (end < lines.length && !/\*\//.test(lines[end])) end += 1
+  } else {
+    const style = lineComment(language)
+    if (!style.test(lines[k] ?? '')) return undefined
+    while (end + 1 < lines.length && style.test(lines[end + 1])) end += 1
+  }
+  if (symbols.some(sym => sym.line === end + 2)) return undefined
+  return docAbove(lines, end + 1, language)
+}
+
 export function symbolsOf(text, language) {
   const patterns = PATTERNS[language]
   if (!patterns) return []
@@ -111,6 +209,10 @@ export function symbolsOf(text, language) {
     const sibling = symbols.slice(i + 1).find(next => next.indent <= s.indent)
     s.end = Math.min(endOf(lines, s.line - 1, language, s.indent), sibling ? sibling.line - 1 : lines.length)
   })
+  for (const s of symbols) {
+    const doc = (HASH_COMMENTS.has(language) && language !== 'shell' ? docstringAfter(lines, s.line - 1) : undefined) ?? docAbove(lines, s.line - 1, language)
+    if (doc) s.doc = doc
+  }
   const callable = kind => kind === 'function' || kind === 'method'
   return symbols
     .filter(s => !symbols.some(outer => outer !== s && callable(outer.kind) && outer.line < s.line && outer.end >= s.end))
@@ -292,14 +394,19 @@ function docInfo(rel, text, fileSet) {
   const links = new Set()
   const mentions = new Set()
   let title
-  for (const line of text.split('\n')) {
-    const md = line.match(/^(#{1,3})\s+(.+?)\s*#*\s*$/) ?? line.match(/^\\(section|subsection|chapter)\*?\{(.+)\}/)
-    if (md) {
-      const heading = md[2].trim()
-      title ??= heading
-      if (headings.length < 15) headings.push(heading)
-    }
-  }
+  const sections = []
+  let fenced = false
+  const latexLevel = { chapter: 1, section: 2, subsection: 3 }
+  text.split('\n').forEach((line, i) => {
+    if (/^\s*(```|~~~)/.test(line)) fenced = !fenced
+    if (fenced) return
+    const md = line.match(/^(#{1,4})\s+(.+?)\s*#*\s*$/) ?? line.match(/^\\(section|subsection|chapter)\*?\{(.+)\}/)
+    if (!md) return
+    const heading = md[2].trim()
+    title ??= heading
+    if (headings.length < 15 && md[1].length <= 3) headings.push(heading)
+    if (sections.length < 80) sections.push({ heading, level: md[1].startsWith('#') ? md[1].length : latexLevel[md[1]], line: i + 1 })
+  })
   if (!title) title = text.match(/^(.+)\n[=]{3,}\s*$/m)?.[1]?.trim() ?? text.match(/^=\s+(.+)$/m)?.[1]?.trim()
   const front = text.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? ''
   const frontField = key => {
@@ -327,7 +434,7 @@ function docInfo(rel, text, fileSet) {
     const hit = candidates.find(c => fileSet.has(c))
     if (hit && hit !== rel) mentions.add(hit)
   }
-  return { title: title ?? null, summary, headings, links: [...links].sort(), mentions: [...mentions].sort() }
+  return { title: title ?? null, summary, headings, sections, links: [...links].sort(), mentions: [...mentions].sort() }
 }
 
 /** The innermost function or method whose line range contains `line`. */
@@ -360,6 +467,7 @@ export function buildMindMap(destInput, { roots, save = false } = {}) {
   const files = {}
   const docs = {}
   const texts = new Map()
+  const docTexts = new Map()
   let skipped = 0
   for (const rel of all) {
     const language = languageOf(rel, table)
@@ -375,6 +483,7 @@ export function buildMindMap(destInput, { roots, save = false } = {}) {
     const lines = text.split('\n').length
     if (doc) {
       docs[rel] = { hash: hashOf(text), lines, ...docInfo(rel, text, fileSet) }
+      docTexts.set(rel, text)
       continue
     }
     const { relative, bare } = rawImports(rel, text, language)
@@ -384,7 +493,9 @@ export function buildMindMap(destInput, { roots, save = false } = {}) {
       const key = libraryKey(spec, language, declared, local, localTopNames)
       if (key) libraries.add(key)
     }
-    files[rel] = { language, module: moduleOf(rel), hash: hashOf(text), lines, test: TEST_FILE.test(rel), imports, libraries: [...libraries].sort(), symbols: symbolsOf(text, language) }
+    const symbols = symbolsOf(text, language)
+    const fileDoc = fileDocOf(text, language, symbols)
+    files[rel] = { language, module: moduleOf(rel), hash: hashOf(text), lines, test: TEST_FILE.test(rel), ...(fileDoc ? { doc: fileDoc } : {}), imports, libraries: [...libraries].sort(), symbols }
     texts.set(rel, text)
   }
 
@@ -473,6 +584,12 @@ export function buildMindMap(destInput, { roots, save = false } = {}) {
     return new Set(sources.map(d => d.file)).size > 1
   }).map(([name, defs]) => ({ name, definitions: defs.filter(d => !files[d.file].test).map(d => `${d.file}:${d.line}`) })).sort((a, b) => b.definitions.length - a.definitions.length || a.name.localeCompare(b.name))
 
+  linkDocsToCode(docs, docTexts, files, definitions)
+  for (const [id, m] of Object.entries(modules)) {
+    const doc = moduleDocOf(id, m, docs, files)
+    if (doc) m.doc = doc
+  }
+
   const project = projectFacts(dest, all, files)
   const map = {
     format: FORMAT, generatedAt: new Date().toISOString(), project,
@@ -480,19 +597,288 @@ export function buildMindMap(destInput, { roots, save = false } = {}) {
     modules, files, importedBy, testedBy, docs, libraries, calls: callList, duplicates,
     note: 'Heuristic (regular expressions, no compiler): dynamic imports, reflection, macros, overloads and same-named methods on different types are not told apart. A call is linked only when the callee is in the same file, a file it imports, or defined once in the project. Read the file before relying on a link for a change.',
   }
-  const overview = renderOverview(map)
-  const result = { dest, map, overview, summary: renderSummary(map, overview) }
+  const notes = readNotes(dest)
+  const overview = renderOverview(map, notes)
+  const graph = graphOf(map, notes)
+  const result = { dest, map, graph, overview, summary: renderSummary(map, overview, graph) }
   if (save) {
     const dir = path.join(dest, MINDMAP_DIR)
-    for (const [name, body] of [[MAP_FILE, JSON.stringify(map) + '\n'], [SUMMARY_FILE, result.summary], [OVERVIEW_FILE, overview]]) {
+    for (const [name, body] of [[MAP_FILE, JSON.stringify(map) + '\n'], [SUMMARY_FILE, result.summary], [OVERVIEW_FILE, overview], [GRAPH_FILE, JSON.stringify(graph) + '\n']]) {
       const file = path.join(dir, name)
       assertInside(dest, file)
       fs.mkdirSync(dir, { recursive: true })
       fs.writeFileSync(file, body)
     }
-    result.saved = [path.join(MINDMAP_DIR, MAP_FILE), path.join(MINDMAP_DIR, SUMMARY_FILE), path.join(MINDMAP_DIR, OVERVIEW_FILE)]
+    result.saved = [path.join(MINDMAP_DIR, MAP_FILE), path.join(MINDMAP_DIR, SUMMARY_FILE), path.join(MINDMAP_DIR, OVERVIEW_FILE), path.join(MINDMAP_DIR, GRAPH_FILE)]
   }
   return result
+}
+
+const DOC_CODE_REF = /`([A-Za-z_$][\w$]*(?:(?:\.|::|#)[A-Za-z_$][\w$]*)*)(?:\([^)`]*\))?`/g
+const DOC_PATH_REF = /\]\(([^)\s#]+)(?:#[^)]*)?\)|`([\w./-]+\.[A-Za-z]{1,6})`/g
+
+/**
+ * Ties documentation to code: each doc section lists the functions, types and
+ * files it talks about (`refs`), each symbol lists the doc sections that
+ * describe it (`documentedIn`), and each doc lists what it `describes`.
+ * A name defined in more than three places is too ambiguous to link.
+ */
+function linkDocsToCode(docs, docTexts, files, definitions) {
+  const symbolsByRef = new Map()
+  for (const [rel, info] of Object.entries(files)) for (const s of info.symbols) if (!symbolsByRef.has(`${rel}#${s.name}`)) symbolsByRef.set(`${rel}#${s.name}`, s)
+  const known = rel => files[rel] !== undefined || docs[rel] !== undefined
+  for (const [rel, text] of docTexts) {
+    const doc = docs[rel]
+    const describes = new Set()
+    let section
+    let next = 0
+    const dir = path.posix.dirname(rel)
+    text.split('\n').forEach((line, i) => {
+      while (next < doc.sections.length && doc.sections[next].line <= i + 1) section = doc.sections[next++]
+      const refer = ref => {
+        describes.add(ref)
+        if (section && !(section.refs ??= []).includes(ref) && section.refs.length < 30) section.refs.push(ref)
+      }
+      for (const m of line.matchAll(DOC_CODE_REF)) {
+        const name = m[1].split(/\.|::|#/).pop()
+        const codeLike = m[0].includes('(') || m[1] !== name || /[A-Z_]/.test(name.slice(1)) || /^[A-Z]\w{3,}/.test(name)
+        if (!codeLike) continue
+        const defs = definitions.get(name)?.filter(d => !files[d.file].test)
+        if (!defs || defs.length === 0 || defs.length > 3) continue
+        for (const d of defs) {
+          const ref = `${d.file}#${name}`
+          const s = symbolsByRef.get(ref)
+          if (!s) continue
+          refer(ref)
+          const where = { doc: rel, section: section?.heading ?? doc.title ?? rel, line: section?.line ?? 1 }
+          s.documentedIn ??= []
+          if (s.documentedIn.length < 8 && !s.documentedIn.some(x => x.doc === where.doc && x.line === where.line)) s.documentedIn.push(where)
+        }
+      }
+      for (const m of line.matchAll(DOC_PATH_REF)) {
+        const spec = m[1] ?? m[2]
+        if (/^[a-z]+:/i.test(spec)) continue
+        let target
+        try { target = [path.posix.normalize(path.posix.join(dir, decodeURI(spec))), spec].find(known) } catch { continue }
+        if (target && target !== rel && files[target]) refer(target)
+      }
+    })
+    doc.describes = [...describes].sort().slice(0, 60)
+  }
+}
+
+const CONTAINER_KINDS = new Set(['class', 'type', 'interface', 'enum', 'module', 'object', 'trait'])
+const EDGE_NAMES = {
+  imports: ['imports', 'imported by'], calls: ['calls', 'called by'], uses: ['uses library', 'used by'],
+  documents: ['documents', 'documented by'], links: ['links to', 'linked from'], tests: ['tests', 'tested by'],
+}
+
+/**
+ * The mind map as one tree with cross links. The tree (`parent`) is
+ * project > module > file > class > function, and project or module > doc >
+ * section; libraries hang under one `libraries` node. Edges add imports,
+ * calls, uses, documents, links and tests. Every node carries its own
+ * documentation (`summary`) and the hand-written `notes` for it.
+ */
+export function graphOf(map, notes = {}) {
+  const nodes = new Map()
+  const edges = []
+  const add = node => { if (!nodes.has(node.id)) nodes.set(node.id, Object.fromEntries(Object.entries(node).filter(([, v]) => v !== undefined && v !== null))); return node.id }
+  const link = (from, to, kind, count) => { if (nodes.has(from) && nodes.has(to) && from !== to) edges.push({ from, to, kind, ...(count > 1 ? { count } : {}) }) }
+  const readme = Object.keys(map.docs).filter(rel => README.test(rel)).sort((a, b) => a.length - b.length)[0]
+  add({ id: 'project', kind: 'project', name: map.project?.name ?? (readme ? map.docs[readme].title : null) ?? 'project', parent: null, summary: readme ? map.docs[readme].summary : undefined })
+  for (const [id, m] of Object.entries(map.modules)) add({ id: `module:${id}`, kind: 'module', name: id, parent: 'project', summary: m.doc })
+  const symbolId = new Map()
+  for (const [rel, f] of Object.entries(map.files)) {
+    add({ id: `file:${rel}`, kind: f.test ? 'test' : 'file', name: rel.split('/').pop(), path: rel, parent: nodes.has(`module:${f.module}`) ? `module:${f.module}` : 'project', summary: f.doc, lines: f.lines, language: f.language })
+    const containers = f.symbols.filter(s => CONTAINER_KINDS.has(s.kind))
+    for (const s of f.symbols) {
+      const owner = containers.filter(c => c !== s && c.line <= s.line && c.end >= s.end && c.line !== s.line).pop()
+      let id = `symbol:${rel}#${s.name}`
+      if (nodes.has(id)) id += `@${s.line}`
+      if (!symbolId.has(`${rel}#${s.name}`)) symbolId.set(`${rel}#${s.name}`, id)
+      add({ id, kind: s.kind, name: s.name, path: rel, line: s.line, end: s.end, parent: owner ? symbolId.get(`${rel}#${owner.name}`) : `file:${rel}`, summary: s.doc, signature: s.signature, exported: s.exported })
+    }
+  }
+  if (Object.keys(map.docs).length > 0) add({ id: 'docs', kind: 'group', name: 'documentation', parent: 'project' })
+  const folderOf = dir => {
+    if (dir === '.') return 'docs'
+    const id = `folder:${dir}`
+    if (!nodes.has(id)) add({ id, kind: 'folder', name: dir.split('/').pop() + '/', path: dir, parent: folderOf(path.posix.dirname(dir)) })
+    return id
+  }
+  for (const [rel, d] of Object.entries(map.docs)) {
+    const module = `module:${moduleOf(rel)}`
+    add({ id: `doc:${rel}`, kind: 'doc', name: d.title ?? rel.split('/').pop(), path: rel, parent: nodes.has(module) ? module : folderOf(path.posix.dirname(rel)), summary: d.summary })
+    const stack = []
+    for (const sec of d.sections ?? []) {
+      while (stack.length > 0 && stack[stack.length - 1].level >= sec.level) stack.pop()
+      const id = `section:${rel}#L${sec.line}`
+      add({ id, kind: 'section', name: sec.heading, path: rel, line: sec.line, parent: stack.length > 0 ? stack[stack.length - 1].id : `doc:${rel}` })
+      stack.push({ id, level: sec.level })
+    }
+  }
+  const libraries = Object.entries(map.libraries)
+  if (libraries.length > 0) add({ id: 'libraries', kind: 'group', name: 'libraries', parent: 'project' })
+  for (const [name, l] of libraries) add({ id: `library:${name}`, kind: 'library', name, parent: 'libraries', summary: l.declaredIn.map(d => `${d.manifest}${d.version ? ` ${d.version}` : ''}`).join(', ') || 'not in a manifest' })
+
+  const refId = ref => (ref.includes('#') ? symbolId.get(ref) ?? `file:${ref.slice(0, ref.lastIndexOf('#'))}` : nodes.has(`file:${ref}`) ? `file:${ref}` : `doc:${ref}`)
+  for (const [rel, f] of Object.entries(map.files)) {
+    for (const target of f.imports) link(`file:${rel}`, `file:${target}`, 'imports')
+    for (const lib of f.libraries) link(`file:${rel}`, `library:${lib}`, 'uses')
+  }
+  for (const [target, tests] of Object.entries(map.testedBy)) for (const t of tests) link(`file:${t}`, `file:${target}`, 'tests')
+  for (const c of map.calls) link(refId(c.from), refId(c.to), 'calls', c.count)
+  for (const [rel, d] of Object.entries(map.docs)) {
+    for (const target of d.links) link(`doc:${rel}`, map.docs[target] ? `doc:${target}` : `file:${target}`, map.docs[target] ? 'links' : 'documents')
+    for (const sec of d.sections ?? []) for (const ref of sec.refs ?? []) link(`section:${rel}#L${sec.line}`, refId(ref), 'documents')
+  }
+
+  const graph = { nodes: [...nodes.values()], edges }
+  for (const [key, text] of Object.entries(notes)) {
+    const id = resolveNode(graph, key, { quiet: true })
+    if (id) nodes.get(id).notes = text
+  }
+  return graph
+}
+
+/** Finds a node from what a person or agent would type: an id, a path, `path#name`, a module or a bare name. */
+export function resolveNode(graph, key, { quiet = false } = {}) {
+  const ids = new Set(graph.nodes.map(n => n.id))
+  const k = String(key).trim().replace(/^\.\//, '')
+  for (const candidate of [k, `module:${k}`, `file:${k}`, `doc:${k}`, `symbol:${k}`, `library:${k}`, `folder:${k.replace(/\/$/, '')}`]) if (ids.has(candidate)) return candidate
+  const named = graph.nodes.filter(n => n.name === k && n.kind !== 'section')
+  if (named.length === 1) return named[0].id
+  if (quiet) return undefined
+  const hint = (named.length > 1 ? named : graph.nodes.filter(n => n.name?.toLowerCase().includes(k.toLowerCase()))).slice(0, 10).map(n => n.id)
+  throw new Error(`no single node for "${k}"${hint.length ? `; did you mean: ${hint.join(', ')}` : ''}`)
+}
+
+export function readNotes(dest) {
+  let text
+  try { text = fs.readFileSync(path.join(dest, MINDMAP_DIR, NOTES_FILE), 'utf8') } catch { return {} }
+  const notes = {}
+  for (const part of text.split(/^## /m).slice(1)) {
+    const newline = part.indexOf('\n')
+    const key = (newline === -1 ? part : part.slice(0, newline)).trim().replace(/^`|`$/g, '')
+    const body = newline === -1 ? '' : part.slice(newline + 1).trim()
+    if (key && body) notes[key] = body
+  }
+  return notes
+}
+
+const brief = n => ({ id: n.id, kind: n.kind, name: n.name, path: n.path, line: n.line, end: n.end, signature: n.signature, summary: n.summary, notes: n.notes })
+
+function treeLine(n) {
+  const where = n.kind === 'section' ? ` (${n.path}:${n.line})` : n.line ? ` L${n.line}-${n.end}` : ''
+  const label = n.kind === 'project' || n.kind === 'module' || n.kind === 'file' || n.kind === 'test' || n.kind === 'doc' || n.kind === 'group' || n.kind === 'library' || n.kind === 'folder' ? n.name : n.signature ?? n.name
+  return `${label} [${n.kind}]${where}${n.summary ? ` — ${n.summary}` : ''}${n.notes ? `\n  note: ${n.notes.replace(/\s+/g, ' ').slice(0, 300)}` : ''}`
+}
+
+/** Indented text of a tree from `walk`, one node a line; children past the limit are counted. */
+function renderTreeText(tree, indent = '') {
+  const lines = [`${indent}- ${treeLine(tree).replace(/\n/g, `\n${indent}  `)}`]
+  for (const child of tree.children ?? []) lines.push(renderTreeText(child, indent + '  '))
+  if (tree.more) lines.push(`${indent}  - ... ${tree.more} more`)
+  return lines.join('\n')
+}
+
+function treeIndex(graph) {
+  const byId = new Map(graph.nodes.map(n => [n.id, n]))
+  const children = new Map()
+  for (const n of graph.nodes) if (n.parent) (children.get(n.parent) ?? children.set(n.parent, []).get(n.parent)).push(n.id)
+  return { byId, children }
+}
+
+function walkTree(index, id, depth, limit, keep = () => true) {
+  const node = index.byId.get(id)
+  const kids = (index.children.get(id) ?? []).filter(k => keep(index.byId.get(k)))
+  const out = { ...brief(node), childCount: kids.length }
+  if (depth > 0 && kids.length > 0) {
+    out.children = kids.slice(0, limit).map(k => walkTree(index, k, depth - 1, limit, keep))
+    if (kids.length > limit) out.more = kids.length - limit
+  }
+  return out
+}
+
+/**
+ * One node of the mind map with its place in the tree, its subtree to
+ * `depth`, its documentation and notes, and its links grouped by kind both
+ * ways (with each neighbour's own documentation): enough to say how a
+ * function or module works without opening a file.
+ */
+export function mindMapTree(destInput, { node = 'project', depth = 2, fresh = false, limit = 25 } = {}, { roots } = {}) {
+  const dest = resolveDest(destInput, roots)
+  if (typeof node !== 'string' || node.length < 1 || node.length > 300) throw new Error('node must be a string of 1 to 300 characters')
+  const d = Math.max(0, Math.min(Number.isInteger(depth) ? depth : 2, 6))
+  const saved = fresh ? undefined : loadSaved(dest)
+  const map = saved ?? buildMindMap(dest).map
+  const graph = graphOf(map, readNotes(dest))
+  const index = treeIndex(graph)
+  const id = resolveNode(graph, node)
+  const ancestors = []
+  for (let p = index.byId.get(id).parent; p; p = index.byId.get(p)?.parent) ancestors.unshift(index.byId.get(p).name)
+  const tree = walkTree(index, id, d, limit)
+  const links = { out: {}, in: {} }
+  for (const e of graph.edges) {
+    const dir = e.from === id ? 'out' : e.to === id ? 'in' : undefined
+    if (!dir) continue
+    const other = index.byId.get(dir === 'out' ? e.to : e.from)
+    const label = EDGE_NAMES[e.kind][dir === 'out' ? 0 : 1]
+    const list = links[dir][label] ??= []
+    if (list.length < limit) list.push({ id: other.id, name: other.kind === 'section' ? `${other.path} > ${other.name}` : other.name, summary: other.summary, ...(e.count ? { count: e.count } : {}) })
+  }
+  return {
+    dest, source: saved ? `saved map from ${saved.generatedAt}` : 'built now, not saved', path: ancestors, node: { ...brief(index.byId.get(id)), childCount: tree.childCount },
+    tree, links, text: [ancestors.length ? `in: ${ancestors.join(' > ')}` : undefined, renderTreeText(tree)].filter(Boolean).join('\n'),
+  }
+}
+
+const NOTES_HEADER = '# Mind map notes\n\nHand-written notes that the mind map attaches to its nodes; rebuilding the map never touches this file. One section per node, headed `## <node>`: a module (`src/api`), a file (`src/api/routes.ts`), a function or type (`src/api/routes.ts#routeFor`, or the bare name when it is defined once), a doc (`docs/guide.md`) or `project`. Say how it works, why it is built that way, and what to watch out for.\n'
+
+/** Adds or replaces the hand-written note for one node in NOTES.md (plan unless `apply`). */
+export function mindMapNote(destInput, { node, text, apply = false } = {}, { roots } = {}) {
+  const dest = resolveDest(destInput, roots)
+  if (typeof text !== 'string' || text.trim() === '' || text.length > 4000) throw new Error('text must be 1 to 4000 characters')
+  if (/^## /m.test(text)) throw new Error('text may not contain a "## " heading line')
+  if (typeof node !== 'string' || node.length < 1 || node.length > 300) throw new Error('node must be a string of 1 to 300 characters')
+  const map = loadSaved(dest) ?? buildMindMap(dest).map
+  const id = resolveNode(graphOf(map), node)
+  const key = id === 'project' ? 'project' : id.replace(/^(module|file|doc|symbol|library):/, '')
+  const file = path.join(dest, MINDMAP_DIR, NOTES_FILE)
+  let current = NOTES_HEADER
+  try { current = fs.readFileSync(file, 'utf8') } catch { /* first note */ }
+  const section = `## ${key}\n\n${text.trim()}\n`
+  const pattern = new RegExp(`^## \`?${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\`?[ \\t]*\\n[\\s\\S]*?(?=^## |(?![\\s\\S]))`, 'm')
+  const replaced = pattern.test(current)
+  const next = replaced ? current.replace(pattern, section + '\n') : current.replace(/\n*$/, '\n\n') + section
+  if (apply) {
+    assertInside(dest, file)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, next)
+  }
+  return { dest, node: id, key, file: path.join(MINDMAP_DIR, NOTES_FILE), action: replaced ? 'replace' : 'add', applied: apply, section }
+}
+
+/** The code tree with each node's documentation, bounded for MINDMAP.md. */
+function renderCodeTree(graph) {
+  const index = treeIndex(graph)
+  const isCode = n => !['doc', 'section', 'group', 'library', 'folder'].includes(n.kind) && n.kind !== 'test' && (n.path === undefined || n.kind === 'file' || n.exported || n.summary || n.notes)
+  return renderTreeText(walkTree(index, 'project', 4, 12, isCode))
+}
+
+/** A Mermaid mindmap of the tree: project, modules, then files (bounded). */
+function renderMermaidMindmap(graph) {
+  const index = treeIndex(graph)
+  const label = text => safeLabel(String(text)).replace(/[{}:;`#]/g, ' ').replace(/\s+/g, ' ').trim() || '-'
+  const lines = ['mindmap', `  root((${label(index.byId.get('project').name)}))`]
+  const modules = (index.children.get('project') ?? []).map(id => index.byId.get(id)).filter(n => n.kind === 'module').slice(0, 15)
+  for (const m of modules) {
+    lines.push(`    ${label(m.name)}`)
+    const files = (index.children.get(m.id) ?? []).map(id => index.byId.get(id)).filter(n => n.kind === 'file').slice(0, 6)
+    for (const f of files) lines.push(`      ${label(f.name)}`)
+  }
+  return lines.join('\n')
 }
 
 /** Where the project starts and how it is run: manifest entry points, conventional main files, scripts and make targets. */
@@ -525,10 +911,20 @@ const top = (object, n) => Object.entries(object).sort((a, b) => b[1] - a[1]).sl
 
 const README = /^readme\.(md|markdown|rst|adoc|txt)$/i
 
+/** How a module describes itself: its README, else the doc comment of its index or most imported file. */
+function moduleDocOf(id, m, docs, files) {
+  const readme = (m.docs ?? []).filter(rel => README.test(rel.split('/').pop())).sort((a, b) => a.length - b.length).map(rel => docs[rel]?.summary).find(Boolean)
+  if (readme) return readme
+  const documented = m.files.filter(rel => files[rel]?.doc && !files[rel].test)
+  const index = documented.find(rel => /(^|\/)(index|mod|__init__|lib|main)\.\w+$/.test(rel))
+  return index ? files[index].doc : documented.length === 1 ? files[documented[0]].doc : undefined
+}
+
 /** What a module is for: its own README's summary, else the first doc inside it, else its main exports. */
-function purposeOf(id, m, map) {
-  const summary = (m.docs ?? []).filter(rel => README.test(rel.split('/').pop())).sort((a, b) => a.length - b.length).map(rel => map.docs[rel]?.summary).find(Boolean)
-  if (summary) return summary.slice(0, 140)
+function purposeOf(id, m, map, notes = {}) {
+  const note = notes[id] ?? notes[`module:${id}`]
+  if (note) return note.replace(/\s+/g, ' ').slice(0, 160)
+  if (m.doc) return m.doc.slice(0, 160)
   const names = m.exports.slice(0, 5).map(e => e.split(' ')[0])
   return names.length > 0 ? `exports ${names.join(', ')}` : `${m.files.length} files`
 }
@@ -538,7 +934,7 @@ function purposeOf(id, m, map) {
  * which docs to read and what to watch out for, in about forty lines. Shown in
  * plain chat with no team running, and at the top of MINDMAP.md.
  */
-export function renderOverview(map) {
+export function renderOverview(map, notes = {}) {
   const c = map.counts
   const out = []
   const readme = Object.keys(map.docs).filter(rel => README.test(rel)).sort((a, b) => a.length - b.length)[0]
@@ -556,7 +952,7 @@ export function renderOverview(map) {
     out.push('**Parts of the code:**')
     for (const [id, m] of modules) {
       const deps = Object.keys(m.dependsOn).slice(0, 3)
-      out.push(`- \`${id}\` (${m.files.length} files): ${purposeOf(id, m, map)}${deps.length ? `; uses ${deps.join(', ')}` : ''}`)
+      out.push(`- \`${id}\` (${m.files.length} files): ${purposeOf(id, m, map, notes)}${deps.length ? `; uses ${deps.join(', ')}` : ''}`)
     }
     out.push('')
   }
@@ -584,7 +980,7 @@ export function renderOverview(map) {
 }
 
 /** The Markdown an agent reads before opening files: the overview, then the detail, bounded, pointing at `mindmap_query`. */
-export function renderSummary(map, overview = renderOverview(map)) {
+export function renderSummary(map, overview = renderOverview(map), graph = graphOf(map)) {
   const out = []
   const c = map.counts
   out.push('# Repository mind map', '')
@@ -596,6 +992,17 @@ export function renderSummary(map, overview = renderOverview(map)) {
   const modules = Object.entries(map.modules).sort((a, b) => b[1].files.length - a[1].files.length)
   const shown = modules.slice(0, 30)
   const shownIds = new Set(shown.map(([id]) => id))
+  out.push('## Tree', '', 'The mind map is a tree (project > module > file > class > function, and doc > section) with cross links (imports, calls, documents, tests, uses). `mindmap_tree` opens any node with its documentation, notes and links.', '', '```mermaid', renderMermaidMindmap(graph), '```', '')
+  out.push('### Code tree with documentation', '', 'Each line: name or signature, kind, lines, then what its doc comment, docstring, README or note says. Private helpers without documentation are left out; `mindmap_tree` on a file lists all of them.', '', renderCodeTree(graph), '')
+  const described = Object.entries(map.docs).filter(([, d]) => d.describes?.length)
+  if (described.length > 0) {
+    out.push('### Docs to code', '', 'Which doc sections describe which functions and files.', '')
+    for (const [rel, d] of described.slice(0, 40)) {
+      out.push(`- \`${rel}\``)
+      for (const sec of (d.sections ?? []).filter(x => x.refs?.length).slice(0, 6)) out.push(`  - ${sec.heading} (L${sec.line}): ${sec.refs.slice(0, 6).map(r => `\`${r}\``).join(', ')}${sec.refs.length > 6 ? ', ...' : ''}`)
+    }
+    out.push('')
+  }
   out.push('## Module graph', '', '```mermaid', 'graph TD')
   for (const [id, m] of shown) out.push(`  ${safeId(id)}["${safeLabel(id)}<br/>${m.files.length} files — ${safeLabel(top(m.languages, 2).map(([l]) => l).join(', '))}"]`)
   for (const [id, m] of shown) for (const [to, count] of top(m.dependsOn, 8)) if (shownIds.has(to)) out.push(`  ${safeId(id)} -->|${count}| ${safeId(to)}`)
@@ -687,7 +1094,7 @@ export function mindMapOverview(destInput, { roots } = {}) {
     return { dest, source: 'built now, not saved (mindmap_build with save=true keeps it)', overview: built.overview }
   }
   let overview
-  try { overview = fs.readFileSync(path.join(dest, MINDMAP_DIR, OVERVIEW_FILE), 'utf8') } catch { overview = renderOverview(saved) }
+  try { overview = fs.readFileSync(path.join(dest, MINDMAP_DIR, OVERVIEW_FILE), 'utf8') } catch { overview = renderOverview(saved, readNotes(dest)) }
   const status = mindMapStatus(dest)
   const changed = status.changed.length + status.added.length + status.removed.length
   return { dest, source: `saved map from ${saved.generatedAt}`, stale: status.stale, changedFiles: changed, overview, ...(changed > 0 ? { next: `${changed} file(s) changed since: ${[...status.changed, ...status.added, ...status.removed].slice(0, 10).join(', ')}. Read those directly if the question touches them; rebuild with mindmap_build save=true.` } : {}) }
@@ -711,9 +1118,11 @@ export function mindMapQuery(destInput, { symbol, file, module, library, search,
 
   if (symbol !== undefined) {
     const definitions = []
-    for (const [rel, info] of Object.entries(map.files)) for (const s of info.symbols) if (s.name === symbol) definitions.push({ file: rel, line: s.line, kind: s.kind, exported: s.exported, signature: s.signature, module: info.module, testedBy: map.testedBy[rel] ?? [], documentedBy: info.documentedBy ?? [] })
+    const notes = readNotes(dest)
+    for (const [rel, info] of Object.entries(map.files)) for (const s of info.symbols) if (s.name === symbol) definitions.push({ file: rel, line: s.line, end: s.end, kind: s.kind, exported: s.exported, signature: s.signature, doc: s.doc, notes: notes[`${rel}#${s.name}`] ?? notes[s.name], documentedIn: s.documentedIn ?? [], module: info.module, testedBy: map.testedBy[rel] ?? [], documentedBy: info.documentedBy ?? [] })
     const callers = map.calls.filter(c => parseRef(c.to).name === symbol).map(c => ({ caller: c.from, callee: c.to, count: c.count }))
-    const callees = map.calls.filter(c => parseRef(c.from).name === symbol).map(c => ({ caller: c.from, callee: c.to, count: c.count }))
+    const docOf = ref => { const { file, name } = parseRef(ref); return map.files[file]?.symbols.find(s => s.name === name)?.doc }
+    const callees = map.calls.filter(c => parseRef(c.from).name === symbol).map(c => ({ caller: c.from, callee: c.to, count: c.count, ...(docOf(c.to) ? { calleeDoc: docOf(c.to) } : {}) }))
     const lower = symbol.toLowerCase()
     const similar = definitions.length > 0 ? [] : cap([...new Set(Object.values(map.files).flatMap(f => f.symbols.map(s => s.name)).filter(n => n.toLowerCase().includes(lower) || lower.includes(n.toLowerCase()) && n.length > 3))])
     return { dest, source, symbol, definitions: cap(definitions), callers: cap(callers), callees: cap(callees), ...(similar.length > 0 ? { similarNames: similar } : {}), ...(definitions.length > 1 ? { warning: 'defined in more than one place: check for duplicate implementations' } : {}) }
@@ -724,7 +1133,7 @@ export function mindMapQuery(destInput, { symbol, file, module, library, search,
     const doc = map.docs[rel]
     if (!info && !doc) throw new Error(`not in the mind map: ${rel} (not a code or doc file, skipped, or the map is stale)`)
     if (doc) return { dest, source, file: rel, doc, linkedFrom: Object.entries(map.docs).filter(([, d]) => d.links.includes(rel)).map(([r]) => r) }
-    return { dest, source, file: rel, language: info.language, module: info.module, lines: info.lines, test: info.test, symbols: info.symbols, imports: info.imports, importedBy: map.importedBy[rel] ?? [], libraries: info.libraries, testedBy: map.testedBy[rel] ?? [], documentedBy: info.documentedBy ?? [], callsOut: cap(map.calls.filter(c => parseRef(c.from).file === rel)), callsIn: cap(map.calls.filter(c => parseRef(c.to).file === rel && parseRef(c.from).file !== rel)) }
+    return { dest, source, file: rel, doc: info.doc, notes: readNotes(dest)[rel], language: info.language, module: info.module, lines: info.lines, test: info.test, symbols: info.symbols, imports: info.imports, importedBy: map.importedBy[rel] ?? [], libraries: info.libraries, testedBy: map.testedBy[rel] ?? [], documentedBy: info.documentedBy ?? [], callsOut: cap(map.calls.filter(c => parseRef(c.from).file === rel)), callsIn: cap(map.calls.filter(c => parseRef(c.to).file === rel && parseRef(c.from).file !== rel)) }
   }
   if (module !== undefined) {
     const m = map.modules[module]
@@ -754,6 +1163,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       const result = buildMindMap(dest, { save: args.includes('--save') })
       if (args.includes('--json')) console.log(JSON.stringify(result.map))
       else console.log(result.saved ? `saved ${result.saved.join(' and ')}\n${JSON.stringify(result.map.counts)}` : result.summary)
+    } else if (command === 'tree') {
+      const result = mindMapTree(dest, { node: opt('--node') ?? 'project', depth: opt('--depth') === undefined ? 2 : Number(opt('--depth')), fresh: args.includes('--fresh') })
+      console.log(args.includes('--json') ? JSON.stringify(result, null, 2) : [result.text, ...Object.entries(result.links).flatMap(([dir, groups]) => Object.entries(groups).map(([kind, list]) => `${dir === 'out' ? '->' : '<-'} ${kind}: ${list.map(l => l.name).join(', ')}`))].join('\n'))
+    } else if (command === 'note') {
+      console.log(JSON.stringify(mindMapNote(dest, { node: opt('--node'), text: opt('--text'), apply: args.includes('--apply') }), null, 2))
     } else if (command === 'overview') {
       const result = mindMapOverview(dest)
       console.log(args.includes('--json') ? JSON.stringify(result) : result.overview + (result.next ? `\n${result.next}` : ''))
@@ -763,7 +1177,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       const query = Object.fromEntries(['symbol', 'file', 'module', 'library', 'search'].map(k => [k, opt('--' + k)]).filter(([, v]) => v !== undefined))
       console.log(JSON.stringify(mindMapQuery(dest, { ...query, fresh: args.includes('--fresh') }), null, 2))
     } else {
-      console.error('usage: devops-mindmap overview [--json] | build [--save] [--json] | status | query --symbol NAME|--file PATH|--module ID|--library NAME|--search TEXT [--fresh]   [--dest DIR]')
+      console.error('usage: devops-mindmap overview [--json] | tree [--node ID] [--depth N] [--json] | note --node ID --text TEXT [--apply] | build [--save] [--json] | status | query --symbol NAME|--file PATH|--module ID|--library NAME|--search TEXT [--fresh]   [--dest DIR]')
       process.exitCode = 2
     }
   } catch (error) {

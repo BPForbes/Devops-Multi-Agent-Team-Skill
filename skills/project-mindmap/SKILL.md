@@ -31,7 +31,12 @@ no gates. You answer the person directly.
 2. **Answer from the overview** when it is enough ("what is this", "how is it
    organised", "how do I run the tests"). Say where each fact came from
    (README, `package.json` scripts, the module list).
-3. **Look up specifics** with `mindmap_query`, one question at a time:
+3. **"How does X work?"**: `mindmap_tree` with `node` set to the function,
+   file, module or doc. It returns the node's place in the tree, its doc comment
+   or README, the hand-written note, its children, and its links both ways
+   (calls, called by, imports, documented by, tests), each neighbour with its own
+   documentation. Explain from that; quote the doc section it names.
+   **Other specifics** with `mindmap_query`, one question at a time:
    `symbol` (definition, signature, line range, callers, callees, tests, docs),
    `file`, `module`, `library`, or `search` for a name or path fragment.
    `/devops map TEXT` does the search from the chat.
@@ -42,6 +47,14 @@ no gates. You answer the person directly.
    refresh (`mindmap_build` with `save=true`, or `/devops map refresh`); it
    writes only `.devops/mindmap/`. With no saved map, the tools build one in
    memory and write nothing.
+
+## Adding documentation to the map
+
+When the person explains how something works, or you had to read code to work
+it out, offer to keep it: `mindmap_note` with the node and a few sentences
+(plan first, `apply=true` after they agree). It goes to
+`.devops/mindmap/NOTES.md`, survives rebuilds and shows with that node from then
+on.
 
 ## Keep in mind
 

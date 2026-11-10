@@ -56,7 +56,9 @@ and [version-tags.md](../skills/devops-multi-agent-team/references/version-tags.
    `mindmap_build` with `save=true` when stale or missing, read `OVERVIEW.md`
    and the parts of `MINDMAP.md` in scope, then `mindmap_query` for every
    symbol, file, module and library the change touches instead of reading files
-   to find them. Carry into the brief what the other seats need (map date,
+   to find them. Use `mindmap_tree` to learn how a module or function works from its
+   documentation and neighbours before opening code, and record what you had to
+   work out with `mindmap_note`. Carry into the brief what the other seats need (map date,
    relevant overview lines, definitions as `path:start-end` with callers and
    tests, duplicates in scope, libraries) so they do not rescan. Build the brief's
    Mermaid module mind map from it (`module_map` for the module graph alone,

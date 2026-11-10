@@ -21,7 +21,10 @@ works with or without the DevOps team: in plain chat follow the
    `symbol`, `file`, `module` or `library`; if nothing matches, `search`.
    Answer from the result: where it is defined (file and line range), callers,
    importers, tests and docs. Open a file only at the line range given.
-3. A name defined in more than one place, or listed under **Possible
+3. **`how NAME`** (`/mindmap how total`): `mindmap_tree` on that node; explain
+   how it works from its documentation, note, children and neighbours.
+   **`note NAME TEXT`**: `mindmap_note` (show the plan, apply after a yes).
+4. A name defined in more than one place, or listed under **Possible
    duplicates**, is reported as a possible duplicate implementation for the
    Researcher, never silently picked.
 

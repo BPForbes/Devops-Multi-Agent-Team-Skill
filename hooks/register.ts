@@ -22,6 +22,7 @@ const HELP = [
   '/devops comments warn|strict|off (you) comment audit on git commit: warn (default), refuse a commit with blocking findings, or off',
   '/devops map          the project at a glance, from the mind map (works without the DevOps team)',
   '/devops map refresh  rebuild and save the mind map (.devops/mindmap/)',
+  '/devops map how NAME how a function, file or module works: its docs, note and links',
   '/devops map TEXT     find functions, files and docs whose name contains TEXT',
 ].join('\n')
 
@@ -152,7 +153,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'devops',
       description: 'DevOps multi-agent team: languages, gates, QA verdict',
-      argumentHint: '[map [refresh|TEXT]|languages|setup|push-ok|push-reset|allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off]',
+      argumentHint: '[map [refresh|how NAME|TEXT]|languages|setup|push-ok|push-reset|allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off]',
     })
     const found = await detect($)
     await $.state.set({ plugin: 'devops-multi-agent-team', key: 'languages' } as const, found.map(f => f.id))
@@ -187,6 +188,8 @@ export const register: Register = on => {
     if (word === 'map') {
       if (rest === '') return { text: await mindmap($, ['overview']) }
       if (rest === 'refresh') return { text: await mindmap($, ['build', '--save']) }
+      const how = /^how\s+([\w.$/#-]{1,200})$/.exec(rest)
+      if (how) return { text: await mindmap($, ['tree', '--node', how[1], '--depth', '1']) }
       if (!/^[\w.$/-]{2,80}$/.test(rest)) return { text: 'Usage: /devops map [refresh|TEXT], TEXT being a name or path fragment (letters, digits, . _ $ / -).' }
       return { text: await mindmap($, ['query', '--search', rest]) }
     }
@@ -323,7 +326,7 @@ export const register: Register = on => {
       ? [{
           id: `${PLUGIN}:mindmap`,
           text: [
-            'Project mind map (quick scan, generated; use it with or without the DevOps team). For a question about this project, answer from it first; for specifics use the mindmap_query MCP tool or /devops map TEXT, and open files only at the line ranges they give. It can be out of date: mindmap_status (or /devops map) says which files changed; read those directly.',
+            'Project mind map (quick scan, generated; use it with or without the DevOps team). For a question about this project, answer from it first; for how something works use the mindmap_tree MCP tool (or /devops map how NAME), for other specifics mindmap_query or /devops map TEXT, and open files only at the line ranges they give. It can be out of date: mindmap_status (or /devops map) says which files changed; read those directly.',
             overview.length > MAX_OVERVIEW_CHARS ? overview.slice(0, MAX_OVERVIEW_CHARS) + '\n[cut; full text in .devops/mindmap/OVERVIEW.md]' : overview,
           ].join('\n\n'),
           scope: 'session' as const,

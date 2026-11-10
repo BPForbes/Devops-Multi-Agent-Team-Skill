@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { buildMindMap, mindMapOverview, mindMapQuery, mindMapStatus, symbolsOf } from './devops-mindmap.mjs'
+import { buildMindMap, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree, symbolsOf } from './devops-mindmap.mjs'
 
 function project(files) {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dmat-mind-')))
@@ -63,7 +63,7 @@ test('mind map links docs, files, imports, calls, libraries, tests and duplicate
 test('saved map, status shows only what changed, query answers without reading files', () => {
   const dir = project(SAMPLE)
   const built = buildMindMap(dir, { save: true })
-  assert.deepEqual(built.saved, ['mindmap.json', 'MINDMAP.md', 'OVERVIEW.md'].map(name => path.join('.devops', 'mindmap', name)))
+  assert.deepEqual(built.saved, ['mindmap.json', 'MINDMAP.md', 'OVERVIEW.md', 'graph.json'].map(name => path.join('.devops', 'mindmap', name)))
   assert.equal(mindMapStatus(dir).stale, false)
 
   fs.appendFileSync(path.join(dir, 'src/util/strings.ts'), 'export const extra = 1\n')
@@ -117,4 +117,92 @@ test('overview: a quick scan for plain chat, from the saved map or built without
   const stale = mindMapOverview(dir)
   assert.equal(stale.changedFiles, 1)
   assert.match(stale.next, /src\/api\/routes\.ts/)
+})
+
+const DOCUMENTED = {
+  'README.md': '# Shop\n\nA small shop.\n',
+  'src/cart/README.md': '# Cart\n\nThe cart keeps line items and totals them.\n',
+  'src/cart/cart.ts': [
+    '/** Line items and their total. */',
+    "import { money } from '../util/money'",
+    '',
+    '/**',
+    ' * Adds up every line item, rounding once at the end.',
+    ' * @param items the lines',
+    ' */',
+    'export function total(items: number[]) {',
+    '  return money(items.reduce((a, b) => a + b, 0))',
+    '}',
+    '',
+    'export class Cart {',
+    '  // Appends one line item.',
+    '  add(item: number) {',
+    '    return item',
+    '  }',
+    '}',
+    '',
+  ].join('\n'),
+  'src/util/money.ts': '// Rounds to cents.\nexport function money(n: number) {\n  return Math.round(n * 100) / 100\n}\n',
+  'py/tax.py': '"""Tax rules."""\n\ndef vat(amount):\n    """Value added tax at the standard rate.\n\n    Args:\n      amount: net\n    """\n    return amount * 0.2\n',
+  'docs/design.md': '# Design\n\n## Totals\n\n`total()` calls `money()` once, see [cart](../src/cart/cart.ts); the `status` word links nothing.\n\n### Tax\n\nTax is `tax.vat`.\n',
+}
+
+test('documentation is part of the map: doc comments, docstrings, file headers, READMEs and doc sections', () => {
+  const dir = project(DOCUMENTED)
+  const { map } = buildMindMap(dir)
+  const cart = map.files['src/cart/cart.ts']
+  assert.equal(cart.doc, 'Line items and their total.')
+  const total = cart.symbols.find(s => s.name === 'total')
+  assert.equal(total.doc, 'Adds up every line item, rounding once at the end.')
+  assert.equal(cart.symbols.find(s => s.name === 'add').doc, 'Appends one line item.')
+  assert.equal(map.files['src/util/money.ts'].doc, undefined, 'a comment on the first function is its doc, not the file\'s')
+  assert.equal(map.files['src/util/money.ts'].symbols[0].doc, 'Rounds to cents.')
+  assert.equal(map.files['py/tax.py'].doc, 'Tax rules.')
+  assert.equal(map.files['py/tax.py'].symbols[0].doc, 'Value added tax at the standard rate.')
+  assert.equal(map.modules['src/cart'].doc, 'The cart keeps line items and totals them.')
+  assert.deepEqual(total.documentedIn, [{ doc: 'docs/design.md', section: 'Totals', line: 3 }])
+  const totals = map.docs['docs/design.md'].sections.find(s => s.heading === 'Totals')
+  assert.deepEqual(totals.refs, ['src/cart/cart.ts#total', 'src/util/money.ts#money', 'src/cart/cart.ts'])
+  assert.deepEqual(map.docs['docs/design.md'].sections.find(s => s.heading === 'Tax').refs, ['py/tax.py#vat'])
+})
+
+test('the map is a tree with cross links; a node explains how it works with its neighbours\' docs and notes', () => {
+  const dir = project(DOCUMENTED)
+  const { graph, summary } = buildMindMap(dir, { save: true })
+  const node = id => graph.nodes.find(n => n.id === id)
+  assert.equal(node('module:src/cart').parent, 'project')
+  assert.equal(node('file:src/cart/cart.ts').parent, 'module:src/cart')
+  assert.equal(node('symbol:src/cart/cart.ts#add').parent, 'symbol:src/cart/cart.ts#Cart', 'a method sits under its class')
+  assert.equal(node('section:docs/design.md#L7').parent, 'section:docs/design.md#L3', 'sections nest by level')
+  assert.equal(node('doc:docs/design.md').parent, 'folder:docs')
+  assert.ok(graph.edges.some(e => e.kind === 'documents' && e.from === 'section:docs/design.md#L3' && e.to === 'symbol:src/cart/cart.ts#total'))
+  assert.ok(graph.edges.some(e => e.kind === 'calls' && e.from === 'symbol:src/cart/cart.ts#total' && e.to === 'symbol:src/util/money.ts#money'))
+  assert.ok(fs.existsSync(path.join(dir, '.devops/mindmap/graph.json')))
+  assert.match(summary, /```mermaid\nmindmap\n {2}root\(\(Shop\)\)/)
+  assert.match(summary, /- export function total\(items: number\[\]\) \{ \[function\] L8-10 — Adds up every line item/)
+  assert.match(summary, /Totals \(L3\): `src\/cart\/cart\.ts#total`/)
+
+  const planned = mindMapNote(dir, { node: 'total', text: 'Rounds once so totals match the receipt.' })
+  assert.equal(planned.applied, false)
+  assert.equal(planned.key, 'src/cart/cart.ts#total')
+  mindMapNote(dir, { node: 'total', text: 'Rounds once so totals match the receipt.', apply: true })
+  mindMapNote(dir, { node: 'src/cart', text: 'Owns pricing of a basket.', apply: true })
+  mindMapNote(dir, { node: 'total', text: 'Rounds once, at the end.', apply: true })
+  const notes = fs.readFileSync(path.join(dir, '.devops/mindmap/NOTES.md'), 'utf8')
+  assert.equal(notes.match(/## src\/cart\/cart\.ts#total/g).length, 1, 'a note is replaced, not duplicated')
+  assert.match(notes, /Rounds once, at the end\./)
+  assert.throws(() => mindMapNote(dir, { node: 'nothing-like-this', text: 'x' }), /no single node/)
+
+  const tree = mindMapTree(dir, { node: 'total' })
+  assert.deepEqual(tree.path, ['Shop', 'src/cart', 'cart.ts'])
+  assert.equal(tree.node.summary, 'Adds up every line item, rounding once at the end.')
+  assert.equal(tree.node.notes, 'Rounds once, at the end.', 'notes are read live, no rebuild needed')
+  assert.deepEqual(tree.links.out.calls, [{ id: 'symbol:src/util/money.ts#money', name: 'money', summary: 'Rounds to cents.' }])
+  assert.equal(tree.links.in['documented by'][0].name, 'docs/design.md > Totals')
+  const module = mindMapTree(dir, { node: 'src/cart', depth: 2 })
+  assert.equal(module.node.notes, 'Owns pricing of a basket.')
+  assert.match(module.text, /cart\.ts \[file\] — Line items and their total\.\n {4}- export function total/)
+  assert.equal(mindMapTree(dir, { node: 'docs/design.md', depth: 3 }).tree.children[0].children[0].children[0].name, 'Tax', 'doc > Design > Totals > Tax')
+  assert.equal(mindMapQuery(dir, { symbol: 'total' }).definitions[0].notes, 'Rounds once, at the end.')
+  assert.equal(mindMapQuery(dir, { symbol: 'total' }).callees[0].calleeDoc, 'Rounds to cents.')
 })

@@ -14,12 +14,80 @@ to find out, and does not write a second `slugify`.
 | File | What | Who reads it |
 |------|------|--------------|
 | `.devops/mindmap/OVERVIEW.md` | The quick scan, about forty lines: what the project is (README), size and languages, where it starts, how it is run (scripts, make targets), its parts and what each is for, docs to read first, most depended-on files, main libraries, what to watch out for | plain chat first; the Researcher first in a team run; the Claude mod puts it in the session prompt |
-| `.devops/mindmap/MINDMAP.md` | The overview, then the detail: counts, a Mermaid module graph, a module table (dependencies both ways, libraries, key exports), a docs table (title and what each doc says), the most imported files, the most called functions, libraries, possible duplicates | the Researcher; anyone who needs more than the overview |
+| `.devops/mindmap/MINDMAP.md` | The overview, then the **tree** (a Mermaid mindmap, and the code tree with each module's, file's and function's documentation on its line), **docs to code** (which doc sections describe which functions and files), then the detail: counts, a Mermaid module graph, a module table (dependencies both ways, libraries, key exports), a docs table (title and what each doc says), the most imported files, the most called functions, libraries, possible duplicates | the Researcher; anyone who needs more than the overview |
+| `.devops/mindmap/graph.json` | The tree and its cross links as nodes and edges, for any graph tool | `mindmap_tree`, other tools |
 | `.devops/mindmap/mindmap.json` | The full map behind it | `mindmap_query`, not people |
+| `.devops/mindmap/NOTES.md` | **Hand-written**: how a module, file, function or doc works, one `## <node>` section each. Never generated, so rebuilding keeps it | written with `mindmap_note` or by hand; shown with its node everywhere |
 
 Built by `mindmap_build` (MCP) or `devops-mindmap build --save`. It runs no
 program and writes only `.devops/mindmap/`. Building takes well under a second
 on a few thousand files.
+
+## The tree and the graph
+
+The map is one **tree** with **cross links**. Every node carries its own
+documentation.
+
+```text
+project                         README summary
+├── module   src/cart           its README, or the doc comment of its index file
+│   ├── file   cart.ts          its header comment / module docstring
+│   │   ├── function total      its doc comment or docstring, signature, L8-10
+│   │   └── class Cart
+│   │       └── method add
+│   └── doc    README.md        title and summary
+│       └── section ...         nested by heading level
+├── documentation
+│   └── folder docs/
+│       └── doc design.md
+│           └── section Totals  -> documents total(), money(), cart.ts
+└── libraries
+    └── library lodash          manifest and version
+```
+
+| Cross link | From | To |
+|------------|------|----|
+| `imports` | file | file |
+| `calls` | function | function |
+| `uses` | file | library |
+| `documents` | doc section or doc | function, type or file it names |
+| `links` | doc | doc |
+| `tests` | test file | file it imports |
+
+`mindmap_tree` (or `devops-mindmap tree --node X`) opens any node: where it sits
+(`path`), its documentation and note, its subtree to a depth, and its links
+both ways, each neighbour with **its** documentation. Asked about `total`, it
+answers "adds up every line item; calls `money` (rounds to cents); documented
+in design.md > Totals; note: rounds once so totals match the receipt" without
+opening a file. Node names: a path, `path#name`, a module id, a bare name
+defined once, a doc path, `docs/` folder, or `project`.
+
+## Documentation in the map
+
+Documentation comes from four places and is attached to the node it describes:
+
+1. **In the code**: the doc comment right above a declaration (`/** */`, `///`,
+   `//`, `#`, `--`, skipping decorators and attributes) or the docstring right
+   below it (Python), cut to its first paragraph, `@param`-style tags left out.
+   A file's header comment, module docstring or Go `// Package` comment
+   describes the file. License headers, lint pragmas and TODOs are not
+   documentation.
+2. **READMEs**: a module's README describes the module; the root README the
+   project. Without one, the doc comment of the module's index file is used.
+3. **Doc files**: every heading is a section node. A section **documents** the
+   functions and files it names: a code span written like code (`` `total()` ``,
+   `` `Cart.add` ``, `` `parseHeader` ``, `` `CartItem` ``) or a link or path to
+   a file. A plain lowercase word in backticks (`` `status` ``) is not linked,
+   so write function names with `()` or qualified. Each function lists the
+   sections that describe it (`documentedIn`).
+4. **Notes** (`NOTES.md`): what the code and docs do not say: how a module works
+   as a whole, why it is built that way, what to watch out for. Written with
+   `mindmap_note` (plans unless `apply=true`; replaces that node's section) or by
+   hand. Read live by `mindmap_tree` and `mindmap_query`, used for the module
+   line of the overview at the next build.
+
+Undocumented parts are visible too: a node with no `summary` and no `notes` is
+a gap the Researcher can fill with a note.
 
 ## What is in it
 
@@ -58,8 +126,10 @@ The `project-mindmap` skill ([SKILL.md](../../project-mindmap/SKILL.md)) and the
 1. **Quick scan**: `mindmap_overview` (or `/devops map`, or
    `.devops/mindmap/OVERVIEW.md`; with the Claude mod it is already in the
    session prompt). Answer from it when it is enough.
-2. **Specifics**: `mindmap_query` (or `/devops map TEXT`), then open a file only
-   at the line range given.
+2. **Specifics**: `mindmap_tree` on the node ("how does X work?": its
+   documentation, note, children and the documentation of what it calls and
+   what calls it) or `mindmap_query` (or `/devops map TEXT`), then open a file
+   only at the line range given.
 3. **Freshness**: the overview says how many files changed since the save; read
    those directly and offer `mindmap_build` with `save=true`
    (`/devops map refresh`).
@@ -75,7 +145,7 @@ several times.
 
 | Seat | Uses the map for |
 |------|------------------|
-| **Researcher** | Start of every research round: `mindmap_status`, `mindmap_build` with `save=true` when stale or missing, read `OVERVIEW.md` and the parts of `MINDMAP.md` in scope, `mindmap_query` for each symbol, file, module and library the change touches. Into the brief go: the map's date, the overview lines that matter, the module mind map, each relevant definition as `path:start-end` with its callers and tests, the **Possible duplicates** in scope (explained or listed for cleanup) and the libraries involved. After QA PASS and integration, rebuild and save the map so the next round and plain chat start from a current one. |
+| **Researcher** | Writes `mindmap_note` for each module or function whose working the brief had to work out (how it works, why, traps), so the next round and plain chat get it for free. Start of every research round: `mindmap_status`, `mindmap_build` with `save=true` when stale or missing, read `OVERVIEW.md` and the parts of `MINDMAP.md` in scope, `mindmap_query` for each symbol, file, module and library the change touches. Into the brief go: the map's date, the overview lines that matter, the module mind map, each relevant definition as `path:start-end` with its callers and tests, the **Possible duplicates** in scope (explained or listed for cleanup) and the libraries involved. After QA PASS and integration, rebuild and save the map so the next round and plain chat start from a current one. |
 | **Coder** | Reads the brief's mind-map section, not the whole map. Before adding a function, `mindmap_query` with `symbol` and `search` for its name and verbs; a hit means extend or call it, or ask the Researcher. Opens files at the line ranges the brief gives. |
 | **Reviewer** | `mindmap_query` with `symbol` for each new name: one the map shows defined elsewhere is a re-implementation finding (blocking) unless the brief's "new, because ..." holds. New imports are checked against the module graph for forbidden edges. |
 | **Security and QA** | `mindmap_query` with `library` to see where a vulnerable or undeclared dependency is used; QA checks the brief carries the map's date and the duplicates in scope. |

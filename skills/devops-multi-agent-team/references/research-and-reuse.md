@@ -105,7 +105,7 @@ is written, and a counterexample can reject a design. Basic logic stays plain En
 ```markdown
 # Research: <topic>   Seat: <researcher-id>   Department: <dept>
 ## Scope (what it must do; modules, files and languages touched; what to leave alone)
-## Mind map (date; overview lines that matter; definitions in scope as path:start-end with callers and tests; duplicates in scope; libraries)
+## Mind map (date; overview lines that matter; the subtree in scope from mindmap_tree with each node's documentation; definitions as path:start-end with callers and tests; duplicates in scope; libraries; notes added with mindmap_note)
 ## Docs read (path, what it says, any disagreement with the code)
 ## Module mind map (Mermaid) + extension points
 ## Reuse map (term | searched where | found | reuse / extend / new because)
