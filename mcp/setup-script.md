@@ -5,7 +5,8 @@ SETUP SCRIPT. Run it when the user asks to install, set up or add the DevOps tea
 3. Call install_devops_team with apply=false (target defaults to auto: the host folders that exist, else both). If the project already has an equivalent rule file, pass skipRules. Show the user what would be created, replaced and skipped, and any warnings.
 4. Ask for agreement. On yes call install_devops_team with apply=true. If status then shows gitignoreOk=false call ensure_gitignore with apply=true. Thought files go in devops-skill/thoughts/non-final/ and devops-skill/thoughts/final/; both are git-ignored.
 5. Call check_toolchain for the chosen language and service ids. List what is missing with the install lines from get_language / get_service. Never install software or run the project's own commands yourself; use sandbox_plan to show how a command would run in the sandbox.
-6. On request only: ghas_plan (GitHub security files), tag_history / tag_plan (releases), module_map / reuse_search (research), story_new / story_graph (stories), cleanup_scan (cleanup).
+5b. Call mindmap_build with save=true. It writes only .devops/mindmap/ (OVERVIEW.md, MINDMAP.md, mindmap.json): the repository mind map. It serves plain chat (mindmap_overview answers "what is this project" without opening files) and the DevOps team (the Researcher reads it first). Show the user the overview it returns.
+6. On request only: ghas_plan (GitHub security files), tag_history / tag_plan (releases), module_map / reuse_search / mindmap_query (research), story_new / story_graph (stories), cleanup_scan (cleanup).
 7. Finish: tell the user to fill in the "Fill in by hand" section of .devops/project.md and to commit .devops/, .cursor/ and .claude/ (not devops-skill/thoughts/).
 
 Rules: plan before writing; write only after the user agrees; existing files are kept unless the user says replace; environment variables are named, never valued; nothing is pushed.

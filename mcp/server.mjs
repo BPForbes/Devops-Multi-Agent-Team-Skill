@@ -18,6 +18,7 @@ import { parseStatement, scanProject, snapshot } from '../scripts/devops-cleanup
 import { formalCheck } from '../scripts/devops-formal.mjs'
 import { ghasPlan } from '../scripts/devops-ghas.mjs'
 import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, parseStory } from '../scripts/devops-stories.mjs'
+import { buildMindMap, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree } from '../scripts/devops-mindmap.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 
@@ -25,6 +26,9 @@ const PKG = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 
 const SUPPORTED = ['2025-06-18', '2025-03-26', '2024-11-05']
 const MAX_LINE = 2 * 1024 * 1024
 const ID = /^[a-z][a-z0-9-]*$/
+
+/** Mind map wording lives in mindmap-text.json; tool lists are sent before a project is known, so the package defaults apply here. */
+const MINDMAP_TEXT = loadText()
 
 const SETUP_SCRIPT = fs.readFileSync(path.join(PACKAGE_ROOT, 'mcp', 'setup-script.md'), 'utf8').trim()
 
@@ -34,6 +38,7 @@ const INSTRUCTIONS = [
   'Any language can be used for any purpose; layers are only sorting tags. Use list_languages / get_language / add_language for languages not yet defined.',
   'The server only writes .cursor/, .claude/, .devops/, devops-skill/ (thought files and cleanup snapshots), .gitignore and (ghas_plan with apply) the .github security files and SECURITY.md inside the project, and never runs project commands; sandbox_plan only prints a container command; tag tools never push, move or delete a tag.',
   'Researchers: read documentation first, then module_map and reuse_search before any code is written.',
+  MINDMAP_TEXT.t('serverInstructions'),
 ].join(' ') + '\n\n' + SETUP_SCRIPT
 
 let clientRoots = []
@@ -231,6 +236,55 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
     annotations: { readOnlyHint: true },
     run: args => moduleMap(projectDir(args), allowedRoots()),
+  },
+  {
+    name: 'mindmap_build',
+    description: MINDMAP_TEXT.t('toolBuild'),
+    inputSchema: { type: 'object', properties: { dest, save: { type: 'boolean' }, full: { type: 'boolean', description: MINDMAP_TEXT.t('paramFull') } }, additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    run: args => {
+      const result = buildMindMap(projectDir(args), { roots: allowedRoots(), save: optionalBool(args, 'save', false) })
+      return { dest: result.dest, counts: result.map.counts, saved: result.saved ?? null, overview: result.overview, summary: result.summary, ...(optionalBool(args, 'full', false) ? { map: result.map } : {}) }
+    },
+  },
+  {
+    name: 'mindmap_overview',
+    description: MINDMAP_TEXT.t('toolOverview'),
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => mindMapOverview(projectDir(args), { roots: allowedRoots() }),
+  },
+  {
+    name: 'mindmap_tree',
+    description: MINDMAP_TEXT.t('toolTree'),
+    inputSchema: { type: 'object', properties: { dest, node: { type: 'string' }, depth: { type: 'integer', minimum: 0, maximum: 6 }, fresh: { type: 'boolean' }, limit: { type: 'integer', minimum: 1, maximum: 100 } }, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => mindMapTree(projectDir(args), { node: typeof args.node === 'string' ? args.node : 'project', depth: Number.isInteger(args.depth) ? args.depth : 2, fresh: optionalBool(args, 'fresh', false), limit: Number.isInteger(args.limit) ? args.limit : 25 }, { roots: allowedRoots() }),
+  },
+  {
+    name: 'mindmap_note',
+    description: MINDMAP_TEXT.t('toolNote'),
+    inputSchema: { type: 'object', properties: { dest, node: { type: 'string' }, text: { type: 'string', maxLength: 4000 }, apply: { type: 'boolean' } }, required: ['node', 'text'], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    run: args => mindMapNote(projectDir(args), { node: args.node, text: args.text, apply: optionalBool(args, 'apply', false) }, { roots: allowedRoots() }),
+  },
+  {
+    name: 'mindmap_status',
+    description: MINDMAP_TEXT.t('toolStatus'),
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => mindMapStatus(projectDir(args), { roots: allowedRoots() }),
+  },
+  {
+    name: 'mindmap_query',
+    description: MINDMAP_TEXT.t('toolQuery'),
+    inputSchema: {
+      type: 'object',
+      properties: { dest, symbol: { type: 'string' }, file: { type: 'string' }, module: { type: 'string' }, library: { type: 'string' }, search: { type: 'string' }, fresh: { type: 'boolean' }, limit: { type: 'integer', minimum: 1, maximum: 200 } },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => mindMapQuery(projectDir(args), { symbol: args.symbol, file: args.file, module: args.module, library: args.library, search: args.search, fresh: optionalBool(args, 'fresh', false), limit: Number.isInteger(args.limit) ? args.limit : 30 }, { roots: allowedRoots() }),
   },
   {
     name: 'reuse_search',

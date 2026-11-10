@@ -161,3 +161,43 @@ test('a clean audit adds nothing', async ($, on) => {
   engineWithAudit(on, { blocking: 0, nonBlocking: 0, findings: [] })
   assert.equal((await $.tool.call({ tool: 'Bash', command: 'git commit -m "x"' })).context, undefined)
 })
+
+const COMPOSE = { model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] }
+
+const PACKAGE_TEXT = JSON.stringify({ text: { chatPrompt: 'DEFAULT PROMPT: use mindmap_tree.', chatNoMap: 'DEFAULT NO MAP' } })
+
+function engineWithMindmap(on: any, overview: string | undefined, projectText?: string) {
+  on('state.get', () => ({ value: { value: undefined, version: 1 } }))
+  on('session.root', () => ({ value: '/work' }))
+  on('fs.exists', () => ({ value: false }))
+  on('fs.read', (_: unknown, e: { path: string }) => {
+    if (overview !== undefined && e.path === '/work/.devops/mindmap/OVERVIEW.md') return { value: overview }
+    if (projectText !== undefined && e.path === '/work/.devops/mindmap/text.json') return { value: projectText }
+    if (e.path.endsWith('/mindmap-text.json')) return { value: PACKAGE_TEXT }
+    throw new Error('missing')
+  })
+  on('prompt.compose', () => ({ sections: [] }))
+}
+
+test('a saved mind map overview reaches plain chat even with no DevOps profile', async ($, on) => {
+  engineWithMindmap(on, '# demo: at a glance\nA demo.\n')
+  const composed = await $.prompt.compose(COMPOSE)
+  const section = composed.sections.find(s => s.id === 'devops-multi-agent-team:mindmap')
+  assert.ok(section !== undefined)
+  assert.ok(String(section?.text).includes('# demo: at a glance'))
+  assert.ok(String(section?.text).includes('DEFAULT PROMPT: use mindmap_tree.'), 'the wording comes from mindmap-text.json')
+  assert.ok(!String(section?.text).includes('/devops'), 'no command is needed for the mind map')
+  assert.equal(composed.sections.some(s => s.id === 'devops-multi-agent-team:context'), false)
+})
+
+test('no saved mind map and no profile adds nothing to the prompt', async ($, on) => {
+  engineWithMindmap(on, undefined)
+  assert.equal((await $.prompt.compose(COMPOSE)).sections.length, 0)
+})
+
+test('a project\'s own wording replaces the default sentence', async ($, on) => {
+  engineWithMindmap(on, '# demo\n', JSON.stringify({ text: { chatPrompt: 'Carte du projet : répondez à partir de ceci.' } }))
+  const section = (await $.prompt.compose(COMPOSE)).sections.find(s => s.id === 'devops-multi-agent-team:mindmap')
+  assert.ok(String(section?.text).startsWith('Carte du projet : répondez à partir de ceci.'))
+  assert.ok(!String(section?.text).includes('DEFAULT PROMPT'))
+})

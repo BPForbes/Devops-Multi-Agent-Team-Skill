@@ -10,7 +10,7 @@ const MAX_SEARCH_BYTES = 512 * 1024
 const MAX_FILES_READ = 3000
 const MAX_FILES_SEARCHED = 6000
 const DOC_EXTENSIONS = ['.md', '.markdown', '.tex', '.rst', '.adoc', '.txt']
-const SECRET_FILE = /(^|\/)(\.env(\..*)?|.*\.(pem|key|p12|pfx|jks)|id_(rsa|dsa|ecdsa|ed25519)|credentials?(\..*)?|secrets?(\..*)?)$/i
+export const SECRET_FILE = /(^|\/)(\.env(\..*)?|.*\.(pem|key|p12|pfx|jks)|id_(rsa|dsa|ecdsa|ed25519)|credentials?(\..*)?|secrets?(\..*)?)$/i
 const SECRET_VALUE = /((?:secret|token|passw(?:or)?d|api[_-]?key|private[_-]?key)["']?\s*[:=]\s*)(["']?)[^\s"',;]{4,}/gi
 
 export function extensionTable(dest) {
@@ -33,8 +33,8 @@ export function moduleOf(rel) {
   return parts[0]
 }
 
-const safeId = id => 'm_' + id.replace(/[^A-Za-z0-9]/g, '_')
-const safeLabel = text => text.replace(/["\[\]()]/g, '')
+export const safeId = id => 'm_' + id.replace(/[^A-Za-z0-9]/g, '_')
+export const safeLabel = text => text.replace(/["\[\]()]/g, '')
 
 function importsOf(rel, text, language) {
   const dir = path.posix.dirname(rel)
@@ -121,7 +121,7 @@ export function moduleMap(destInput, roots) {
 const DECLARATION = /^\s*(?:export\s+|pub(?:\([^)]*\))?\s+|public\s+|private\s+|protected\s+|static\s+|async\s+|abstract\s+|final\s+)*(?:def|fn|func|function|class|struct|interface|trait|enum|impl|type|const|let|var|module|defmodule|defp?|sub|proc|procedure|record|object)\b/
 const COMMENT = /^\s*(?:\/\/|\/\*|\*|#|--|;|!|'''|"""|%|\(\*|<!--)/
 
-const redact = line => line.replace(SECRET_VALUE, '$1$2***')
+export const redact = line => line.replace(SECRET_VALUE, '$1$2***')
 
 export function reuseSearch(destInput, terms, roots, { maxPerTerm = 20 } = {}) {
   const dest = resolveDest(destInput, roots)

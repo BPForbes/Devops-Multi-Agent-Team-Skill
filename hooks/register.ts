@@ -5,6 +5,11 @@ import { branchNameOf, classify, classifySegments, commitInfo, splitArgs, verdic
 
 const PLUGIN = 'devops-multi-agent-team'
 const THOUGHT_DIRS = ['devops-skill/thoughts/non-final', 'devops-skill/thoughts/final']
+const MINDMAP_OVERVIEW = '.devops/mindmap/OVERVIEW.md'
+/** The mind map's wording: the package defaults, then the project's own file, key by key. */
+const MINDMAP_TEXT_OVERRIDE = '.devops/mindmap/text.json'
+/** Keeps the session prompt small: the overview is about forty lines, this is a guard against a huge README summary. */
+const MAX_OVERVIEW_CHARS = 4000
 
 
 const HELP = [
@@ -18,6 +23,20 @@ const HELP = [
   '/devops monitor on|off (you) turn the failed-check monitor on or off',
   '/devops comments warn|strict|off (you) comment audit on git commit: warn (default), refuse a commit with blocking findings, or off',
 ].join('\n')
+
+async function mindmapText($: EngineInterface, root: string): Promise<Record<string, string>> {
+  const parse = (raw: unknown): Record<string, string> => {
+    try {
+      const text = (JSON.parse(typeof raw === 'string' ? raw : '') as { text?: Record<string, unknown> }).text ?? {}
+      return Object.fromEntries(Object.entries(text).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+    } catch {
+      return {}
+    }
+  }
+  const defaults = parse(await $.fs.read(`${$.plugin.root}/mindmap-text.json`).catch(() => ''))
+  const project = parse(await $.fs.read(`${root}/${MINDMAP_TEXT_OVERRIDE}`).catch(() => ''))
+  return { ...defaults, ...project }
+}
 
 async function detect($: EngineInterface): Promise<Found[]> {
   const root = await $.session.root()
@@ -148,7 +167,7 @@ export const register: Register = on => {
 
   on('command.run', { command: 'devops' }, async ($, e) => {
     const { word, rest } = splitArgs(e.args)
-    const isPerson = e.origin.kind === 'composer'
+    const isPerson = e.origin?.kind === 'composer'
     const personOnly = (): { text: string } | undefined =>
       isPerson ? undefined : { text: `/devops ${word} changes a gate, so only you can run it by typing it; an agent cannot.` }
 
@@ -296,9 +315,22 @@ export const register: Register = on => {
 
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
+    const root = await $.session.root()
+    const overview = await $.fs.read(`${root}/${MINDMAP_OVERVIEW}`).catch(() => '')
+    const wording = await mindmapText($, root)
+    const mindmapSection = typeof overview === 'string' && overview.trim() !== ''
+      ? [{
+          id: `${PLUGIN}:mindmap`,
+          text: [
+            wording.chatPrompt,
+            overview.length > MAX_OVERVIEW_CHARS ? `${overview.slice(0, MAX_OVERVIEW_CHARS)}\n${wording.chatOverviewCut ?? ''}` : overview,
+          ].filter(Boolean).join('\n\n'),
+          scope: 'session' as const,
+        }]
+      : []
     const languages = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'languages' } as const)).value ?? []
-    const hasProfile = await $.fs.exists(`${await $.session.root()}/.devops/project.md`).catch(() => false)
-    if (languages.length === 0 && !hasProfile) return composed
+    const hasProfile = await $.fs.exists(`${root}/.devops/project.md`).catch(() => false)
+    if (languages.length === 0 && !hasProfile) return { sections: [...composed.sections, ...mindmapSection] }
 
     const text = [
       'The devops-multi-agent-team skill is available in this project.',
@@ -307,8 +339,9 @@ export const register: Register = on => {
         ? 'Read .devops/project.md before planning: it lists the validation and security commands per language.'
         : 'No .devops/project.md yet: /devops setup shows how to create it.',
       'Only QA may give the OK to push; git push, gh pr create|merge and creating a git branch are refused until QA records "Publish gate: PASS" and the person runs /devops push-ok.',
+      mindmapSection.length === 0 ? wording.chatNoMap : undefined,
     ].filter(Boolean).join(' ')
 
-    return { sections: [...composed.sections, { id: `${PLUGIN}:context`, text, scope: 'session' as const }] }
+    return { sections: [...composed.sections, { id: `${PLUGIN}:context`, text, scope: 'session' as const }, ...mindmapSection] }
   })
 }
