@@ -10,6 +10,8 @@ import { SECRET_FILE, extensionTable, languageOf, moduleOf, redact, safeId, safe
 export const MINDMAP_DIR = path.join('.devops', 'mindmap')
 const MAP_FILE = 'mindmap.json'
 const SUMMARY_FILE = 'MINDMAP.md'
+const OVERVIEW_FILE = 'OVERVIEW.md'
+const ENTRY_FILE = /(^|\/)(main\.(go|rs|py|c|cc|cpp|java|kt|cs|swift|zig|dart|ts|js|mjs)|__main__\.py|manage\.py|Program\.cs|(index|app|server|cli)\.(ts|tsx|js|mjs|py|rb|php))$/
 const FORMAT = 1
 const MAX_FILE_BYTES = 256 * 1024
 const MAX_FILES = 4000
@@ -308,8 +310,12 @@ function docInfo(rel, text, fileSet) {
   }
   title = frontField('title') ?? frontField('name') ?? title
   const body = text.slice(front ? front.length + 8 : 0)
-  const paragraph = body.split(/\n\s*\n/).map(p => p.trim()).find(p => p && !/^(#|\\|=|```|\||<|!\[|-{3,})/.test(p))
-  const summary = (frontField('description') ?? paragraph?.replace(/\s+/g, ' '))?.slice(0, 200) ?? null
+  const blocks = body.split(/\n\s*\n/).map(p => p.trim())
+  const at = blocks.findIndex(p => p && !/^(#|\\|=|```|\||<|!\[|-{3,})/.test(p))
+  let paragraph = at === -1 ? undefined : blocks[at]
+  if (paragraph?.endsWith(':') && blocks[at + 1]) paragraph += ' ' + blocks[at + 1].split(/\n(?=\s*(?:[-*+]|\d+\.)\s)/).map(item => item.replace(/^\s*(?:[-*+]|\d+\.)\s+/, '').replace(/\s+/g, ' ')).join('; ')
+  const plain = text => text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\*\*|__/g, '').replace(/\s+/g, ' ').trim()
+  const summary = plain(frontField('description') ?? paragraph ?? '').slice(0, 200) || null
   const dir = path.posix.dirname(rel)
   for (const m of text.matchAll(/\]\(([^)\s#]+)(?:#[^)]*)?\)/g)) {
     if (/^[a-z]+:/i.test(m[1])) continue
@@ -467,37 +473,125 @@ export function buildMindMap(destInput, { roots, save = false } = {}) {
     return new Set(sources.map(d => d.file)).size > 1
   }).map(([name, defs]) => ({ name, definitions: defs.filter(d => !files[d.file].test).map(d => `${d.file}:${d.line}`) })).sort((a, b) => b.definitions.length - a.definitions.length || a.name.localeCompare(b.name))
 
+  const project = projectFacts(dest, all, files)
   const map = {
-    format: FORMAT, generatedAt: new Date().toISOString(),
+    format: FORMAT, generatedAt: new Date().toISOString(), project,
     counts: { codeFiles: Object.keys(files).length, docs: Object.keys(docs).length, modules: Object.keys(modules).length, symbols: Object.values(files).reduce((n, f) => n + f.symbols.length, 0), calls: callList.length, libraries: Object.keys(libraries).length, skippedFiles: skipped, unresolvedCalls },
     modules, files, importedBy, testedBy, docs, libraries, calls: callList, duplicates,
     note: 'Heuristic (regular expressions, no compiler): dynamic imports, reflection, macros, overloads and same-named methods on different types are not told apart. A call is linked only when the callee is in the same file, a file it imports, or defined once in the project. Read the file before relying on a link for a change.',
   }
-  const result = { dest, map, summary: renderSummary(map) }
+  const overview = renderOverview(map)
+  const result = { dest, map, overview, summary: renderSummary(map, overview) }
   if (save) {
     const dir = path.join(dest, MINDMAP_DIR)
-    for (const [name, body] of [[MAP_FILE, JSON.stringify(map) + '\n'], [SUMMARY_FILE, result.summary]]) {
+    for (const [name, body] of [[MAP_FILE, JSON.stringify(map) + '\n'], [SUMMARY_FILE, result.summary], [OVERVIEW_FILE, overview]]) {
       const file = path.join(dir, name)
       assertInside(dest, file)
       fs.mkdirSync(dir, { recursive: true })
       fs.writeFileSync(file, body)
     }
-    result.saved = [path.join(MINDMAP_DIR, MAP_FILE), path.join(MINDMAP_DIR, SUMMARY_FILE)]
+    result.saved = [path.join(MINDMAP_DIR, MAP_FILE), path.join(MINDMAP_DIR, SUMMARY_FILE), path.join(MINDMAP_DIR, OVERVIEW_FILE)]
   }
   return result
+}
+
+/** Where the project starts and how it is run: manifest entry points, conventional main files, scripts and make targets. */
+function projectFacts(dest, all, files) {
+  const read = rel => { try { return fs.readFileSync(path.join(dest, rel), 'utf8') } catch { return '' } }
+  const entryPoints = new Set()
+  const commands = []
+  let name
+  const pkgText = read('package.json')
+  if (pkgText) {
+    try {
+      const pkg = JSON.parse(pkgText)
+      name = pkg.name
+      const bins = typeof pkg.bin === 'string' ? [pkg.bin] : Object.values(pkg.bin ?? {})
+      for (const target of [...bins, pkg.main, typeof pkg.exports === 'string' ? pkg.exports : undefined]) if (typeof target === 'string') entryPoints.add(path.posix.normalize(target))
+      for (const [script, command] of Object.entries(pkg.scripts ?? {})) commands.push({ run: `npm run ${script}`, does: String(command).slice(0, 100) })
+    } catch { /* not JSON: no facts from it */ }
+  }
+  const pyproject = read('pyproject.toml')
+  name ??= pyproject.match(/^name\s*=\s*"([^"]+)"/m)?.[1]
+  for (const m of (pyproject.match(/^\[project\.scripts\]([\s\S]*?)(?=^\[|$(?![\s\S]))/m)?.[1] ?? '').matchAll(/^([\w-]+)\s*=\s*"([^"]+)"/gm)) commands.push({ run: m[1], does: m[2] })
+  name ??= read('Cargo.toml').match(/^\[package\][\s\S]*?^name\s*=\s*"([^"]+)"/m)?.[1] ?? read('go.mod').match(/^module\s+(\S+)/m)?.[1]
+  for (const m of read('Makefile').matchAll(/^([A-Za-z][\w-]*)\s*:(?!=)/gm)) if (commands.length < 30) commands.push({ run: `make ${m[1]}`, does: '' })
+  for (const rel of all) if (ENTRY_FILE.test(rel) && files[rel] && !files[rel].test && rel.split('/').length <= 3) entryPoints.add(rel)
+  return { name: name ?? null, entryPoints: [...entryPoints].filter(rel => all.includes(rel)).slice(0, 12), commands: commands.slice(0, 20) }
 }
 
 const cell = text => String(text).replace(/\|/g, '\\|')
 const top = (object, n) => Object.entries(object).sort((a, b) => b[1] - a[1]).slice(0, n)
 
-/** The Markdown an agent reads first: small, bounded, pointing at `mindmap_query` for detail. */
-export function renderSummary(map) {
+const README = /^readme\.(md|markdown|rst|adoc|txt)$/i
+
+/** What a module is for: its own README's summary, else the first doc inside it, else its main exports. */
+function purposeOf(id, m, map) {
+  const summary = (m.docs ?? []).filter(rel => README.test(rel.split('/').pop())).sort((a, b) => a.length - b.length).map(rel => map.docs[rel]?.summary).find(Boolean)
+  if (summary) return summary.slice(0, 140)
+  const names = m.exports.slice(0, 5).map(e => e.split(' ')[0])
+  return names.length > 0 ? `exports ${names.join(', ')}` : `${m.files.length} files`
+}
+
+/**
+ * The quick scan: what the project is, where it starts, how it runs, its parts,
+ * which docs to read and what to watch out for, in about forty lines. Shown in
+ * plain chat with no team running, and at the top of MINDMAP.md.
+ */
+export function renderOverview(map) {
+  const c = map.counts
+  const out = []
+  const readme = Object.keys(map.docs).filter(rel => README.test(rel)).sort((a, b) => a.length - b.length)[0]
+  const title = map.project?.name ?? (readme ? map.docs[readme].title : null) ?? 'This project'
+  out.push(`# ${title}: at a glance`, '')
+  if (readme && map.docs[readme].summary) out.push(map.docs[readme].summary, '')
+  const languages = {}
+  for (const info of Object.values(map.files)) languages[info.language] = (languages[info.language] ?? 0) + 1
+  out.push(`**Size:** ${c.codeFiles} code files (${top(languages, 5).map(([l, n]) => `${l} ${n}`).join(', ') || 'none'}), ${c.docs} docs, ${c.modules} modules, ${c.symbols} functions and types.`)
+  if (map.project?.entryPoints?.length) out.push(`**Starts at:** ${map.project.entryPoints.map(e => `\`${e}\``).join(', ')}`)
+  if (map.project?.commands?.length) out.push(`**Run with:** ${map.project.commands.slice(0, 8).map(cmd => `\`${cmd.run}\`${cmd.does ? ` (${cmd.does.slice(0, 50)})` : ''}`).join('; ')}`)
+  out.push('')
+  const modules = Object.entries(map.modules).sort((a, b) => b[1].files.length - a[1].files.length).slice(0, 12)
+  if (modules.length > 0) {
+    out.push('**Parts of the code:**')
+    for (const [id, m] of modules) {
+      const deps = Object.keys(m.dependsOn).slice(0, 3)
+      out.push(`- \`${id}\` (${m.files.length} files): ${purposeOf(id, m, map)}${deps.length ? `; uses ${deps.join(', ')}` : ''}`)
+    }
+    out.push('')
+  }
+  const docAreas = {}
+  for (const rel of Object.keys(map.docs)) { const area = rel.includes('/') ? rel.split('/')[0] + '/' : '(root)'; docAreas[area] = (docAreas[area] ?? 0) + 1 }
+  const inbound = {}
+  for (const d of Object.values(map.docs)) for (const target of d.links) if (map.docs[target]) inbound[target] = (inbound[target] ?? 0) + 1
+  const readFirst = [...new Set([readme, ...top(inbound, 5).map(([rel]) => rel)].filter(Boolean))]
+  if (readFirst.length > 0) {
+    out.push('**Docs to read first:**')
+    for (const rel of readFirst) out.push(`- \`${rel}\`: ${map.docs[rel].title ?? ''}${map.docs[rel].summary && rel !== readme ? `: ${map.docs[rel].summary.slice(0, 100)}` : ''}`)
+    out.push(`- Docs by folder: ${top(docAreas, 8).map(([a, n]) => `${a} ${n}`).join(', ')}`, '')
+  }
+  const hubs = Object.entries(map.importedBy).map(([rel, list]) => [rel, list.length]).sort((a, b) => b[1] - a[1]).slice(0, 5)
+  if (hubs.length > 0) out.push(`**Most depended-on files:** ${hubs.map(([rel, n]) => `\`${rel}\` (${n})`).join(', ')}`)
+  const libs = Object.entries(map.libraries).map(([name, l]) => [name, l.usedBy.filter(rel => !map.files[rel]?.test).length]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).slice(0, 8)
+  if (libs.length > 0) out.push(`**Main libraries:** ${libs.map(([name, n]) => `${name} (${n} files)`).join(', ')}`)
+  const warnings = []
+  if (map.duplicates.length > 0) warnings.push(`${map.duplicates.length} name(s) defined in more than one file (${map.duplicates.slice(0, 4).map(d => d.name).join(', ')})`)
+  const undeclared = Object.entries(map.libraries).filter(([, l]) => l.undeclared).length
+  if (undeclared > 0) warnings.push(`${undeclared} imported package(s) not in a manifest (standard library or missing)`)
+  if (warnings.length > 0) out.push(`**Watch out:** ${warnings.join('; ')}.`)
+  out.push('', `_Mind map of ${map.generatedAt}. Details: \`.devops/mindmap/MINDMAP.md\`; exact lookups: \`mindmap_query\` (symbol, file, module, library, search)._`, '')
+  return out.join('\n')
+}
+
+/** The Markdown an agent reads before opening files: the overview, then the detail, bounded, pointing at `mindmap_query`. */
+export function renderSummary(map, overview = renderOverview(map)) {
   const out = []
   const c = map.counts
   out.push('# Repository mind map', '')
   out.push(`Generated ${map.generatedAt} by \`mindmap_build\` (\`devops-mindmap build --save\`). Do not edit by hand.`, '')
   out.push(`${c.codeFiles} code files, ${c.docs} docs, ${c.modules} modules, ${c.symbols} symbols, ${c.calls} call links, ${c.libraries} libraries.`, '')
-  out.push('**How to use it.** Read this file before opening source files. Ask `mindmap_query` (symbol, file, module, library, search) for exact definitions, signatures, callers, importers, tests and docs instead of reading files to find them. Run `mindmap_status` first: only the files it lists as changed need re-reading. Before writing a new function, look it up here and in **Possible duplicates**.', '')
+  out.push('**How to use it.** Read the overview below for a question about the project; read on for the detail. Ask `mindmap_query` (symbol, file, module, library, search) for exact definitions, signatures, callers, importers, tests and docs instead of reading files to find them. Run `mindmap_status` first: only the files it lists as changed need re-reading. Before writing a new function, look it up here and in **Possible duplicates**.', '')
+  out.push(overview.replace(/^# /, '## '), '')
 
   const modules = Object.entries(map.modules).sort((a, b) => b[1].files.length - a[1].files.length)
   const shown = modules.slice(0, 30)
@@ -581,6 +675,24 @@ export function mindMapStatus(destInput, { roots } = {}) {
   }
 }
 
+/**
+ * The quick scan for plain chat: the saved OVERVIEW.md (with how many files
+ * changed since), or one built now when nothing is saved. Writes nothing.
+ */
+export function mindMapOverview(destInput, { roots } = {}) {
+  const dest = resolveDest(destInput, roots)
+  const saved = loadSaved(dest)
+  if (!saved) {
+    const built = buildMindMap(dest)
+    return { dest, source: 'built now, not saved (mindmap_build with save=true keeps it)', overview: built.overview }
+  }
+  let overview
+  try { overview = fs.readFileSync(path.join(dest, MINDMAP_DIR, OVERVIEW_FILE), 'utf8') } catch { overview = renderOverview(saved) }
+  const status = mindMapStatus(dest)
+  const changed = status.changed.length + status.added.length + status.removed.length
+  return { dest, source: `saved map from ${saved.generatedAt}`, stale: status.stale, changedFiles: changed, overview, ...(changed > 0 ? { next: `${changed} file(s) changed since: ${[...status.changed, ...status.added, ...status.removed].slice(0, 10).join(', ')}. Read those directly if the question touches them; rebuild with mindmap_build save=true.` } : {}) }
+}
+
 const parseRef = ref => { const i = ref.lastIndexOf('#'); return { file: ref.slice(0, i), name: ref.slice(i + 1) } }
 
 /**
@@ -642,13 +754,16 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       const result = buildMindMap(dest, { save: args.includes('--save') })
       if (args.includes('--json')) console.log(JSON.stringify(result.map))
       else console.log(result.saved ? `saved ${result.saved.join(' and ')}\n${JSON.stringify(result.map.counts)}` : result.summary)
+    } else if (command === 'overview') {
+      const result = mindMapOverview(dest)
+      console.log(args.includes('--json') ? JSON.stringify(result) : result.overview + (result.next ? `\n${result.next}` : ''))
     } else if (command === 'status') {
       console.log(JSON.stringify(mindMapStatus(dest), null, 2))
     } else if (command === 'query') {
       const query = Object.fromEntries(['symbol', 'file', 'module', 'library', 'search'].map(k => [k, opt('--' + k)]).filter(([, v]) => v !== undefined))
       console.log(JSON.stringify(mindMapQuery(dest, { ...query, fresh: args.includes('--fresh') }), null, 2))
     } else {
-      console.error('usage: devops-mindmap build [--save] [--json] | status | query --symbol NAME|--file PATH|--module ID|--library NAME|--search TEXT [--fresh]   [--dest DIR]')
+      console.error('usage: devops-mindmap overview [--json] | build [--save] [--json] | status | query --symbol NAME|--file PATH|--module ID|--library NAME|--search TEXT [--fresh]   [--dest DIR]')
       process.exitCode = 2
     }
   } catch (error) {

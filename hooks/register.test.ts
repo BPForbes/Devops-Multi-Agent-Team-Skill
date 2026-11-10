@@ -161,3 +161,49 @@ test('a clean audit adds nothing', async ($, on) => {
   engineWithAudit(on, { blocking: 0, nonBlocking: 0, findings: [] })
   assert.equal((await $.tool.call({ tool: 'Bash', command: 'git commit -m "x"' })).context, undefined)
 })
+
+const COMPOSE = { model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] }
+
+function engineWithMindmap(on: any, overview: string | undefined) {
+  const runs: string[][] = []
+  on('state.get', () => ({ value: { value: undefined, version: 1 } }))
+  on('session.root', () => ({ value: '/work' }))
+  on('fs.exists', () => ({ value: false }))
+  on('fs.read', (_: unknown, e: { path: string }) => {
+    if (overview !== undefined && e.path === '/work/.devops/mindmap/OVERVIEW.md') return { value: overview }
+    throw new Error('missing')
+  })
+  on('process.run', (_: unknown, e: { argv: string[] }) => {
+    runs.push(e.argv)
+    return { value: { exitCode: 0, stdout: `ran ${e.argv.slice(2).join(' ')}\n`, stderr: '' } }
+  })
+  on('prompt.compose', () => ({ sections: [] }))
+  on('command.run', () => ({}))
+  return runs
+}
+
+test('a saved mind map overview reaches plain chat even with no DevOps profile', async ($, on) => {
+  engineWithMindmap(on, '# demo: at a glance\nA demo.\n')
+  const composed = await $.prompt.compose(COMPOSE)
+  const section = composed.sections.find(s => s.id === 'devops-multi-agent-team:mindmap')
+  assert.ok(section !== undefined)
+  assert.ok(String(section?.text).includes('# demo: at a glance'))
+  assert.ok(String(section?.text).includes('mindmap_query'))
+  assert.equal(composed.sections.some(s => s.id === 'devops-multi-agent-team:context'), false)
+})
+
+test('no saved mind map and no profile adds nothing to the prompt', async ($, on) => {
+  engineWithMindmap(on, undefined)
+  assert.equal((await $.prompt.compose(COMPOSE)).sections.length, 0)
+})
+
+test('/devops map shows the overview, refreshes, and searches', async ($, on) => {
+  const runs = engineWithMindmap(on, undefined)
+  assert.ok(String((await $.command.run({ command: 'devops', args: 'map' })).text).includes('ran overview'))
+  await $.command.run({ command: 'devops', args: 'map refresh' })
+  assert.deepEqual(runs[1].slice(2), ['build', '--save', '--dest', '/work'])
+  await $.command.run({ command: 'devops', args: 'map slugify' })
+  assert.deepEqual(runs[2].slice(2), ['query', '--search', 'slugify', '--dest', '/work'])
+  assert.ok(String((await $.command.run({ command: 'devops', args: 'map a;rm' })).text).startsWith('Usage'))
+  assert.equal(runs.length, 3)
+})

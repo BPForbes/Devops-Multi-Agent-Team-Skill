@@ -5,6 +5,9 @@ import { branchNameOf, classify, classifySegments, commitInfo, splitArgs, verdic
 
 const PLUGIN = 'devops-multi-agent-team'
 const THOUGHT_DIRS = ['devops-skill/thoughts/non-final', 'devops-skill/thoughts/final']
+const MINDMAP_OVERVIEW = '.devops/mindmap/OVERVIEW.md'
+/** Keeps the session prompt small: the overview is about forty lines, this is a guard against a huge README summary. */
+const MAX_OVERVIEW_CHARS = 4000
 
 
 const HELP = [
@@ -17,7 +20,19 @@ const HELP = [
   '/devops gates on|off (you) turn the push and branch gates on or off',
   '/devops monitor on|off (you) turn the failed-check monitor on or off',
   '/devops comments warn|strict|off (you) comment audit on git commit: warn (default), refuse a commit with blocking findings, or off',
+  '/devops map          the project at a glance, from the mind map (works without the DevOps team)',
+  '/devops map refresh  rebuild and save the mind map (.devops/mindmap/)',
+  '/devops map TEXT     find functions, files and docs whose name contains TEXT',
 ].join('\n')
+
+async function mindmap($: EngineInterface, args: string[]): Promise<string> {
+  const root = await $.session.root()
+  const ran = await $.process
+    .run(['node', `${$.plugin.root}/scripts/devops-mindmap.mjs`, ...args, '--dest', root], { timeoutMs: 30000 })
+    .catch(() => undefined)
+  if (ran === undefined) return 'The mind map script could not be run (is node on the PATH?).'
+  return ran.exitCode === 0 ? ran.stdout.trim() : `devops-mindmap failed: ${ran.stderr.trim().slice(0, 300)}`
+}
 
 async function detect($: EngineInterface): Promise<Found[]> {
   const root = await $.session.root()
@@ -137,7 +152,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'devops',
       description: 'DevOps multi-agent team: languages, gates, QA verdict',
-      argumentHint: '[languages|setup|push-ok|push-reset|allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off]',
+      argumentHint: '[map [refresh|TEXT]|languages|setup|push-ok|push-reset|allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off]',
     })
     const found = await detect($)
     await $.state.set({ plugin: 'devops-multi-agent-team', key: 'languages' } as const, found.map(f => f.id))
@@ -148,7 +163,7 @@ export const register: Register = on => {
 
   on('command.run', { command: 'devops' }, async ($, e) => {
     const { word, rest } = splitArgs(e.args)
-    const isPerson = e.origin.kind === 'composer'
+    const isPerson = e.origin?.kind === 'composer'
     const personOnly = (): { text: string } | undefined =>
       isPerson ? undefined : { text: `/devops ${word} changes a gate, so only you can run it by typing it; an agent cannot.` }
 
@@ -168,6 +183,12 @@ export const register: Register = on => {
           `branches you allowed: ${branches.length === 0 ? 'none' : branches.join(', ')}`,
         ].join('\n'),
       }
+    }
+    if (word === 'map') {
+      if (rest === '') return { text: await mindmap($, ['overview']) }
+      if (rest === 'refresh') return { text: await mindmap($, ['build', '--save']) }
+      if (!/^[\w.$/-]{2,80}$/.test(rest)) return { text: 'Usage: /devops map [refresh|TEXT], TEXT being a name or path fragment (letters, digits, . _ $ / -).' }
+      return { text: await mindmap($, ['query', '--search', rest]) }
     }
     if (word === 'languages') {
       const found = await detect($)
@@ -296,9 +317,21 @@ export const register: Register = on => {
 
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
+    const root = await $.session.root()
+    const overview = await $.fs.read(`${root}/${MINDMAP_OVERVIEW}`).catch(() => '')
+    const mindmapSection = typeof overview === 'string' && overview.trim() !== ''
+      ? [{
+          id: `${PLUGIN}:mindmap`,
+          text: [
+            'Project mind map (quick scan, generated; use it with or without the DevOps team). For a question about this project, answer from it first; for specifics use the mindmap_query MCP tool or /devops map TEXT, and open files only at the line ranges they give. It can be out of date: mindmap_status (or /devops map) says which files changed; read those directly.',
+            overview.length > MAX_OVERVIEW_CHARS ? overview.slice(0, MAX_OVERVIEW_CHARS) + '\n[cut; full text in .devops/mindmap/OVERVIEW.md]' : overview,
+          ].join('\n\n'),
+          scope: 'session' as const,
+        }]
+      : []
     const languages = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'languages' } as const)).value ?? []
-    const hasProfile = await $.fs.exists(`${await $.session.root()}/.devops/project.md`).catch(() => false)
-    if (languages.length === 0 && !hasProfile) return composed
+    const hasProfile = await $.fs.exists(`${root}/.devops/project.md`).catch(() => false)
+    if (languages.length === 0 && !hasProfile) return { sections: [...composed.sections, ...mindmapSection] }
 
     const text = [
       'The devops-multi-agent-team skill is available in this project.',
@@ -307,8 +340,9 @@ export const register: Register = on => {
         ? 'Read .devops/project.md before planning: it lists the validation and security commands per language.'
         : 'No .devops/project.md yet: /devops setup shows how to create it.',
       'Only QA may give the OK to push; git push, gh pr create|merge and creating a git branch are refused until QA records "Publish gate: PASS" and the person runs /devops push-ok.',
+      mindmapSection.length === 0 ? 'No mind map saved yet: /devops map refresh (or mindmap_build with save=true) builds one for quick answers about the project.' : undefined,
     ].filter(Boolean).join(' ')
 
-    return { sections: [...composed.sections, { id: `${PLUGIN}:context`, text, scope: 'session' as const }] }
+    return { sections: [...composed.sections, { id: `${PLUGIN}:context`, text, scope: 'session' as const }, ...mindmapSection] }
   })
 }

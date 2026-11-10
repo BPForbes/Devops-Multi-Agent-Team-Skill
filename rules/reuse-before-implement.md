@@ -17,7 +17,7 @@ generated clients already cover the need, and can they be used or extended?
 - Reviewers block duplicated code. Say what exists and how to extend it.
 
 The DevOps multi-agent team has the Researcher produce a module mind map and a
-reuse map (`references/research-and-reuse.md`) before any Coder starts. Every
-seat reads the repository mind map (`.devops/mindmap/MINDMAP.md`,
-`references/mind-map.md`) before opening source files and asks `mindmap_query`
-where something is defined and who calls it instead of re-reading files.
+reuse map (`references/research-and-reuse.md`) before any Coder starts. The
+Researcher owns the repository mind map (`references/mind-map.md`) and carries
+it into the brief; any seat, and plain chat, asks `mindmap_query` where
+something is defined and who calls it instead of re-reading files.

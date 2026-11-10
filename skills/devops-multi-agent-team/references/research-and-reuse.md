@@ -38,8 +38,8 @@ is a finding, not something to quietly resolve.
 
 Every research brief carries a **module mind map**: a Mermaid diagram of the
 modules the change could touch, how they depend on each other, and where
-each could be extended. Build it from evidence, not memory: start from the
-repository mind map ([mind-map.md](mind-map.md): `.devops/mindmap/MINDMAP.md`,
+each could be extended. Build it from evidence, not memory: the Researcher owns
+and starts from the repository mind map ([mind-map.md](mind-map.md): `.devops/mindmap/MINDMAP.md`,
 `mindmap_status`, `mindmap_query`), which already holds the docs, modules,
 imports, functions, call links and libraries; the MCP tool `module_map` (or
 `devops-research module-map`) gives the module graph alone. Add what you learn
@@ -105,6 +105,7 @@ is written, and a counterexample can reject a design. Basic logic stays plain En
 ```markdown
 # Research: <topic>   Seat: <researcher-id>   Department: <dept>
 ## Scope (what it must do; modules, files and languages touched; what to leave alone)
+## Mind map (date; overview lines that matter; definitions in scope as path:start-end with callers and tests; duplicates in scope; libraries)
 ## Docs read (path, what it says, any disagreement with the code)
 ## Module mind map (Mermaid) + extension points
 ## Reuse map (term | searched where | found | reuse / extend / new because)

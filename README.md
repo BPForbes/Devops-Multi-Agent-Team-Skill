@@ -16,6 +16,7 @@ commands, plus:
 
 | Path | What |
 |------|------|
+| `skills/project-mindmap/` | Plain-chat skill: answer questions about the project from the mind map, no team needed. |
 | `skills/devops-multi-agent-team/` | The skill: `SKILL.md` and `references/` (seat ids, pods, side worktrees, Push JSON, QA policy, SOC 2 review, templates). Language-neutral. |
 | `agents/` | Nine role prompts: researcher, reviewer, CI, quality (QA), security, ticket lead, verifier, integrator, communicator. |
 | `commands/` | `/goal`, `/create-subagent`, `/code-review`, `/repro`, `/triage`, `/mindmap`. |
@@ -24,8 +25,26 @@ commands, plus:
 | `mcp/server.mjs` | The MCP server for installing and managing through chat. |
 | `templates/project.md` | Skeleton of the per-project profile (`.devops/project.md`). |
 | `scripts/devops-setup.mjs` | `list`, `detect`, `profile`, `install`, `status`, `check`, `sandbox`. No dependencies, Node 18+. |
-| `scripts/devops-mindmap.mjs` | The repository mind map: `build [--save]`, `status`, `query`. Writes `.devops/mindmap/`. |
+| `scripts/devops-mindmap.mjs` | The repository mind map: `overview`, `build [--save]`, `status`, `query`. Writes only `.devops/mindmap/`, and only with `--save`. |
 | `hooks/`, `types/`, `.claude-plugin/` | The Claude mod and plugin manifest. |
+
+## Repository mind map: with or without the team
+
+`.devops/mindmap/` holds a generated map of the project: `OVERVIEW.md` (a quick
+scan of about forty lines), `MINDMAP.md` (modules, docs, hubs, libraries,
+possible duplicates) and `mindmap.json` (behind `mindmap_query`). Build it with
+`mindmap_build save=true`, `/devops map refresh` or
+`node scripts/devops-mindmap.mjs build --save`; it takes well under a second.
+
+- **Plain chat, no team.** Ask "what is this project?", "where is X?", "what
+  uses lodash?". The `project-mindmap` skill answers from `mindmap_overview`
+  (the Claude mod already puts the overview in the session prompt), then
+  `mindmap_query` for specifics, opening files only at the line ranges given.
+  `/devops map` shows the overview, `/devops map TEXT` searches it.
+- **DevOps team run (Research, Coder, Reviewers, Security, QA).** The
+  Researcher owns the map: refreshes it at the start of research, queries it
+  and puts what the others need in the brief; the others use it only for
+  narrow lookups. Details: [`mind-map.md`](skills/devops-multi-agent-team/references/mind-map.md).
 
 ## Install through chat (MCP)
 
@@ -77,7 +96,8 @@ prompts) walks the same steps.
 | `check_toolchain` | is each tool installed? (`<tool> --version` only; env vars reported as set/unset, never their values) |
 | `sandbox_plan` | prints the container command that runs a command for a language in the sandbox; runs nothing |
 | `module_map` | research: modules, languages and the imports between them as a Mermaid mind map |
-| `mindmap_build`, `mindmap_status`, `mindmap_query` | the repository mind map every seat reads before opening files: docs (title, summary, links), modules, file imports and importers, functions and classes with signatures and line ranges, call links, libraries (declared vs used), tests and docs per file, and names defined twice; `status` lists only the files changed since it was saved; `query` answers one question (symbol, file, module, library, search) so files are not re-read to find it |
+| `mindmap_overview` | the project at a glance in about forty lines (what it is, size, where it starts, how it runs, its parts, docs to read first, main libraries, what to watch out for); for plain chat, no team needed |
+| `mindmap_build`, `mindmap_status`, `mindmap_query` | the full repository mind map (the Researcher owns it in a team run): docs (title, summary, links), modules, file imports and importers, functions and classes with signatures and line ranges, call links, libraries (declared vs used), tests and docs per file, and names defined twice; `status` lists only the files changed since it was saved; `query` answers one question (symbol, file, module, library, search) so files are not re-read to find it |
 | `reuse_search` | research: where a term (or a spelling variant) already appears in code, comments and docs (Markdown, LaTeX, ...); secret files skipped |
 | `tag_history` | versions: how the project changed between git tags (commits, files, lines, directories, languages, commit types), unreleased work and a suggested bump; `save` keeps a snapshot in `.devops/tags/` |
 | `tag_plan`, `tag_create` | versions: plan the next semver tag; create one annotated local tag. Never pushes, moves or deletes a tag |
@@ -135,7 +155,7 @@ which holds the committed profile `.devops/project.md`. The tests check this aga
 | Rule | Where | Enforced by |
 |------|-------|-------------|
 | **Documentation first** (Markdown, LaTeX, code comments, then code, then the web) | `research-and-reuse.md`, researcher agent | Reviewers reject a brief without it |
-| **Repository mind map** read before opening source files: re-read only what `mindmap_status` says changed, look up definitions, callers and libraries with `mindmap_query`, read files only at the line ranges it gives; fewer tokens and no second copy of a function | [`mind-map.md`](skills/devops-multi-agent-team/references/mind-map.md), `mindmap_*` tools | Coders refresh it before handoff; Reviewers: a name it shows defined elsewhere is a re-implementation finding; QA: nothing stale for the changed files |
+| **Repository mind map**, with or without the team: plain chat answers from its overview; in a team run the Researcher refreshes and queries it and carries it into the brief, so other seats read files only at the line ranges given; fewer tokens and no second copy of a function | [`mind-map.md`](skills/devops-multi-agent-team/references/mind-map.md), `project-mindmap` skill, `mindmap_*` tools, `/devops map` | Researcher: map date, definitions and duplicates in scope in the brief; Reviewers: a name it shows defined elsewhere is a re-implementation finding; QA checks the brief carries it |
 | **Module mind map + reuse map** before any Coder starts; "new, because ..." must hold up | `research-and-reuse.md`, `module_map`, `reuse_search` | Reviewers: re-implementation is a blocking finding; QA checks the brief |
 | **Clean code** (intention-revealing names, small single-purpose functions, DRY with care, no magic numbers, simplicity over cleverness, SOLID where it fits) | `clean-code.md`, `rules/clean-code.md` | Coders write to it; Reviewers label violations; `cleanup_scan` finds magic numbers, vague names, flag arguments, long or deep functions and duplicates |
 | **Formal check with Lean 4** (`formal-check.md`; optional, asked per goal) | `formal-check.md`, `proof-writeup-template.md`, `scripts/devops-formal.mjs` | When on: Researchers pick formal targets, Coders write Lean and a write-up for advanced logic, Reviewers check statement and trace, QA runs the Lean gate |
@@ -199,8 +219,9 @@ The plugin provides the skill, agents, commands, the MCP server and the mod.
 |------|------|
 | `tool.call` Bash (comment audit) | On `git commit` it runs the comment audit on the staged diff (the working tree for `-a`) and adds the findings to the result. `/devops comments strict` refuses a commit with blocking findings; `off` turns it off. |
 | `tool.call` Bash (monitor) | A command that matches a validation command in the language data (for example `cargo test`, `npm run lint`) and fails is recorded in `devops-skill/thoughts/non-final/check-ledger.md`, counted per check, and the result gets a reminder to reproduce, fix the cause and re-run; at the retry cap (default 3, set in `project.md`) it says stop and escalate. A pass clears the count. `/devops monitor off` (typed by you) turns it off. |
+| `prompt.compose` (mind map) | When `.devops/mindmap/OVERVIEW.md` exists, adds it to the session prompt, so plain chat knows the project at a glance with no tool call, with or without a DevOps profile. |
 | `session.start` | Runs `devops-setup detect --json`, shows `devops: rust+typescript` in the status line, registers `/devops`. |
-| `command.run` `/devops` | `status`, `languages`, `setup` (anyone); `push-ok`, `push-reset`, `allow-branch NAME`, `gates on|off` (only when **you** type them; an agent that runs the command is refused). |
+| `command.run` `/devops` | `status`, `languages`, `setup`, `map` (overview), `map refresh`, `map TEXT` (search) (anyone); `push-ok`, `push-reset`, `allow-branch NAME`, `gates on|off` (only when **you** type them; an agent that runs the command is refused). |
 | `tool.call` Bash | Refuses `git push`, `gh pr create\|merge\|ready\|edit\|close\|reopen`, `gh release create` unless the newest `qa-*.md` under `devops-skill/thoughts/` has `Publish gate: PASS` **and** you ran `/devops push-ok` (consumed by that push). Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>`. Detached worktrees and reads pass. If the check itself fails, it refuses. |
 | `prompt.compose` | Adds a short session section naming the detected languages and pointing at `.devops/project.md`. |
 

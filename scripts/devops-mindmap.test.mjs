@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { buildMindMap, mindMapQuery, mindMapStatus, symbolsOf } from './devops-mindmap.mjs'
+import { buildMindMap, mindMapOverview, mindMapQuery, mindMapStatus, symbolsOf } from './devops-mindmap.mjs'
 
 function project(files) {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dmat-mind-')))
@@ -15,7 +15,8 @@ function project(files) {
 }
 
 const SAMPLE = {
-  'package.json': JSON.stringify({ name: 'sample', dependencies: { lodash: '^4.17.21', unused: '1.0.0' } }),
+  'package.json': JSON.stringify({ name: 'sample', bin: { sample: 'src/api/routes.ts' }, scripts: { test: 'node --test' }, dependencies: { lodash: '^4.17.21', unused: '1.0.0' } }),
+  'README.md': '# Sample\n\nA sample service that builds routes.\n',
   'src/util/strings.ts': "export function slugify(text: string) {\n  return text.toLowerCase()\n}\n\nfunction helper() {\n  const inner = () => 1\n  return inner()\n}\n",
   'src/api/routes.ts': "import { slugify } from '../util/strings'\nimport fs from 'node:fs'\nimport _ from 'lodash'\n\nexport function routeFor(name: string) {\n  return '/' + slugify(name)\n}\n",
   'src/web/other.ts': 'export function slugify(text: string) {\n  return text\n}\n',
@@ -62,7 +63,7 @@ test('mind map links docs, files, imports, calls, libraries, tests and duplicate
 test('saved map, status shows only what changed, query answers without reading files', () => {
   const dir = project(SAMPLE)
   const built = buildMindMap(dir, { save: true })
-  assert.deepEqual(built.saved, [path.join('.devops', 'mindmap', 'mindmap.json'), path.join('.devops', 'mindmap', 'MINDMAP.md')])
+  assert.deepEqual(built.saved, ['mindmap.json', 'MINDMAP.md', 'OVERVIEW.md'].map(name => path.join('.devops', 'mindmap', name)))
   assert.equal(mindMapStatus(dir).stale, false)
 
   fs.appendFileSync(path.join(dir, 'src/util/strings.ts'), 'export const extra = 1\n')
@@ -90,4 +91,30 @@ test('saved map, status shows only what changed, query answers without reading f
   assert.equal(mindMapQuery(dir, { symbol: 'added', fresh: true }).definitions[0].file, 'src/api/new.ts')
   assert.throws(() => mindMapQuery(dir, {}), /exactly one/)
   assert.throws(() => mindMapQuery(dir, { file: 'nope.ts' }), /not in the mind map/)
+})
+
+test('overview: a quick scan for plain chat, from the saved map or built without writing', () => {
+  const dir = project(SAMPLE)
+  const unsaved = mindMapOverview(dir)
+  assert.match(unsaved.source, /not saved/)
+  assert.ok(!fs.existsSync(path.join(dir, '.devops')), 'an overview never writes')
+  const text = unsaved.overview
+  assert.match(text, /^# sample: at a glance/)
+  assert.match(text, /A sample service that builds routes\./)
+  assert.match(text, /\*\*Starts at:\*\* `src\/api\/routes\.ts`/)
+  assert.match(text, /`npm run test` \(node --test\)/)
+  assert.match(text, /- `src\/api` \(2 files\): exports routeFor; uses src\/util/)
+  assert.match(text, /\*\*Main libraries:\*\* lodash \(1 files\)/)
+  assert.match(text, /\*\*Watch out:\*\* 1 name\(s\) defined in more than one file \(slugify\)/)
+  assert.ok(text.split('\n').length < 50, 'short enough to scan')
+
+  buildMindMap(dir, { save: true })
+  assert.match(fs.readFileSync(path.join(dir, '.devops/mindmap/MINDMAP.md'), 'utf8'), /## sample: at a glance/)
+  const fresh = mindMapOverview(dir)
+  assert.equal(fresh.stale, false)
+  assert.equal(fresh.overview, fs.readFileSync(path.join(dir, '.devops/mindmap/OVERVIEW.md'), 'utf8'))
+  fs.appendFileSync(path.join(dir, 'src/api/routes.ts'), '// changed\n')
+  const stale = mindMapOverview(dir)
+  assert.equal(stale.changedFiles, 1)
+  assert.match(stale.next, /src\/api\/routes\.ts/)
 })

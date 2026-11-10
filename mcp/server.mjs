@@ -18,7 +18,7 @@ import { parseStatement, scanProject, snapshot } from '../scripts/devops-cleanup
 import { formalCheck } from '../scripts/devops-formal.mjs'
 import { ghasPlan } from '../scripts/devops-ghas.mjs'
 import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, parseStory } from '../scripts/devops-stories.mjs'
-import { buildMindMap, mindMapQuery, mindMapStatus } from '../scripts/devops-mindmap.mjs'
+import { buildMindMap, mindMapOverview, mindMapQuery, mindMapStatus } from '../scripts/devops-mindmap.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 
@@ -35,7 +35,7 @@ const INSTRUCTIONS = [
   'Any language can be used for any purpose; layers are only sorting tags. Use list_languages / get_language / add_language for languages not yet defined.',
   'The server only writes .cursor/, .claude/, .devops/, devops-skill/ (thought files and cleanup snapshots), .gitignore and (ghas_plan with apply) the .github security files and SECURITY.md inside the project, and never runs project commands; sandbox_plan only prints a container command; tag tools never push, move or delete a tag.',
   'Researchers: read documentation first, then module_map and reuse_search before any code is written.',
-  'Every seat: before opening source files, read .devops/mindmap/MINDMAP.md (or call mindmap_build), call mindmap_status to learn which files changed since it was saved, and ask mindmap_query for definitions, signatures, line ranges, callers, importers, tests, docs and libraries instead of re-reading files to find them.',
+  'Repository mind map, with or without the DevOps team: for any question about the project in plain chat (what it is, how it is laid out, where something is, what uses what), call mindmap_overview first and answer from it, then mindmap_query for specifics, and open files only at the line ranges it gives. In a DevOps team run the Researcher owns the map: mindmap_status, then mindmap_build with save=true when stale, and the brief carries what other seats need.',
 ].join(' ') + '\n\n' + SETUP_SCRIPT
 
 let clientRoots = []
@@ -236,13 +236,20 @@ const TOOLS = [
   },
   {
     name: 'mindmap_build',
-    description: 'The repository mind map, so seats stop re-reading files to rediscover structure: documentation (title, summary, headings, links), modules (files, languages, dependencies both ways, libraries, key exports), every code file (hash, imports, importers, libraries, tests, docs) and its functions, classes and types (signature and line range), call links between functions, libraries (declared in which manifest, used by which files, undeclared or unused) and names defined in more than one file (possible duplicate implementations). Returns a compact Markdown summary; with save=true writes .devops/mindmap/mindmap.json and .devops/mindmap/MINDMAP.md. Heuristic (no compiler). Runs no program.',
+    description: 'The repository mind map, so seats stop re-reading files to rediscover structure: documentation (title, summary, headings, links), modules (files, languages, dependencies both ways, libraries, key exports), every code file (hash, imports, importers, libraries, tests, docs) and its functions, classes and types (signature and line range), call links between functions, libraries (declared in which manifest, used by which files, undeclared or unused) and names defined in more than one file (possible duplicate implementations). Returns a compact Markdown summary; with save=true writes .devops/mindmap/OVERVIEW.md (the quick scan), MINDMAP.md (the detail) and mindmap.json (for queries). Heuristic (no compiler). Runs no program.',
     inputSchema: { type: 'object', properties: { dest, save: { type: 'boolean' }, full: { type: 'boolean', description: 'Also return the whole map as data (large; prefer mindmap_query).' } }, additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     run: args => {
       const result = buildMindMap(projectDir(args), { roots: allowedRoots(), save: optionalBool(args, 'save', false) })
-      return { dest: result.dest, counts: result.map.counts, saved: result.saved ?? null, summary: result.summary, ...(optionalBool(args, 'full', false) ? { map: result.map } : {}) }
+      return { dest: result.dest, counts: result.map.counts, saved: result.saved ?? null, overview: result.overview, summary: result.summary, ...(optionalBool(args, 'full', false) ? { map: result.map } : {}) }
     },
+  },
+  {
+    name: 'mindmap_overview',
+    description: 'Quick scan of the project for plain chat, with or without the DevOps team: what it is (from the README), size and languages, where it starts, how it is run (scripts, make targets), its parts and what each is for, which docs to read first, the most depended-on files, main libraries and what to watch out for, in about forty lines. Uses the saved map (and says how many files changed since) or builds one in memory. Call it first for any question about the project. Read-only.',
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => mindMapOverview(projectDir(args), { roots: allowedRoots() }),
   },
   {
     name: 'mindmap_status',

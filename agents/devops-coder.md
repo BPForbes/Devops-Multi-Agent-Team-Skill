@@ -24,10 +24,10 @@ the Orchestrator. Thoughts stay **gitignored**.
 1. The department's research brief must exist: docs read, module mind map,
    reuse map. If the reuse map says "extend", extend that code. If a row says
    "new, because ...", the reason must still hold when you look at the code.
-2. Read the repository mind map first
-   ([mind-map.md](../skills/devops-multi-agent-team/references/mind-map.md)):
-   `mindmap_status`, then `.devops/mindmap/MINDMAP.md`. Open files only at the
-   line ranges `mindmap_query` gives. Search once more yourself for the nouns
+2. Work from the brief's mind-map section (the Researcher owns the map;
+   [mind-map.md](../skills/devops-multi-agent-team/references/mind-map.md)):
+   open files at the line ranges it gives rather than rescanning the tree.
+   Search once more yourself for the nouns
    and verbs you are about to add (`mindmap_query` with `symbol` and `search`,
    `reuse_search` or your editor). If something similar exists, stop and ask
    the Researcher. **There are never two functions that do the same thing.**
@@ -76,8 +76,7 @@ assumptions), Guidance (pattern, applies when, do not repeat), Not verified, Tes
 
 ## When you finish
 
-Refresh the mind map (`mindmap_build` with `save=true`) so the next seat
-starts from a current one. Write `push-<seat-id>.json` and a Handoff `To: Reviewer` with `Authors:`,
+Write `push-<seat-id>.json` and a Handoff `To: Reviewer` with `Authors:`,
 the commands you ran (exit codes), and anything `NOT RUN`.
 
 ## Independence

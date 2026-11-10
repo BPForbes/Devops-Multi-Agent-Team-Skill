@@ -1,6 +1,6 @@
 ---
 name: mindmap
-description: Build, check or query the repository mind map (docs, modules, imports, functions, calls, libraries) so seats stop re-reading files to find things.
+description: Show the project at a glance, or build, check or query the repository mind map (docs, modules, imports, functions, calls, libraries) so seats stop re-reading files to find things.
 ---
 
 # /mindmap
@@ -8,12 +8,14 @@ description: Build, check or query the repository mind map (docs, modules, impor
 Also: `mind map`, `repo map`, `where is X defined`, `who calls X`.
 
 The repository mind map ([mind-map.md](../skills/devops-multi-agent-team/references/mind-map.md))
-is read before any source file.
+works with or without the DevOps team: in plain chat follow the
+`project-mindmap` skill; in a team run the Researcher owns it.
 
-1. **No argument**: run `mindmap_status` (MCP) or
-   `node <plugin>/scripts/devops-mindmap.mjs status`. No saved map, or files
-   changed: `mindmap_build` with `save=true` (writes only `.devops/mindmap/`).
-   Report the counts and the files that changed; do not paste the summary.
+1. **No argument**: `mindmap_overview` (MCP) or
+   `node <plugin>/scripts/devops-mindmap.mjs overview`. Show the overview (it is
+   short) and how many files changed since it was saved; offer to refresh.
+   **`refresh`**: `mindmap_build` with `save=true` (writes only
+   `.devops/mindmap/`) and show the new overview.
 2. **A name, path, module or library** (`/mindmap parseHeader`,
    `/mindmap src/api/routes.ts`, `/mindmap lodash`): `mindmap_query` with
    `symbol`, `file`, `module` or `library`; if nothing matches, `search`.

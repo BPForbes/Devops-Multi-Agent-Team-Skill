@@ -55,13 +55,13 @@ function client({ env = {}, cwd = os.tmpdir(), capabilities = {}, onRequest } = 
   return ready()
 }
 
-test('initialize negotiates, lists 31 tools, prompts and resources', async () => {
+test('initialize negotiates, lists 32 tools, prompts and resources', async () => {
   const root = tmp()
   const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
   try {
     const tools = (await c.rpc('tools/list')).result.tools.map(t => t.name)
-    for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 31)
+    for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_overview', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
+    assert.equal(tools.length, 32)
     const writers = (await c.rpc('tools/list')).result.tools.filter(t => t.name === 'install_devops_team')
     assert.equal(writers[0].annotations.destructiveHint, false)
     assert.ok((await c.rpc('prompts/list')).result.prompts.some(p => p.name === 'setup_project'))
@@ -204,6 +204,7 @@ test('research, tag and security tools work through chat and stay inside the fol
     assert.ok(found.results[0].matches.some(m => m.kind === 'definition'))
     assert.ok((await c.call('reuse_search', { terms: [] })).isError)
 
+    assert.match((await c.call('mindmap_overview')).json().overview, /at a glance/)
     const built = (await c.call('mindmap_build', { save: true })).json()
     assert.match(built.summary, /# Repository mind map/)
     assert.ok(fs.existsSync(path.join(root, '.devops', 'mindmap', 'MINDMAP.md')))
