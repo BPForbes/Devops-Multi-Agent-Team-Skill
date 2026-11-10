@@ -67,6 +67,13 @@ it out, offer to keep it: `mindmap_note` with the node and a few sentences
 `.devops/mindmap/NOTES.md`, survives rebuilds and shows with that node from then
 on.
 
+## Wording
+
+The map's sentences and labels come from `mindmap-text.json`. If the person
+wants them in another language or in their own terms, write
+`.devops/mindmap/text.json` with just the keys to change (plan it, show it,
+write after a yes) and rebuild the map.
+
 ## Keep in mind
 
 - The map is heuristic (pattern matching, no compiler). Present a call link or

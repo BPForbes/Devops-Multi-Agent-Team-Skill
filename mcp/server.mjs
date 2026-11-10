@@ -18,7 +18,7 @@ import { parseStatement, scanProject, snapshot } from '../scripts/devops-cleanup
 import { formalCheck } from '../scripts/devops-formal.mjs'
 import { ghasPlan } from '../scripts/devops-ghas.mjs'
 import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, parseStory } from '../scripts/devops-stories.mjs'
-import { buildMindMap, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree } from '../scripts/devops-mindmap.mjs'
+import { buildMindMap, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree } from '../scripts/devops-mindmap.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 
@@ -26,6 +26,9 @@ const PKG = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 
 const SUPPORTED = ['2025-06-18', '2025-03-26', '2024-11-05']
 const MAX_LINE = 2 * 1024 * 1024
 const ID = /^[a-z][a-z0-9-]*$/
+
+/** Mind map wording lives in mindmap-text.json; tool lists are sent before a project is known, so the package defaults apply here. */
+const MINDMAP_TEXT = loadText()
 
 const SETUP_SCRIPT = fs.readFileSync(path.join(PACKAGE_ROOT, 'mcp', 'setup-script.md'), 'utf8').trim()
 
@@ -35,7 +38,7 @@ const INSTRUCTIONS = [
   'Any language can be used for any purpose; layers are only sorting tags. Use list_languages / get_language / add_language for languages not yet defined.',
   'The server only writes .cursor/, .claude/, .devops/, devops-skill/ (thought files and cleanup snapshots), .gitignore and (ghas_plan with apply) the .github security files and SECURITY.md inside the project, and never runs project commands; sandbox_plan only prints a container command; tag tools never push, move or delete a tag.',
   'Researchers: read documentation first, then module_map and reuse_search before any code is written.',
-  'Repository mind map, with or without the DevOps team: for any question about the project in plain chat (what it is, how it is laid out, where something is, what uses what), call mindmap_overview first and answer from it, then mindmap_tree for how a function or module works (its documentation, note and neighbours) or mindmap_query for specifics, and open files only at the line ranges it gives. In a DevOps team run the Researcher owns the map: mindmap_status, then mindmap_build with save=true when stale, and the brief carries what other seats need.',
+  MINDMAP_TEXT.t('serverInstructions'),
 ].join(' ') + '\n\n' + SETUP_SCRIPT
 
 let clientRoots = []
@@ -236,8 +239,8 @@ const TOOLS = [
   },
   {
     name: 'mindmap_build',
-    description: 'The repository mind map, so seats stop re-reading files to rediscover structure: documentation (title, summary, headings, links), modules (files, languages, dependencies both ways, libraries, key exports), every code file (hash, imports, importers, libraries, tests, docs) and its functions, classes and types (signature and line range), call links between functions, libraries (declared in which manifest, used by which files, undeclared or unused) and names defined in more than one file (possible duplicate implementations). Returns a compact Markdown summary; with save=true writes .devops/mindmap/OVERVIEW.md (the quick scan), MINDMAP.md (the tree with documentation, then the detail), graph.json (the tree and its cross links) and mindmap.json (for queries). Doc comments, docstrings, file headers, READMEs, doc sections that name a function or file, and the hand-written NOTES.md are all attached to the nodes they describe. Heuristic (no compiler). Runs no program.',
-    inputSchema: { type: 'object', properties: { dest, save: { type: 'boolean' }, full: { type: 'boolean', description: 'Also return the whole map as data (large; prefer mindmap_query).' } }, additionalProperties: false },
+    description: MINDMAP_TEXT.t('toolBuild'),
+    inputSchema: { type: 'object', properties: { dest, save: { type: 'boolean' }, full: { type: 'boolean', description: MINDMAP_TEXT.t('paramFull') } }, additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     run: args => {
       const result = buildMindMap(projectDir(args), { roots: allowedRoots(), save: optionalBool(args, 'save', false) })
@@ -246,35 +249,35 @@ const TOOLS = [
   },
   {
     name: 'mindmap_overview',
-    description: 'Quick scan of the project for plain chat, with or without the DevOps team: what it is (from the README), size and languages, where it starts, how it is run (scripts, make targets), its parts and what each is for, which docs to read first, the most depended-on files, main libraries and what to watch out for, in about forty lines. Uses the saved map (and says how many files changed since) or builds one in memory. Call it first for any question about the project. Read-only.',
+    description: MINDMAP_TEXT.t('toolOverview'),
     inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
     annotations: { readOnlyHint: true },
     run: args => mindMapOverview(projectDir(args), { roots: allowedRoots() }),
   },
   {
     name: 'mindmap_tree',
-    description: 'Open one node of the mind map tree (project > module > file > class > function; documentation > folder > doc > section; libraries) with its documentation: the doc comment or docstring, the README or file header that describes it, the hand-written note for it, its subtree to `depth`, and its links both ways grouped by kind (imports, calls, uses, documents, links, tests) with each neighbour\'s own documentation. Use it to explain how a function or module works without opening files. `node` is a path, `path#name`, a module, a bare name defined once, a doc path or `project`. Read-only.',
+    description: MINDMAP_TEXT.t('toolTree'),
     inputSchema: { type: 'object', properties: { dest, node: { type: 'string' }, depth: { type: 'integer', minimum: 0, maximum: 6 }, fresh: { type: 'boolean' }, limit: { type: 'integer', minimum: 1, maximum: 100 } }, additionalProperties: false },
     annotations: { readOnlyHint: true },
     run: args => mindMapTree(projectDir(args), { node: typeof args.node === 'string' ? args.node : 'project', depth: Number.isInteger(args.depth) ? args.depth : 2, fresh: optionalBool(args, 'fresh', false), limit: Number.isInteger(args.limit) ? args.limit : 25 }, { roots: allowedRoots() }),
   },
   {
     name: 'mindmap_note',
-    description: 'Write how a module, file, function, type or doc works into the mind map: adds or replaces that node\'s section in .devops/mindmap/NOTES.md, hand-written documentation that rebuilding never overwrites and that mindmap_tree, mindmap_query and the overview show with the node. Plans unless apply=true.',
+    description: MINDMAP_TEXT.t('toolNote'),
     inputSchema: { type: 'object', properties: { dest, node: { type: 'string' }, text: { type: 'string', maxLength: 4000 }, apply: { type: 'boolean' } }, required: ['node', 'text'], additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     run: args => mindMapNote(projectDir(args), { node: args.node, text: args.text, apply: optionalBool(args, 'apply', false) }, { roots: allowedRoots() }),
   },
   {
     name: 'mindmap_status',
-    description: 'Compare the saved mind map with the files on disk: which code and doc files changed, were added or were removed, and which modules they belong to. Re-read only those files; trust the map for the rest. Read-only.',
+    description: MINDMAP_TEXT.t('toolStatus'),
     inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
     annotations: { readOnlyHint: true },
     run: args => mindMapStatus(projectDir(args), { roots: allowedRoots() }),
   },
   {
     name: 'mindmap_query',
-    description: 'Ask the mind map one question instead of reading files: `symbol` (where it is defined, its signature and line range, callers, callees, tests, docs; a warning when defined twice), `file` (symbols with line ranges, imports, importers, libraries, tests, docs, calls in and out), `module` (files, dependencies both ways, libraries, exports), `library` (manifest, version, files using it) or `search` (names, paths and doc titles containing the text). Uses the saved map unless fresh=true. Read-only.',
+    description: MINDMAP_TEXT.t('toolQuery'),
     inputSchema: {
       type: 'object',
       properties: { dest, symbol: { type: 'string' }, file: { type: 'string' }, module: { type: 'string' }, library: { type: 'string' }, search: { type: 'string' }, fresh: { type: 'boolean' }, limit: { type: 'integer', minimum: 1, maximum: 200 } },

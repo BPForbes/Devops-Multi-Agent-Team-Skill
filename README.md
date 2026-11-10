@@ -25,6 +25,7 @@ commands, plus:
 | `mcp/server.mjs` | The MCP server for installing and managing through chat. |
 | `templates/project.md` | Skeleton of the per-project profile (`.devops/project.md`). |
 | `scripts/devops-setup.mjs` | `list`, `detect`, `profile`, `install`, `status`, `check`, `sandbox`. No dependencies, Node 18+. |
+| `mindmap-text.json` | Every sentence, label and word list the mind map uses; a project overrides keys in `.devops/mindmap/text.json`. |
 | `scripts/devops-mindmap.mjs` | The repository mind map: `overview`, `tree`, `note`, `build [--save]`, `status`, `query`. Writes only `.devops/mindmap/`, and only with `--save`. |
 | `hooks/`, `types/`, `.claude-plugin/` | The Claude mod and plugin manifest. |
 
@@ -38,7 +39,10 @@ docstring, file header or README, the doc sections that name it, and a
 hand-written note from `NOTES.md`. Files: `OVERVIEW.md` (a quick scan),
 `MINDMAP.md` (the tree with documentation, docs to code, modules, libraries,
 possible duplicates), `graph.json` (nodes and edges), `mindmap.json` (behind
-`mindmap_query`) and `NOTES.md` (yours, never overwritten). "How does X work?"
+`mindmap_query`) and `NOTES.md` (yours, never overwritten). No sentence is
+written in the code: all wording and English word lists are in
+[`mindmap-text.json`](mindmap-text.json), and a project can change any of them
+in `.devops/mindmap/text.json`. "How does X work?"
 is `mindmap_tree` on X. Build it with
 asking "map this project" (the assistant calls `mindmap_build save=true`) or
 `node scripts/devops-mindmap.mjs build --save`; it takes well under a second.

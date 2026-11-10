@@ -6,6 +6,8 @@ import { branchNameOf, classify, classifySegments, commitInfo, splitArgs, verdic
 const PLUGIN = 'devops-multi-agent-team'
 const THOUGHT_DIRS = ['devops-skill/thoughts/non-final', 'devops-skill/thoughts/final']
 const MINDMAP_OVERVIEW = '.devops/mindmap/OVERVIEW.md'
+/** The mind map's wording: the package defaults, then the project's own file, key by key. */
+const MINDMAP_TEXT_OVERRIDE = '.devops/mindmap/text.json'
 /** Keeps the session prompt small: the overview is about forty lines, this is a guard against a huge README summary. */
 const MAX_OVERVIEW_CHARS = 4000
 
@@ -21,6 +23,20 @@ const HELP = [
   '/devops monitor on|off (you) turn the failed-check monitor on or off',
   '/devops comments warn|strict|off (you) comment audit on git commit: warn (default), refuse a commit with blocking findings, or off',
 ].join('\n')
+
+async function mindmapText($: EngineInterface, root: string): Promise<Record<string, string>> {
+  const parse = (raw: unknown): Record<string, string> => {
+    try {
+      const text = (JSON.parse(typeof raw === 'string' ? raw : '') as { text?: Record<string, unknown> }).text ?? {}
+      return Object.fromEntries(Object.entries(text).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+    } catch {
+      return {}
+    }
+  }
+  const defaults = parse(await $.fs.read(`${$.plugin.root}/mindmap-text.json`).catch(() => ''))
+  const project = parse(await $.fs.read(`${root}/${MINDMAP_TEXT_OVERRIDE}`).catch(() => ''))
+  return { ...defaults, ...project }
+}
 
 async function detect($: EngineInterface): Promise<Found[]> {
   const root = await $.session.root()
@@ -301,13 +317,14 @@ export const register: Register = on => {
     const composed = await next(e)
     const root = await $.session.root()
     const overview = await $.fs.read(`${root}/${MINDMAP_OVERVIEW}`).catch(() => '')
+    const wording = await mindmapText($, root)
     const mindmapSection = typeof overview === 'string' && overview.trim() !== ''
       ? [{
           id: `${PLUGIN}:mindmap`,
           text: [
-            'Project mind map (quick scan, generated; no command needed, with or without the DevOps team). When the person asks about this project in plain words, answer from it first; for how something works use the mindmap_tree MCP tool, for other specifics mindmap_query, and open files only at the line ranges they give. It can be out of date: mindmap_status says which files changed; read those directly, and when the person asks to refresh the map, call mindmap_build with save=true.',
-            overview.length > MAX_OVERVIEW_CHARS ? overview.slice(0, MAX_OVERVIEW_CHARS) + '\n[cut; full text in .devops/mindmap/OVERVIEW.md]' : overview,
-          ].join('\n\n'),
+            wording.chatPrompt,
+            overview.length > MAX_OVERVIEW_CHARS ? `${overview.slice(0, MAX_OVERVIEW_CHARS)}\n${wording.chatOverviewCut ?? ''}` : overview,
+          ].filter(Boolean).join('\n\n'),
           scope: 'session' as const,
         }]
       : []
@@ -322,7 +339,7 @@ export const register: Register = on => {
         ? 'Read .devops/project.md before planning: it lists the validation and security commands per language.'
         : 'No .devops/project.md yet: /devops setup shows how to create it.',
       'Only QA may give the OK to push; git push, gh pr create|merge and creating a git branch are refused until QA records "Publish gate: PASS" and the person runs /devops push-ok.',
-      mindmapSection.length === 0 ? 'No mind map saved yet: when the person asks about the project or asks for a map, mindmap_build with save=true builds one.' : undefined,
+      mindmapSection.length === 0 ? wording.chatNoMap : undefined,
     ].filter(Boolean).join(' ')
 
     return { sections: [...composed.sections, { id: `${PLUGIN}:context`, text, scope: 'session' as const }, ...mindmapSection] }

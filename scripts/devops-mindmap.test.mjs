@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { buildMindMap, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree, symbolsOf } from './devops-mindmap.mjs'
+import { buildMindMap, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree, symbolsOf } from './devops-mindmap.mjs'
 
 function project(files) {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dmat-mind-')))
@@ -205,4 +205,34 @@ test('the map is a tree with cross links; a node explains how it works with its 
   assert.equal(mindMapTree(dir, { node: 'docs/design.md', depth: 3 }).tree.children[0].children[0].children[0].name, 'Tax', 'doc > Design > Totals > Tax')
   assert.equal(mindMapQuery(dir, { symbol: 'total' }).definitions[0].notes, 'Rounds once, at the end.')
   assert.equal(mindMapQuery(dir, { symbol: 'total' }).callees[0].calleeDoc, 'Rounds to cents.')
+})
+
+test('no sentence is in the code: the wording and word lists come from mindmap-text.json, overridable per project', () => {
+  const defaults = JSON.parse(fs.readFileSync(new URL('../mindmap-text.json', import.meta.url), 'utf8'))
+  const source = fs.readFileSync(new URL('./devops-mindmap.mjs', import.meta.url), 'utf8')
+  for (const [key, value] of Object.entries(defaults.text)) {
+    const sentence = value.split(/\{\w+\}/).sort((a, b) => b.length - a.length)[0].trim()
+    if (sentence.length >= 16) assert.ok(!source.includes(sentence), `"${key}" is written in the code: ${sentence}`)
+  }
+  for (const match of source.matchAll(/T\.t\('(\w+)'/g)) assert.ok(match[1] in defaults.text, `the code uses "${match[1]}", which mindmap-text.json lacks`)
+
+  const dir = project({
+    ...DOCUMENTED,
+    '.devops/mindmap/text.json': JSON.stringify({
+      text: { overviewTitle: '# {title} : vue d\'ensemble', overviewParts: '**Parties du code :**', nodeDocumentation: 'documentation (fr)' },
+      words: { docSectionLabels: ['Paramètres'], notDocumentationStarts: ['à faire'] },
+    }),
+    'src/fr.ts': '/** Additionne tout.\nParamètres:\n  x le nombre */\nexport function somme(x: number) {\n  return x\n}\n// à faire: nettoyer\nexport function brouillon() {}\n',
+  })
+  const { overview, graph, map } = buildMindMap(dir)
+  assert.match(overview, /^# Shop : vue d'ensemble/)
+  assert.match(overview, /\*\*Parties du code :\*\*/)
+  assert.match(overview, /\*\*Size:\*\*/, 'keys the project leaves out keep the default')
+  assert.equal(graph.nodes.find(n => n.id === 'docs').name, 'documentation (fr)')
+  const fr = map.files['src/fr.ts'].symbols
+  assert.equal(fr.find(s => s.name === 'somme').doc, 'Additionne tout.', 'a project\'s own section label ends the summary')
+  assert.equal(fr.find(s => s.name === 'brouillon').doc, undefined, 'a project\'s own not-documentation marker is skipped')
+
+  fs.writeFileSync(path.join(dir, '.devops/mindmap/text.json'), JSON.stringify({ text: { noSuchKey: 'x' }, words: { genericNames: 'run' } }))
+  assert.throws(() => loadText(dir), /unknown text key "noSuchKey".*words\.genericNames has the wrong type/)
 })

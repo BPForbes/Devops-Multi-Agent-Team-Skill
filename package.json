@@ -33,6 +33,7 @@
     "commands",
     "hooks",
     "languages.json",
+    "mindmap-text.json",
     "mcp",
     "rules",
     "scripts/check-languages.mjs",

@@ -17,6 +17,7 @@ to find out, and does not write a second `slugify`.
 | `.devops/mindmap/MINDMAP.md` | The overview, then the **tree** (a Mermaid mindmap, and the code tree with each module's, file's and function's documentation on its line), **docs to code** (which doc sections describe which functions and files), then the detail: counts, a Mermaid module graph, a module table (dependencies both ways, libraries, key exports), a docs table (title and what each doc says), the most imported files, the most called functions, libraries, possible duplicates | the Researcher; anyone who needs more than the overview |
 | `.devops/mindmap/graph.json` | The tree and its cross links as nodes and edges, for any graph tool | `mindmap_tree`, other tools |
 | `.devops/mindmap/mindmap.json` | The full map behind it | `mindmap_query`, not people |
+| `.devops/mindmap/text.json` | **Optional, yours**: the project's own wording for any sentence, label, heading or word list (see below) | read by every mind map tool and the Claude mod |
 | `.devops/mindmap/NOTES.md` | **Hand-written**: how a module, file, function or doc works, one `## <node>` section each. Never generated, so rebuilding keeps it | written with `mindmap_note` or by hand; shown with its node everywhere |
 
 Built by `mindmap_build` (MCP) or `devops-mindmap build --save`. It runs no
@@ -88,6 +89,38 @@ Documentation comes from four places and is attached to the node it describes:
 
 Undocumented parts are visible too: a node with no `summary` and no `notes` is
 a gap the Researcher can fill with a note.
+
+## Wording: nothing is written in the code
+
+Every sentence the mind map produces (overview labels, MINDMAP.md headings and
+intros, table columns, tree labels, link names such as "called by", status
+messages, errors, the NOTES.md header, the text the Claude mod adds to the
+session prompt, and the MCP tool descriptions) is a template in
+[`mindmap-text.json`](../../../mindmap-text.json) at the package root, with
+`{placeholders}` the code fills in. So are the English word lists that steer
+the scan:
+
+| Word list | What it does |
+|-----------|--------------|
+| `notDocumentationContains`, `notDocumentationStarts` | a comment containing or starting with one of these is not documentation (license headers, lint pragmas, TODOs) |
+| `docSectionLabels` | a doc comment's summary stops at a line like `Args:` or `Returns:` |
+| `genericNames` | names too common to link as calls (`get`, `run`, ...) |
+
+To change the wording for one project (another language, your team's terms),
+write `.devops/mindmap/text.json` with the same shape and only the keys you
+change:
+
+```json
+{
+  "text": { "overviewTitle": "# {title} : vue d'ensemble", "overviewParts": "**Parties du code :**" },
+  "words": { "docSectionLabels": ["Paramètres", "Retourne"] }
+}
+```
+
+Keys you leave out keep the default. An unknown key or a wrong type is refused
+with a message naming it, so a typo does not silently do nothing. A test checks
+that no default sentence appears in the code and that every key the code uses
+exists in the file.
 
 ## What is in it
 
