@@ -79,6 +79,7 @@ export function validateLanguage(lang, ctx, { partial = false } = {}) {
   }
   if (has('comments')) need(isStringList(lang.comments?.line) && Array.isArray(lang.comments?.block), 'comments needs line (list of markers) and block (list of [open, close])')
   if (has('comments') && lang.comments?.interface !== undefined) need(isStringList(lang.comments.interface) && lang.comments.interface.every(e => e.startsWith('.')), 'comments.interface must be a list of extensions (".h", ".d.ts")')
+  if (has('comments') && lang.comments?.extensions !== undefined) need(isStringList(lang.comments.extensions), 'comments.extensions must be a list of extensions or exact file names, audited but not used for detection')
   if (has('comments') && lang.comments?.checks !== undefined) need(isStringList(lang.comments.checks) && lang.comments.checks.every(c => COMMENT_CHECKS.includes(c)), `comments.checks must be a list from: ${COMMENT_CHECKS.join(', ')}`)
   if (has('docs')) need(typeof lang.docs?.format === 'string' && typeof lang.docs?.lineComment === 'string' && typeof lang.docs?.check === 'string', 'docs needs format, lineComment and check (see LANGUAGES.md)')
   if (has('docs') && lang.docs?.guide !== undefined) need(typeof lang.docs.guide === 'string' && lang.docs.guide.trim() !== '', 'docs.guide must be a non-empty string')

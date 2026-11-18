@@ -153,7 +153,14 @@
           ".cc",
           ".cxx",
           ".hpp",
-          ".hh"
+          ".hh",
+          ".cppm",
+          ".ixx",
+          ".mpp",
+          ".c++",
+          ".ipp",
+          ".tpp",
+          ".inl"
         ]
       },
       "toolchain": {
@@ -238,7 +245,10 @@
           ".hpp",
           ".hh",
           ".hxx",
-          ".h++"
+          ".h++",
+          ".cppm",
+          ".ixx",
+          ".mpp"
         ],
         "checks": [
           "marker-space"
@@ -720,7 +730,8 @@
       ],
       "detect": {
         "extensions": [
-          ".kt"
+          ".kt",
+          ".kts"
         ]
       },
       "toolchain": {
@@ -808,7 +819,10 @@
           "Pipfile"
         ],
         "extensions": [
-          ".py"
+          ".py",
+          ".pyw",
+          ".pyx",
+          ".pxd"
         ]
       },
       "toolchain": {
@@ -885,7 +899,8 @@
         "block": [],
         "docstring": true,
         "interface": [
-          ".pyi"
+          ".pyi",
+          ".pxd"
         ],
         "checks": [
           "marker-space",
@@ -906,7 +921,9 @@
         ],
         "extensions": [
           ".ts",
-          ".tsx"
+          ".tsx",
+          ".mts",
+          ".cts"
         ]
       },
       "toolchain": {
@@ -1465,7 +1482,8 @@
           "docker-compose.yml",
           "docker-compose.yaml",
           "compose.yaml",
-          "Chart.yaml"
+          "Chart.yaml",
+          "Containerfile"
         ],
         "extensions": [
           ".dockerfile"
@@ -1530,6 +1548,9 @@
         "block": [],
         "checks": [
           "marker-space"
+        ],
+        "extensions": [
+          "Containerfile"
         ]
       }
     },
@@ -1700,7 +1721,8 @@
           "composer.json"
         ],
         "extensions": [
-          ".php"
+          ".php",
+          ".phtml"
         ]
       },
       "toolchain": {
@@ -1796,10 +1818,14 @@
       "detect": {
         "files": [
           "Gemfile",
-          "*.gemspec"
+          "*.gemspec",
+          "Rakefile"
         ],
         "extensions": [
-          ".rb"
+          ".rb",
+          ".rake",
+          ".ru",
+          ".gemspec"
         ]
       },
       "toolchain": {
@@ -1879,6 +1905,9 @@
         ],
         "checks": [
           "marker-space"
+        ],
+        "extensions": [
+          "Rakefile"
         ]
       }
     },
@@ -1983,7 +2012,8 @@
           "build.sbt"
         ],
         "extensions": [
-          ".scala"
+          ".scala",
+          ".sc"
         ]
       },
       "toolchain": {
@@ -2179,7 +2209,10 @@
         ],
         "extensions": [
           ".pl",
-          ".pm"
+          ".pm",
+          ".t",
+          ".pod",
+          ".psgi"
         ]
       },
       "toolchain": {
@@ -2613,7 +2646,10 @@
           ".f90",
           ".f95",
           ".f03",
-          ".f08"
+          ".f08",
+          ".f",
+          ".for",
+          ".fpp"
         ]
       },
       "toolchain": {
@@ -2944,7 +2980,8 @@
           "*.cabal"
         ],
         "extensions": [
-          ".hs"
+          ".hs",
+          ".lhs"
         ]
       },
       "toolchain": {

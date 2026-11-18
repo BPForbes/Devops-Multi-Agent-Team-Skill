@@ -26,9 +26,10 @@ export function syntaxTable(dest) {
   const table = []
   for (const lang of loadLanguages(dest).languages) {
     const c = lang.comments ?? { line: [], block: [] }
-    const base = { id: lang.id, line: [...c.line].sort((a, b) => b.length - a.length), block: c.block, docstring: c.docstring === true, checks: c.checks ?? [], interfaceExts: c.interface ?? [], sourceExts: lang.detect?.extensions ?? [] }
+    const sources = [...new Set([...(lang.detect?.extensions ?? []), ...(c.extensions ?? [])])]
+    const base = { id: lang.id, line: [...c.line].sort((a, b) => b.length - a.length), block: c.block, docstring: c.docstring === true, checks: c.checks ?? [], interfaceExts: c.interface ?? [], sourceExts: sources }
     for (const ext of c.interface ?? []) table.push({ ...base, ext, interface: true })
-    for (const ext of lang.detect?.extensions ?? []) if (!(c.interface ?? []).includes(ext)) table.push({ ...base, ext, interface: false })
+    for (const ext of sources) if (!(c.interface ?? []).includes(ext)) table.push({ ...base, ext, interface: false })
   }
   for (const [ext, line] of Object.entries(FALLBACK)) table.push({ id: null, ext, line, block: [], docstring: false, checks: [], interfaceExts: [], sourceExts: [], interface: false })
   return file => {

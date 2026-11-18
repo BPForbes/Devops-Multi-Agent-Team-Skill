@@ -222,3 +222,18 @@ test('a C++ source and its .h interface share one check, and a SAFETY comment ab
   execFileSync('git', ['add', '-A'], { cwd: rust })
   assert.ok(!rules(commentAudit(rust, { staged: true })).includes('rust-safety'))
 })
+
+test('file types a human edits are audited with their language syntax', () => {
+  const dir = repo({
+    'build.gradle.kts': '// Pinned because the plugin 2.x drops the old task name.\nplugins {}\n',
+    'Rakefile': '# Runs the suite because CI calls rake by default.\ntask :test\n',
+    'Containerfile': '# Pins the base because 3.x lacks the CA bundle.\nFROM alpine\n',
+    'lib/mod.cppm': '// Exports the queue because consumers import it as a module.\nexport module q;\n',
+    'lib/mod.ipp': '// Keeps the fast path inline because it runs per packet.\ntemplate <class T> void f();\n',
+    'src/x.pyx': '# Releases the GIL because the callback re-enters Python.\ncdef int f()\n',
+    'src/x.pxd': '# Declares the C type because the .pyx needs it.\ncdef int f()\n',
+  })
+  const found = commentAudit(dir, { staged: true })
+  assert.equal(found.findings.filter(f => f.blocking).length, 0, JSON.stringify(found.findings))
+  assert.equal(found.commentLinesAdded, 7)
+})
