@@ -45,7 +45,13 @@ tree vs `<integration-base>`, not `git show HEAD` alone.
 Top-level keys: `topic`, `round`, `seat` (id of the seat that
 wrote this version), `authors` (seat ids of everyone who wrote
 the change), `to` (seat id or role), `notifies` (seat ids or
-roles), `closes`, `qa`, `comments`, `docs`, `formal`, `files`.
+roles), `closes`, `qa`, `comments`, `docs`, `lint`, `formal`, `files`.
+
+`lint` records the lint gate ([lint-rules.md](lint-rules.md)):
+`{ "builtIn": { "verdict": "PASS", "blocking": 0 }, "tools": [{ "command": "ruff check .", "exit": 0 }] }`.
+`tools` has one row per command from `lint_commands`, run in the sandbox, with the
+command text exactly as listed. `lint_check` with `push` blocks a missing row
+(`linter-not-run`) and a non-zero exit (`linter-failed`).
 
 `formal` (optional; only when Lean is on, [formal-check.md](formal-check.md)) is one row per advanced claim:
 `{ "id": "F1", "claim": "...", "status": "proved" | "disproved" | "not-attempted" | "gave-up", "lean": "path",

@@ -34,6 +34,25 @@ push** (except review-bot feedback fixes outside the exceptions: references/qa-p
 
 ## Review bar
 
+**Lint gate first: hard deny.** Before reading the diff, run `lint_check` on the
+side branch (`base` = the integration base) with the Push JSON as `push`
+([lint-rules.md](../skills/devops-multi-agent-team/references/lint-rules.md)).
+It covers every comment rule, line length, function size, unused functions,
+variables and imports, security patterns, outdated APIs and debug leftovers,
+and checks that every open-source linter from `lint_commands` ran in the sandbox
+and exited 0. If the verdict is `DENY`:
+
+1. Set the review verdict to **DENY**. Do not review further; there is no
+   partial approval and no "fix later".
+2. Send the **whole** findings list back: one line remark per finding,
+   `path:line`, `issue (blocking): [rule] message`, and the `Fix:` text, which says
+   how to remediate it. Group nothing away and drop nothing.
+3. Note in the review thread which open-source linters were missing or failed.
+4. Never turn a rule off or exclude a path to pass the gate; only the human
+   changes `.devops/standards.json`.
+
+Only a `PASS` from the gate starts the review below.
+
 When Lean is on, start from the Push JSON `formal` rows and write-ups: check that each statement says what its claim says, that the model matches the code at `covers`, and the `notCovers` gap; do not re-derive a proved argument. A dispute ends in a proof or a counterexample test. `formal_check` finds holes and uncovered code.
 
 Also check [oop-principles.md](../skills/devops-multi-agent-team/references/oop-principles.md): `issue (blocking)` for a new type switch on concrete types, a child that throws or no-ops what its parent promises, an `instanceof` guard that exists only to avoid a child, a function named for two jobs. Ask what the next variant would cost and what the parent's tests say about this child. `cleanup_scan` with goal `oop` finds `type-switch` and `lsp-risk` candidates.

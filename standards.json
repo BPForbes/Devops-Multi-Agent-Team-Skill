@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "about": "Project standards for devops-multi-agent-team: line lengths, function size, nesting, parameters, duplication, comment density, and linter rules. The installer copies this file to .devops/standards.json, where a project edits it. Keys the project does not set keep these defaults. Per-language values go under languages.<id>. Every value is checked by devops-setup's validator, and an unknown key is an error, so a typo cannot pass silently.",
+  "about": "Project standards for devops-multi-agent-team: line lengths, function size, nesting, parameters, duplication, comment density, linter tools, and lint rules. The installer copies this file to .devops/standards.json, where a project edits it. Keys the project does not set keep these defaults. Per-language values go under languages.<id>. Every value is checked by devops-setup's validator, and an unknown key is an error, so a typo cannot pass silently.",
   "defaults": {
     "lineLength": {
       "comment": 80,
@@ -38,28 +38,164 @@
   },
   "languages": {
     "python": {
-      "lineLength": { "code": 88 },
-      "function": { "maxLines": 40 }
+      "lineLength": {
+        "code": 88
+      },
+      "function": {
+        "maxLines": 40
+      }
     },
     "go": {
-      "function": { "maxLines": 50 }
+      "function": {
+        "maxLines": 50
+      }
     }
   },
   "linters": {
+    "all": [
+      {
+        "tool": "semgrep",
+        "command": "semgrep scan --config p/default --error --metrics off"
+      },
+      {
+        "tool": "gitleaks",
+        "command": "gitleaks detect --no-banner --redact"
+      },
+      {
+        "tool": "osv-scanner",
+        "command": "osv-scanner scan --recursive ."
+      }
+    ],
     "python": {
       "tool": "ruff",
+      "command": "ruff check --select E,W,F,B,S,UP,C90,PL --line-length 88 .",
       "configFile": "ruff.toml",
-      "options": { "line-length": 88, "mccabe.max-complexity": 10 }
+      "options": {
+        "line-length": 88,
+        "mccabe.max-complexity": 10
+      }
     },
     "typescript": {
       "tool": "eslint",
+      "command": "npx eslint --max-warnings 0 .",
       "configFile": "eslint.config.mjs",
-      "options": { "max-lines-per-function": 40, "max-depth": 3, "max-params": 4, "complexity": 10 }
+      "options": {
+        "max-len": 100,
+        "max-lines-per-function": 40,
+        "max-depth": 3,
+        "max-params": 4,
+        "complexity": 10,
+        "no-unused-vars": "error",
+        "no-eval": "error",
+        "no-var": "error"
+      }
     },
     "javascript": {
       "tool": "eslint",
+      "command": "npx eslint --max-warnings 0 .",
       "configFile": "eslint.config.mjs",
-      "options": { "max-lines-per-function": 40, "max-depth": 3, "max-params": 4, "complexity": 10 }
+      "options": {
+        "max-len": 100,
+        "max-lines-per-function": 40,
+        "max-depth": 3,
+        "max-params": 4,
+        "complexity": 10,
+        "no-unused-vars": "error",
+        "no-eval": "error",
+        "no-var": "error"
+      }
+    },
+    "go": {
+      "tool": "golangci-lint",
+      "command": "golangci-lint run --enable gosec,unused,staticcheck,revive,lll,funlen,gocyclo ./..."
+    },
+    "rust": {
+      "tool": "clippy",
+      "command": "cargo clippy --all-targets --all-features -- -D warnings -W clippy::pedantic"
+    },
+    "c": {
+      "tool": "cppcheck",
+      "command": "cppcheck --enable=warning,style,performance,portability --error-exitcode=1 --inline-suppr ."
+    },
+    "cpp": {
+      "tool": "cppcheck",
+      "command": "cppcheck --enable=warning,style,performance,portability --error-exitcode=1 --inline-suppr ."
+    },
+    "csharp": {
+      "tool": "dotnet analyzers",
+      "command": "dotnet build --warnaserror -p:EnforceCodeStyleInBuild=true -p:AnalysisLevel=latest-all"
+    },
+    "java": {
+      "tool": "pmd",
+      "command": "pmd check --dir src --rulesets rulesets/java/quickstart.xml --format text"
+    },
+    "kotlin": {
+      "tool": "detekt",
+      "command": "detekt --build-upon-default-config"
+    },
+    "swift": {
+      "tool": "swiftlint",
+      "command": "swiftlint lint --strict"
+    },
+    "shell": {
+      "tool": "shellcheck",
+      "command": "shellcheck --severity=style $(git ls-files '*.sh' '*.bash')"
+    },
+    "powershell": {
+      "tool": "PSScriptAnalyzer",
+      "command": "pwsh -NoProfile -Command \"Invoke-ScriptAnalyzer -Path . -Recurse -EnableExit\""
+    },
+    "ruby": {
+      "tool": "rubocop",
+      "command": "bundle exec rubocop"
+    },
+    "php": {
+      "tool": "phpstan",
+      "command": "vendor/bin/phpstan analyse --level=max --no-progress"
+    },
+    "dart": {
+      "tool": "dart analyze",
+      "command": "dart analyze --fatal-infos"
+    },
+    "lua": {
+      "tool": "luacheck",
+      "command": "luacheck ."
+    },
+    "perl": {
+      "tool": "perlcritic",
+      "command": "perlcritic --stern ."
+    },
+    "elixir": {
+      "tool": "credo",
+      "command": "mix credo --strict"
+    },
+    "haskell": {
+      "tool": "hlint",
+      "command": "hlint ."
+    },
+    "sql": {
+      "tool": "sqlfluff",
+      "command": "sqlfluff lint ."
+    },
+    "css": {
+      "tool": "stylelint",
+      "command": "npx stylelint \"**/*.{css,scss,less}\""
+    },
+    "terraform": {
+      "tool": "tflint",
+      "command": "tflint --recursive"
+    },
+    "containers": {
+      "tool": "hadolint",
+      "command": "hadolint Dockerfile"
+    },
+    "ci-workflows": {
+      "tool": "actionlint",
+      "command": "actionlint"
     }
+  },
+  "lint": {
+    "rules": {},
+    "exclude": []
   }
 }

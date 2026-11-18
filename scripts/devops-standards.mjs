@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
+import { RULE_IDS } from './devops-lint-rules.mjs'
 import { PACKAGE_ROOT, loadLanguages } from './devops-setup.mjs'
 
 const INT = 'int'
@@ -10,90 +11,192 @@ const DEFAULTS_SHAPE = {
   function: { maxLines: INT, maxNesting: INT, maxParams: INT },
   duplicates: { minLines: INT, minChars: INT },
   magicLiterals: { maxRepeats: INT },
-  comments: { densityWarn: RATIO, densityBlock: RATIO, minCommentLines: INT, maxProseLines: INT },
+  comments: {
+    densityWarn: RATIO, densityBlock: RATIO, minCommentLines: INT, maxProseLines: INT,
+  },
   scan: { maxFiles: INT, maxFileBytes: INT },
 }
-const INTERFACE_SHAPE = { comments: { densityWarn: RATIO, densityBlock: RATIO, maxProseLines: INT } }
-
-const TOP_LEVEL = ['schemaVersion', 'about', 'defaults', 'interface', 'languages', 'linters']
+const INTERFACE_SHAPE = {
+  comments: { densityWarn: RATIO, densityBlock: RATIO, maxProseLines: INT },
+}
+const LEAF_CHECKS = {
+  [INT]: [v => Number.isInteger(v) && v >= 1, 'must be a whole number of at least 1'],
+  [RATIO]: [
+    v => typeof v === 'number' && v > 0 && v <= 1,
+    'must be a number above 0 and at most 1',
+  ],
+}
+const TOP_LEVEL = [
+  'schemaVersion', 'about', 'defaults', 'interface', 'languages', 'linters', 'lint',
+]
+const LINTER_KEYS = ['tool', 'command', 'configFile', 'options']
+const LINT_KEYS = ['rules', 'exclude']
+const LEVELS = ['error', 'off']
 
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+const isSimple = v => typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean'
+const isText = v => typeof v === 'string' && v !== ''
 
 /** Recursive merge: plain objects merge key by key, everything else is replaced by the override. */
 export function deepMerge(base, override) {
   if (!isObject(base) || !isObject(override)) return override === undefined ? base : override
   const out = { ...base }
-  for (const [key, value] of Object.entries(override)) out[key] = key in base ? deepMerge(base[key], value) : value
+  for (const [key, value] of Object.entries(override)) {
+    out[key] = key in base ? deepMerge(base[key], value) : value
+  }
   return out
 }
 
-/** Problems with `value` against `shape`; `partial` allows any subset of the shape's keys. */
-function checkShape(value, shape, where, partial, problems) {
-  if (!isObject(value)) return problems.push(`${where} must be an object`)
-  for (const [key, child] of Object.entries(value)) {
-    const at = `${where}.${key}`
-    if (!(key in shape)) { problems.push(`${at} is not a known setting`); continue }
-    if (typeof shape[key] === 'string') {
-      const v = child
-      if (shape[key] === INT && !(Number.isInteger(v) && v >= 1)) problems.push(`${at} must be a whole number of at least 1`)
-      if (shape[key] === RATIO && !(typeof v === 'number' && v > 0 && v <= 1)) problems.push(`${at} must be a number above 0 and at most 1`)
-    } else checkShape(child, shape[key], at, partial, problems)
-  }
-  if (!partial) for (const key of Object.keys(shape)) if (!(key in value)) problems.push(`${where}.${key} is missing`)
+const unknownKeys = (value, known, where) => Object.keys(value)
+  .filter(key => !known.includes(key))
+  .map(key => `${where}.${key} is not a known setting`)
+
+const missingKeys = (value, shape, where) => Object.keys(shape)
+  .filter(key => !(key in value))
+  .map(key => `${where}.${key} is missing`)
+
+function checkKey(child, expected, at, mode) {
+  if (expected === undefined) return [`${at} is not a known setting`]
+  if (typeof expected !== 'string') return checkShape(child, expected, at, mode)
+  const [ok, message] = LEAF_CHECKS[expected]
+  return ok(child) ? [] : [`${at} ${message}`]
+}
+
+/** Problems with `value` against `shape`. `mode` 'complete' also requires every key of the shape. */
+function checkShape(value, shape, where, mode = 'partial') {
+  if (!isObject(value)) return [`${where} must be an object`]
+  const problems = Object.entries(value)
+    .flatMap(([key, child]) => checkKey(child, shape[key], `${where}.${key}`, mode))
+  if (mode === 'complete') problems.push(...missingKeys(value, shape, where))
   return problems
+}
+
+function optionProblems(options, where) {
+  if (options === undefined) return []
+  if (!isObject(options)) return [`${where}.options must be an object`]
+  return Object.entries(options)
+    .filter(([, v]) => !isSimple(v))
+    .map(([name]) => `${where}.options.${name} must be a number, string or boolean`)
+}
+
+/** Problems with one linter entry: a tool name, an optional command, config file and options. */
+function linterProblems(linter, where) {
+  if (!isObject(linter) || !isText(linter.tool)) return [`${where}.tool must be a name`]
+  const problems = unknownKeys(linter, LINTER_KEYS, where)
+  const badCommand = linter.command !== undefined && !isText(linter.command)
+  if (badCommand) problems.push(`${where}.command must be a command line`)
+  const badFile = linter.configFile !== undefined && typeof linter.configFile !== 'string'
+  if (badFile) problems.push(`${where}.configFile must be a file name`)
+  return [...problems, ...optionProblems(linter.options, where)]
+}
+
+function ruleProblems(rules) {
+  if (rules === undefined) return []
+  if (!isObject(rules)) return ['lint.rules must be an object']
+  return Object.entries(rules).flatMap(([rule, level]) => [
+    ...(RULE_IDS.includes(rule) ? [] : [`lint.rules.${rule} is not a known rule`]),
+    ...(LEVELS.includes(level) ? [] : [`lint.rules.${rule} must be "error" or "off"`]),
+  ])
+}
+
+/** Problems with the `lint` section: rule levels for known rule ids, and exclude globs. */
+function lintProblems(lint) {
+  if (lint === undefined) return []
+  if (!isObject(lint)) return ['lint must be an object']
+  const exclude = lint.exclude ?? []
+  const validGlobs = Array.isArray(exclude) && exclude.every(isText)
+  return [
+    ...unknownKeys(lint, LINT_KEYS, 'lint'),
+    ...ruleProblems(lint.rules),
+    ...(validGlobs ? [] : ['lint.exclude must be a list of path globs']),
+  ]
+}
+
+const knownId = (id, languageIds) => languageIds.length === 0 || languageIds.includes(id)
+
+/** Problems with the `linters` section: language ids (or `all`) and each entry, alone or in a list. */
+function lintersProblems(linters, languageIds) {
+  return Object.entries(linters ?? {}).flatMap(([id, entry]) => {
+    const known = id === 'all' || knownId(id, languageIds)
+    const unknown = known ? [] : [`linters.${id}: unknown language id`]
+    if (!Array.isArray(entry)) return [...unknown, ...linterProblems(entry, `linters.${id}`)]
+    const each = entry.flatMap((linter, i) => linterProblems(linter, `linters.${id}[${i}]`))
+    return [...unknown, ...each]
+  })
+}
+
+function languagesProblems(languages, languageIds) {
+  return Object.entries(languages ?? {}).flatMap(([id, override]) => [
+    ...(knownId(id, languageIds) ? [] : [`languages.${id}: unknown language id`]),
+    ...checkShape(override, DEFAULTS_SHAPE, `languages.${id}`),
+  ])
+}
+
+function topLevelProblems(standards) {
+  const version = standards.schemaVersion === 1 ? [] : ['schemaVersion must be 1']
+  const unknown = Object.keys(standards)
+    .filter(key => !TOP_LEVEL.includes(key))
+    .map(key => `${key} is not a known top-level key (use: ${TOP_LEVEL.join(', ')})`)
+  return [...version, ...unknown]
+}
+
+/** A block limit below its warning limit, which would block before it warns. */
+function densityOrder(comments, where) {
+  const { densityWarn: warn, densityBlock: block } = comments ?? {}
+  if (warn === undefined || block === undefined || block >= warn) return []
+  return [`${where}.densityBlock must be at least densityWarn`]
 }
 
 /** Problems with a standards object. `partial` is true for the project file, which may set only some keys. */
 export function validateStandards(standards, { languageIds = [], partial = false } = {}) {
-  const problems = []
   if (!isObject(standards)) return ['standards must be a JSON object']
-  if (standards.schemaVersion !== 1) problems.push('schemaVersion must be 1')
-  for (const key of Object.keys(standards)) if (!TOP_LEVEL.includes(key)) problems.push(`${key} is not a known top-level key (use: ${TOP_LEVEL.join(', ')})`)
-  const defaultsProblems = checkShape(standards.defaults ?? {}, DEFAULTS_SHAPE, 'defaults', partial, [])
-  problems.push(...defaultsProblems)
-  problems.push(...checkShape(standards.interface ?? {}, INTERFACE_SHAPE, 'interface', true, []))
-  for (const [id, override] of Object.entries(standards.languages ?? {})) {
-    if (languageIds.length && !languageIds.includes(id)) problems.push(`languages.${id}: unknown language id`)
-    problems.push(...checkShape(override, DEFAULTS_SHAPE, `languages.${id}`, true, []))
-  }
-  for (const [id, linter] of Object.entries(standards.linters ?? {})) {
-    if (languageIds.length && !languageIds.includes(id)) problems.push(`linters.${id}: unknown language id`)
-    if (!isObject(linter) || typeof linter.tool !== 'string' || linter.tool === '') { problems.push(`linters.${id}.tool must be a name`); continue }
-    if (linter.configFile !== undefined && typeof linter.configFile !== 'string') problems.push(`linters.${id}.configFile must be a file name`)
-    if (!isObject(linter.options)) { problems.push(`linters.${id}.options must be an object`); continue }
-    for (const [name, v] of Object.entries(linter.options)) {
-      if (!(typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean')) problems.push(`linters.${id}.options.${name} must be a number, string or boolean`)
-    }
-  }
-  if (!partial) {
-    const merged = standards.defaults
-    if (merged && merged.comments && merged.comments.densityBlock < merged.comments.densityWarn) problems.push('defaults.comments.densityBlock must be at least densityWarn')
-    if (standards.interface?.comments && standards.interface.comments.densityBlock !== undefined && standards.interface.comments.densityWarn !== undefined && standards.interface.comments.densityBlock < standards.interface.comments.densityWarn) problems.push('interface.comments.densityBlock must be at least densityWarn')
-  }
-  return problems
+  const mode = partial ? 'partial' : 'complete'
+  const problems = [
+    ...topLevelProblems(standards),
+    ...checkShape(standards.defaults ?? {}, DEFAULTS_SHAPE, 'defaults', mode),
+    ...checkShape(standards.interface ?? {}, INTERFACE_SHAPE, 'interface'),
+    ...languagesProblems(standards.languages, languageIds),
+    ...lintersProblems(standards.linters, languageIds),
+    ...lintProblems(standards.lint),
+  ]
+  return partial ? problems : [...problems, ...orderProblems(standards)]
+}
+
+function orderProblems(standards) {
+  return [
+    ...densityOrder(standards.defaults?.comments, 'defaults.comments'),
+    ...densityOrder(standards.interface?.comments, 'interface.comments'),
+  ]
 }
 
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'))
 
+function assertValid(problems, label) {
+  if (problems.length > 0) throw new Error(`${label}: ${problems.join('; ')}`)
+}
+
+function readProjectFile(file) {
+  try {
+    return readJson(file)
+  } catch (error) {
+    throw new Error(`.devops/standards.json is not valid JSON: ${error.message}`)
+  }
+}
+
 /**
- * The project's standards: the package's standards.json, with the project's .devops/standards.json merged over it
- * key by key. Throws with every problem listed, so a bad value stops the audit instead of loosening it.
+ * The project's standards: the package's standards.json, with the project's .devops/standards.json merged
+ * over it key by key. Throws with every problem listed, so a bad value stops the audit instead of loosening it.
  */
 export function loadStandards(dest) {
-  const packageFile = path.join(PACKAGE_ROOT, 'standards.json')
-  const base = readJson(packageFile)
-  const projectFile = path.join(dest, '.devops', 'standards.json')
+  const base = readJson(path.join(PACKAGE_ROOT, 'standards.json'))
   const languageIds = loadLanguages(dest).languages.map(l => l.id)
-  const baseProblems = validateStandards(base, { languageIds })
-  if (baseProblems.length) throw new Error(`standards.json: ${baseProblems.join('; ')}`)
+  assertValid(validateStandards(base, { languageIds }), 'standards.json')
+  const projectFile = path.join(dest, '.devops', 'standards.json')
   if (!fs.existsSync(projectFile)) return base
-  let override
-  try { override = readJson(projectFile) } catch (error) { throw new Error(`.devops/standards.json is not valid JSON: ${error.message}`) }
-  const overrideProblems = validateStandards(override, { languageIds, partial: true })
-  if (overrideProblems.length) throw new Error(`.devops/standards.json: ${overrideProblems.join('; ')}`)
+  const override = readProjectFile(projectFile)
+  assertValid(validateStandards(override, { languageIds, partial: true }), '.devops/standards.json')
   const merged = deepMerge(base, override)
-  const mergedProblems = validateStandards(merged, { languageIds })
-  if (mergedProblems.length) throw new Error(`.devops/standards.json: ${mergedProblems.join('; ')}`)
+  assertValid(validateStandards(merged, { languageIds }), '.devops/standards.json')
   return merged
 }
 

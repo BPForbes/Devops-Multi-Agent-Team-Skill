@@ -80,6 +80,7 @@ prompts) walks the same steps.
 | `reuse_search` | research: where a term (or a spelling variant) already appears in code, comments and docs (Markdown, LaTeX, ...); secret files skipped |
 | `tag_history` | versions: how the project changed between git tags (commits, files, lines, directories, languages, commit types), unreleased work and a suggested bump; `save` keeps a snapshot in `.devops/tags/` |
 | `tag_plan`, `tag_create` | versions: plan the next semver tag; create one annotated local tag. Never pushes, moves or deletes a tag |
+| `lint_check`, `lint_commands` | the lint gate: every comment rule, line length, function size, unused symbols, security patterns, outdated APIs and debug leftovers on the added lines, each with its fix, verdict PASS or DENY; with the Push JSON it also checks that every open-source linter (ruff, ESLint, clippy, shellcheck, semgrep, gitleaks, osv-scanner, ...) ran in the sandbox and exited 0. `lint_commands` lists those commands |
 | `comment_audit` | the comments a change adds (staged, working tree or `base...head`), as ready-to-paste Conventional Comments: restating comments, commented-out code, questions or notes left in code, process notes, bare TODO/FIXME, signature-only docs, over-commented files, comments that narrate the implementation, concept or usage text that may belong in the docs; with the Push JSON `comments` and `docs` lists it also flags comments the Coder did not justify and unlisted doc changes |
 | `story_parse` | read a story in this format (an issue body) into structure: id, project, baseline, status, depends on, needed by, OLD and NEW blocks |
 | `story_new`, `story_link` | create a story from the template and link stories (depends-on, absorbs, supersedes, refines, shares-contract); both sides stay in step and a cycle is refused |
@@ -159,6 +160,7 @@ value out of range stops the run with the problem named.
 
 | Rule | Where | Enforced by |
 |------|-------|-------------|
+| **Lint gate (hard deny)**: comment rules, line length, function size, unused symbols, security, outdated APIs and debug leftovers on added lines, plus the open-source linters run in the sandbox; every finding carries its fix | `lint-rules.md`, `standards.json` `lint` and `linters` | Reviewers DENY on any blocking finding and send the whole list back; the mod runs it on `git commit` |
 | **Documentation first** (Markdown, LaTeX, code comments, then code, then the web) | `research-and-reuse.md`, researcher agent | Reviewers reject a brief without it |
 | **Module mind map + reuse map** before any Coder starts; "new, because ..." must hold up | `research-and-reuse.md`, `module_map`, `reuse_search` | Reviewers: re-implementation is a blocking finding; QA checks the brief |
 | **Clean code** (intention-revealing names, small single-purpose functions, DRY with care, no magic numbers, simplicity over cleverness, SOLID where it fits) | `clean-code.md`, `rules/clean-code.md` | Coders write to it; Reviewers label violations; `cleanup_scan` finds magic numbers, vague names, flag arguments, long or deep functions and duplicates |
@@ -222,7 +224,7 @@ The plugin provides the skill, agents, commands, the MCP server and the mod.
 
 | Hook | Does |
 |------|------|
-| `tool.call` Bash (comment audit) | On `git commit` it runs the comment audit on the staged diff (the working tree for `-a`) and adds the findings to the result. `/devops comments strict` refuses a commit with blocking findings; `off` turns it off. |
+| `tool.call` Bash (lint gate) | On `git commit` it runs `devops-lint check` (comment rules and code rules) on the staged diff (the working tree for `-a`) and adds the findings to the result. `/devops comments strict` refuses a commit with blocking findings; `off` turns it off. |
 | `tool.call` Bash (monitor) | A command that matches a validation command in the language data (for example `cargo test`, `npm run lint`) and fails is recorded in `devops-skill/thoughts/non-final/check-ledger.md`, counted per check, and the result gets a reminder to reproduce, fix the cause and re-run; at the retry cap (default 3, set in `project.md`) it says stop and escalate. A pass clears the count. `/devops monitor off` (typed by you) turns it off. |
 | `session.start` | Runs `devops-setup detect --json`, shows `devops: rust+typescript` in the status line, registers `/devops`. |
 | `command.run` `/devops` | `status`, `languages`, `setup` (anyone); `push-ok`, `push-reset`, `allow-branch NAME`, `gates on|off` (only when **you** type them; an agent that runs the command is refused). |

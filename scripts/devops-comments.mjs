@@ -257,17 +257,27 @@ function languageChecks(items, codeRows, syntax, file, readFile) {
   return out
 }
 
-/** Added code lines longer than the project's code line limit. Comment lines are judged by `judge`. */
-function longCodeLines(rows, items, limits, syntax) {
-  const commentLines = new Set(items.map(i => i.line))
+/**
+ * Added rows that are code, not comments or blank. A -U0 diff can split a comment block across hunks, so a row
+ * that starts with a comment marker counts as a comment even when its block opener is not in the diff.
+ */
+export function codeRows(rows, syntax) {
+  const commentLines = new Set(extract(rows, syntax).items.map(i => i.line))
   const isCommentMarker = trimmed => /^(\*|\/\*|\/\/)/.test(trimmed)
     || syntax.line.some(m => trimmed.startsWith(m))
     || syntax.block.some(([open]) => trimmed.startsWith(open))
+  return rows.filter(row => {
+    const trimmed = row.text.trim()
+    return trimmed !== '' && !commentLines.has(row.line) && !isCommentMarker(trimmed)
+  })
+}
+
+/** Added code lines longer than the project's code line limit. Comment lines are judged by `judge`. */
+function longCodeLines(rows, limits, syntax) {
   const out = []
-  for (const row of rows) {
+  for (const row of codeRows(rows, syntax)) {
     const text = row.text
-    const skip = commentLines.has(row.line) || isCommentMarker(text.trim()) || text.trim() === ''
-    if (skip || /https?:\/\//.test(text)) continue
+    if (/https?:\/\//.test(text)) continue
     if (text.length > limits.codeLineColumns) {
       const limit = limits.codeLineColumns
       const remark = `this line is ${text.length} columns; the code limit is ${limit}`
@@ -313,7 +323,7 @@ export function auditDiff(diffText, standards, { listed, docs, syntaxFor, readFi
     codeTotal += code
     commentLines += items.filter(i => i.text !== '').length
     for (const item of items) findings.push(...judge(item, limits))
-    findings.push(...longCodeLines(rows, items, limits, syntax))
+    findings.push(...longCodeLines(rows, limits, syntax))
     findings.push(...languageChecks(items, codeRows, syntax, file, readFile))
     for (const group of groups(items.filter(i => i.text !== ''))) {
       const first = group.items[0]
@@ -370,17 +380,27 @@ export function auditDiff(diffText, standards, { listed, docs, syntaxFor, readFi
 }
 
 /** Audit the comments a staged change, a working tree or a commit range adds. */
-export function commentAudit(destInput, { base, head = 'HEAD', staged = false, listed, docs, roots } = {}) {
-  const dest = resolveDest(destInput, roots)
+/** The -U0 diff of a staged change, a commit range (`base...head`) or the working tree against HEAD. */
+export function readDiff(dest, { base, head = 'HEAD', staged = false } = {}) {
   const common = ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', '-U0']
   let args
   if (base) {
-    for (const ref of [base, head]) if (!REF.test(ref)) throw new Error(`not a plain ref name: ${JSON.stringify(ref)}`)
+    for (const ref of [base, head]) {
+      if (!REF.test(ref)) throw new Error(`not a plain ref name: ${JSON.stringify(ref)}`)
+    }
     args = [...common, `${base}...${head}`]
   } else if (staged) args = [...common, '--cached']
   else args = [...common, 'HEAD']
   const ran = git(dest, args)
   if (!ran.ok) throw new Error(ran.err || 'git diff failed (is this a git repository?)')
+  const source = base ? `${base}...${head}` : staged ? 'staged' : 'working tree vs HEAD'
+  return { text: ran.out, source }
+}
+
+export function commentAudit(destInput, options = {}) {
+  const { base, head = 'HEAD', staged = false, listed, docs, roots } = options
+  const dest = resolveDest(destInput, roots)
+  const diff = readDiff(dest, { base, head, staged })
   const standards = loadStandards(dest)
   const readFile = rel => {
     try {
@@ -389,13 +409,13 @@ export function commentAudit(destInput, { base, head = 'HEAD', staged = false, l
       return fs.readFileSync(abs, 'utf8')
     } catch { return null }
   }
-  const result = auditDiff(ran.out, standards, {
+  const result = auditDiff(diff.text, standards, {
     listed,
     docs,
     syntaxFor: syntaxTable(dest),
     readFile,
   })
-  return { dest, source: base ? `${base}...${head}` : staged ? 'staged' : 'working tree vs HEAD', ...result }
+  return { dest, source: diff.source, ...result }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

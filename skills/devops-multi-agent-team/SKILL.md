@@ -174,6 +174,7 @@ multi-branch merge rule: [virtual-git.md](references/virtual-git.md).
 | **Single purpose, closed for modification, Liskov substitution** (with the Shape and Bird examples) | [oop-principles.md](references/oop-principles.md) |
 | Documentation first, module mind map, reuse | [research-and-reuse.md](references/research-and-reuse.md) |
 | Comments and doc comments (Reviewers strict) | [comment-standards.md](references/comment-standards.md) |
+| **Lint gate**: built-in rules and open-source linters; any blocking finding is a hard DENY with the full list and fixes sent back | [lint-rules.md](references/lint-rules.md), `lint_check`, `lint_commands` |
 | Failed checks: monitor, auto-correct, stop | [monitoring.md](references/monitoring.md) |
 | Releases: tags as project history | [version-tags.md](references/version-tags.md) |
 | GitHub Advanced Security setup | [github-advanced-security.md](references/github-advanced-security.md) |

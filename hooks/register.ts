@@ -4,6 +4,7 @@ import type { Found } from '../types'
 import { branchNameOf, classify, classifySegments, commitInfo, splitArgs, verdictOf } from './guard'
 
 const PLUGIN = 'devops-multi-agent-team'
+const SCRIPT_TIMEOUT_MS = 20000
 const THOUGHT_DIRS = ['devops-skill/thoughts/non-final', 'devops-skill/thoughts/final']
 
 
@@ -16,13 +17,17 @@ const HELP = [
   '/devops allow-branch NAME   (you) allow creating that git branch',
   '/devops gates on|off (you) turn the push and branch gates on or off',
   '/devops monitor on|off (you) turn the failed-check monitor on or off',
-  '/devops comments warn|strict|off (you) comment audit on git commit: warn (default), refuse a commit with blocking findings, or off',
+  '/devops comments warn|strict|off (you) lint gate on git commit (comment and code rules): ' +
+    'warn (default), refuse a commit with blocking findings, or off',
 ].join('\n')
 
 async function detect($: EngineInterface): Promise<Found[]> {
   const root = await $.session.root()
   const ran = await $.process
-    .run(['node', `${$.plugin.root}/scripts/devops-setup.mjs`, 'detect', '--json', '--dest', root], { timeoutMs: 20000 })
+    .run(
+      ['node', `${$.plugin.root}/scripts/devops-setup.mjs`, 'detect', '--json', '--dest', root],
+      { timeoutMs: SCRIPT_TIMEOUT_MS },
+    )
     .catch(() => undefined)
   if (ran === undefined || ran.exitCode !== 0) return []
   try {
@@ -116,8 +121,11 @@ type AuditSummary = { blocking: number; nonBlocking: number; findings: { file: s
 
 async function auditCommit($: EngineInterface, stagesAll: boolean): Promise<AuditSummary | undefined> {
   const root = await $.session.root()
+  const scope = stagesAll ? [] : ['--staged']
+  const script = `${$.plugin.root}/scripts/devops-lint.mjs`
+  const lintArgs = ['node', script, 'check', '--dest', root, ...scope, '--json']
   const ran = await $.process
-    .run(['node', `${$.plugin.root}/scripts/devops-comments.mjs`, 'audit', '--dest', root, ...(stagesAll ? [] : ['--staged']), '--json'], { timeoutMs: 20000 })
+    .run(lintArgs, { timeoutMs: SCRIPT_TIMEOUT_MS })
     .catch(() => undefined)
   if (ran === undefined || ran.stdout === '') return undefined
   try {
@@ -129,7 +137,10 @@ async function auditCommit($: EngineInterface, stagesAll: boolean): Promise<Audi
 
 function auditContext(audit: AuditSummary): string {
   const first = audit.findings.slice(0, 6).map(f => `${f.file}:${f.line} ${f.remark}`).join(' | ')
-  return `${PLUGIN} comment audit: ${audit.blocking} blocking, ${audit.nonBlocking} non-blocking. Delete the comment, or rename or extract so the code says it; keep one only for a reason the code cannot show, and list it in the Push JSON comments. Questions and notes to a person go to the PR Q&A, never into code. ${first}`
+  const counts = `${audit.blocking} blocking, ${audit.nonBlocking} non-blocking`
+  const advice = 'Each finding names its rule and its fix; fix them all before handoff, ' +
+    'then run the open-source linters (lint_commands) in the sandbox.'
+  return `${PLUGIN} lint: ${counts}. ${advice} ${first}`
 }
 
 export const register: Register = on => {

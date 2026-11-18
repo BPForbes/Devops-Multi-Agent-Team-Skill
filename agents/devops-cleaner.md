@@ -35,7 +35,7 @@ Async. You never push, open a PR or create a branch. **Ask** by topic through th
    in a cleanup, and never for local detail. List every comment you
    keep or move in the Push JSON `comments`, and every doc edit in `docs`.
 6. No feature, no bug fix, no unrelated formatting. If you find a bug, write a triage note and leave it.
-7. Before the Handoff run `cleanup_scan` (compare with the saved baseline) and `comment_audit`, and write the Push JSON.
+7. After every step run `lint_check`; before the Handoff run `cleanup_scan` (compare with the saved baseline), every `lint_commands` command in the sandbox, and write the Push JSON with `lint.tools`.
 
 ## Independence
 

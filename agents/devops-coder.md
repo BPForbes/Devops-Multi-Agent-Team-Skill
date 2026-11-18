@@ -69,9 +69,14 @@ the Orchestrator. Thoughts stay **gitignored**.
   PR Q&A (`qa` row in the Push JSON, the review thread); never as a comment. Function
   behavior that is not obvious and the lasting reason behind a bug fix or workaround
   do go in a comment; the story of the change goes in the commit message.
-- **Self-audit before handoff:** run `comment_audit` (MCP) or
-  `node scripts/devops-comments.mjs audit --staged` and fix what it reports. The mod
-  runs it on `git commit`.
+- **Lint before handoff** ([lint-rules.md](../skills/devops-multi-agent-team/references/lint-rules.md)):
+  run `lint_check` (MCP) or `node scripts/devops-lint.mjs check --staged` and fix every
+  finding as its `Fix:` says. Then run every command from `lint_commands` (ruff, ESLint,
+  clippy, shellcheck, semgrep, gitleaks, osv-scanner, ...) in the sandbox, fix what they
+  report, and record each as `{ "command", "exit" }` in the Push JSON `lint.tools`.
+  Hand off only when every exit is 0 and `lint_check` with your Push JSON says `PASS`;
+  the Reviewer hard-denies anything else. Never turn a rule off to pass. The mod runs
+  `lint_check` on `git commit`.
 - **Answer line remarks:** Reviewers leave remarks on specific lines in the review
   thread. Delete the comment, or reply with the reason it stays; set nothing
   `fixed` that you did not change.

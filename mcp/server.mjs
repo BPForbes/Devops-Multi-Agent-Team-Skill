@@ -16,6 +16,7 @@ import {
 import { commentAudit } from '../scripts/devops-comments.mjs'
 import { parseStatement, scanProject, snapshot } from '../scripts/devops-cleanup.mjs'
 import { formalCheck } from '../scripts/devops-formal.mjs'
+import { lintCheck, lintCommands } from '../scripts/devops-lint.mjs'
 import { ghasPlan } from '../scripts/devops-ghas.mjs'
 import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, parseStory } from '../scripts/devops-stories.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
@@ -286,6 +287,54 @@ const TOOLS = [
       gitAllowed()
       return commentAudit(projectDir(args), { base: args.base, head: args.head, staged: optionalBool(args, 'staged', false), listed: args.listed, docs: args.docs, roots: allowedRoots() })
     },
+  },
+  {
+    name: 'lint_check',
+    description: [
+      'The lint gate. Lints the lines a change adds (staged, working tree vs HEAD, or',
+      'base...head) and returns verdict PASS or DENY with every finding, its rule, its',
+      'category and how to fix it. Rules: every comment rule from comment_audit, code line',
+      'length, function length, nesting, parameters, flag arguments and repeated literals',
+      '(limits from .devops/standards.json), unused functions, variables and imports,',
+      'security patterns (eval, shell injection, unsafe deserialization, disabled TLS',
+      'checks, hardcoded secrets, weak hashes, XSS sinks, SQL built from strings, unbounded',
+      'C string calls, plain-http URLs), outdated APIs, and debug leftovers. Pass `push`',
+      '(the whole Push JSON) to also check that every open-source linter from lint_commands',
+      'ran in the sandbox and exited 0. Reviewers deny on any blocking finding and send the',
+      'whole list back. Read-only.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, base: { type: 'string' }, head: { type: 'string' }, staged: { type: 'boolean' },
+        push: {
+          type: 'object',
+          description: 'The Push JSON; its comments, docs and lint.tools are checked.',
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => {
+      gitAllowed()
+      const push = args.push
+      const staged = optionalBool(args, 'staged', false)
+      const options = { base: args.base, head: args.head, staged, push, roots: allowedRoots() }
+      return lintCheck(projectDir(args), { ...options, listed: push?.comments, docs: push?.docs })
+    },
+  },
+  {
+    name: 'lint_commands',
+    description: [
+      'The open-source linter commands for this project (from .devops/standards.json',
+      '`linters`, for the detected languages, plus the ones for every project such as',
+      'semgrep, gitleaks and osv-scanner). The server does not run them: the Coder runs',
+      'each in the sandbox (sandbox_plan) and records { command, exit } in the Push JSON',
+      '`lint.tools`. Read-only.',
+    ].join(' '),
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => lintCommands(projectDir(args), { roots: allowedRoots() }),
   },
   {
     name: 'formal_check',

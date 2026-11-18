@@ -306,4 +306,4 @@ findings.
    level without overdoing it, and does the source avoid repeating them?
 11c. Docs: is every doc edit the smallest that makes the existing doc true, and
    is any new doc file for a new system, named in the Push JSON `docs` `new`?
-12. Run `comment_audit` and post each finding that holds as a **line remark** on the virtual PR (`path:line`, a Conventional Comment); do not edit the code yourself.
+12. Every comment rule is also a lint rule: `lint_check` runs them all, and a blocking finding is a hard DENY ([lint-rules.md](lint-rules.md)). Run `comment_audit` and post each finding that holds as a **line remark** on the virtual PR (`path:line`, a Conventional Comment); do not edit the code yourself.

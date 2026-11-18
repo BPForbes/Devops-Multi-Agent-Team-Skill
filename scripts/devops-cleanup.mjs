@@ -169,10 +169,15 @@ const CLASS_DECLARATION = /\b(?:class|struct|interface|trait|impl)\s+\w+/
 const REFUSES = /\b(?:throw|raise)\b.*\b(?:Unsupported\w*|NotImplemented\w*|NotSupported\w*)\b|\b(?:throw|raise)\b.*['"`][^'"`]*(?:not supported|unsupported|not implemented|can't|cannot|can not)[^'"`]*['"`]|\b(?:unimplemented|todo)!\s*\(/i
 const FLAG_PARAM = /\b(?:bool|boolean|Boolean)\b|=\s*(?:true|false|True|False)\b|\b(?:flag|force|verbose|strict|(?:is|has|can|should|apply|enable|disable|use|with|include|skip)[A-Z_]\w*)\b/
 
+const REGEX_START = /(^\s*|[(=,:[!&|?{};]\s*)/
+const REGEX_BODY = /\/(?![/*])(?:[^/\\\n[]|\\.|\[(?:[^\]\\]|\\.)*\])+\/[a-z]*/
+const REGEX_LITERAL = new RegExp(REGEX_START.source + REGEX_BODY.source, 'g')
+const stripRegexLiterals = code => code.replace(REGEX_LITERAL, '$1//')
+
 function magicNumbers(lines, markers, settings) {
   const seen = new Map()
   lines.forEach((raw, index) => {
-    const code = stripLineComment(raw, markers)
+    const code = stripRegexLiterals(stripStrings(stripLineComment(raw, markers)))
     if (code.trim() === '' || CONSTANT_LINE.test(code) || IMPORT_LINE.test(code.trim()) || /\[\s*\d+\s*\]/.test(code)) return
     for (const m of code.matchAll(NUMBER)) {
       const entry = seen.get(m[0]) ?? { literal: m[0], count: 0, lines: [] }

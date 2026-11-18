@@ -11,11 +11,12 @@
     "devops-ghas": "scripts/devops-ghas.mjs",
     "devops-comments": "scripts/devops-comments.mjs",
     "devops-stories": "scripts/devops-stories.mjs",
-    "devops-cleanup": "scripts/devops-cleanup.mjs"
+    "devops-cleanup": "scripts/devops-cleanup.mjs",
+    "devops-lint": "scripts/devops-lint.mjs"
   },
   "scripts": {
     "check": "node scripts/check-languages.mjs",
-    "test": "node scripts/check-languages.mjs && node --test scripts/devops-setup.test.mjs scripts/devops-modules.test.mjs scripts/devops-comments.test.mjs scripts/devops-standards.test.mjs scripts/devops-stories.test.mjs scripts/devops-cleanup.test.mjs scripts/devops-formal.test.mjs mcp/server.test.mjs && claude plugin validate . && claude plugin test ."
+    "test": "node scripts/check-languages.mjs && node --test scripts/devops-setup.test.mjs scripts/devops-modules.test.mjs scripts/devops-comments.test.mjs scripts/devops-standards.test.mjs scripts/devops-lint.test.mjs scripts/devops-stories.test.mjs scripts/devops-cleanup.test.mjs scripts/devops-formal.test.mjs mcp/server.test.mjs && claude plugin validate . && claude plugin test ."
   },
   "engines": {
     "node": ">=18"
@@ -38,6 +39,9 @@
     "scripts/devops-cleanup.mjs",
     "scripts/devops-comments.mjs",
     "scripts/devops-ghas.mjs",
+    "scripts/devops-formal.mjs",
+    "scripts/devops-lint.mjs",
+    "scripts/devops-lint-rules.mjs",
     "scripts/devops-research.mjs",
     "scripts/devops-setup.mjs",
     "scripts/devops-standards.mjs",
