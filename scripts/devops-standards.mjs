@@ -6,11 +6,13 @@ import { PACKAGE_ROOT, loadLanguages } from './devops-setup.mjs'
 
 const INT = 'int'
 const RATIO = 'ratio'
+const NUMBERS = 'numbers'
+const BOOL = 'bool'
 const DEFAULTS_SHAPE = {
   lineLength: { comment: INT, code: INT },
   function: { maxLines: INT, maxNesting: INT, maxParams: INT },
   duplicates: { minLines: INT, minChars: INT },
-  magicLiterals: { maxRepeats: INT },
+  magicLiterals: { maxRepeats: INT, allowed: NUMBERS, checkTests: BOOL },
   comments: {
     densityWarn: RATIO, densityBlock: RATIO, minCommentLines: INT, maxProseLines: INT,
   },
@@ -25,12 +27,14 @@ const LEAF_CHECKS = {
     v => typeof v === 'number' && v > 0 && v <= 1,
     'must be a number above 0 and at most 1',
   ],
+  [NUMBERS]: [v => Array.isArray(v) && v.every(Number.isFinite), 'must be a list of numbers'],
+  [BOOL]: [v => typeof v === 'boolean', 'must be true or false'],
 }
 const TOP_LEVEL = [
   'schemaVersion', 'about', 'defaults', 'interface', 'languages', 'linters', 'lint',
 ]
 const LINTER_KEYS = ['tool', 'command', 'configFile', 'options']
-const LINT_KEYS = ['rules', 'exclude']
+const LINT_KEYS = ['rules', 'exclude', 'exemptPublic']
 const LEVELS = ['error', 'off']
 
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -105,10 +109,12 @@ function lintProblems(lint) {
   if (!isObject(lint)) return ['lint must be an object']
   const exclude = lint.exclude ?? []
   const validGlobs = Array.isArray(exclude) && exclude.every(isText)
+  const validExempt = lint.exemptPublic === undefined || typeof lint.exemptPublic === 'boolean'
   return [
     ...unknownKeys(lint, LINT_KEYS, 'lint'),
     ...ruleProblems(lint.rules),
     ...(validGlobs ? [] : ['lint.exclude must be a list of path globs']),
+    ...(validExempt ? [] : ['lint.exemptPublic must be true or false']),
   ]
 }
 
@@ -233,4 +239,10 @@ export function commentLimits(standards, languageId, { isInterface = false } = {
     densityMinComments: c.minCommentLines,
     longBlockLines: c.maxProseLines,
   }
+}
+
+/** The magic-number settings for one language: the numbers allowed in code, and whether tests are checked. */
+export function magicLimits(standards, languageId) {
+  const { allowed, checkTests } = standardsFor(standards, languageId).magicLiterals
+  return { allowed, checkTests }
 }

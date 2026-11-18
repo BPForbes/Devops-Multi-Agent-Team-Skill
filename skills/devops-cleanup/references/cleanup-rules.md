@@ -77,8 +77,8 @@ done; stop and say why.
 
 ## Constants, flag arguments and names
 
-- A repeated literal becomes one named constant that says what it means, defined once near its owners. Do not
-  name `0`, `1`, or a value that is already self-evident in context.
+- A number used directly in code becomes one named constant that says what it means, defined once near its owners. Only the
+  numbers in `magicLiterals.allowed` (default `0`, `1`, `2`) stay as they are.
 - A function with a boolean flag argument is split into two functions named for what each does (or takes a
   named option), with every caller updated in the same step.
 - Names follow clean-code.md: intention-revealing, no noise words, no misleading words, no `m_` prefixes.

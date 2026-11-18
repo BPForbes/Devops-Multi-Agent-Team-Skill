@@ -174,6 +174,9 @@ const REGEX_BODY = /\/(?![/*])(?:[^/\\\n[]|\\.|\[(?:[^\]\\]|\\.)*\])+\/[a-z]*/
 const REGEX_LITERAL = new RegExp(REGEX_START.source + REGEX_BODY.source, 'g')
 const stripRegexLiterals = code => code.replace(REGEX_LITERAL, '$1//')
 
+/** A line with its strings, regex literals and trailing comment removed: only the code is left. */
+export const bareCode = (line, markers) => stripRegexLiterals(stripLineComment(line, markers))
+
 function magicNumbers(lines, markers, settings) {
   const seen = new Map()
   lines.forEach((raw, index) => {

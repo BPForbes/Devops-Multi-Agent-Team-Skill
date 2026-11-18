@@ -56,8 +56,12 @@ the unreferenced items in "Beyond the four sources" as the team's own additions.
    calling code that already exists to writing a similar copy. But reduce
    duplication, do not worship it: two blocks that look alike by accident, or that
    will change for different reasons, stay separate. No premature abstraction.
-5. **No magic numbers or hard-coded values.** Give a literal a named constant
-   (or configuration entry) that says what it means, defined once.
+5. **No magic numbers or hard-coded values.** A magic number is any number used
+   directly in code, even once. Give it a named constant (or configuration entry)
+   that says what it means, defined once, and use the name. Only the numbers in
+   `magicLiterals.allowed` (default 0, 1, 2) may appear directly. Every declared
+   name, a constant included, must be used.
+   ([lint-rules.md](lint-rules.md))
 6. **Comments sparingly, for the reason.** Explain why, a constraint or a trap;
    never restate the code; delete commented-out code
    ([comment-standards.md](comment-standards.md)). The best comment is a better
@@ -100,7 +104,7 @@ the unreferenced items in "Beyond the four sources" as the team's own additions.
 |------|------|
 | **Researcher** | Finds the project's conventions and the existing code to reuse; notes names and constants that already exist. |
 | **Coder** | Writes new code to this standard; names carefully; extracts a function instead of commenting; defines a constant instead of repeating a literal; calls existing code instead of copying it. Does not clean unrelated code in a feature change. |
-| **Reviewer** | Checks the diff against it and labels findings: `issue (blocking)` for misleading or vague names in new code, copy-pasted logic, a repeated magic number, a swallowed error, a flag argument or a function far over the limits in new code; `suggestion (non-blocking)` for smaller simplifications. |
+| **Reviewer** | Checks the diff against it and labels findings: `issue (blocking)` for misleading or vague names in new code, copy-pasted logic, a magic number, a swallowed error, a flag argument or a function far over the limits in new code; `suggestion (non-blocking)` for smaller simplifications. |
 | **Cleaner** | Applies it to existing code on request, one behavior-preserving step at a time ([cleanup-rules.md](../../devops-cleanup/references/cleanup-rules.md)). |
 | **QA** | `cleanup_scan` on the final tree shows no new magic numbers, vague names, flag arguments or over-limit functions in the files the change touched. |
 

@@ -16,7 +16,13 @@
       "minChars": 120
     },
     "magicLiterals": {
-      "maxRepeats": 2
+      "maxRepeats": 2,
+      "allowed": [
+        0,
+        1,
+        2
+      ],
+      "checkTests": false
     },
     "comments": {
       "densityWarn": 0.35,
@@ -196,6 +202,7 @@
   },
   "lint": {
     "rules": {},
-    "exclude": []
+    "exclude": [],
+    "exemptPublic": false
   }
 }

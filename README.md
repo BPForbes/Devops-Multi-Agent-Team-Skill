@@ -149,7 +149,7 @@ value out of range stops the run with the problem named.
 ```
 
 - `defaults`: line lengths (comments and code), function size, nesting, parameters,
-  duplicated blocks, repeated literals, comment density, and scan size.
+  duplicated blocks, magic numbers (allowed numbers, test files), comment density, and scan size.
 - `interface`: the relaxed comment limits for interface files (`.h`, `.d.ts`, ...).
 - `languages`: per-language overrides of any value in `defaults`.
 - `linters`: per language, the linter tool, its config file and the options that

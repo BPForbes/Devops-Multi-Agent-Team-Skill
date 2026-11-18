@@ -25,7 +25,7 @@ Async. You never push, open a PR or create a branch. **Ask** by topic through th
    **every** step. If it turns red, revert the step; one retry; then ask.
 4. Apply `oop-principles.md` where the plan lists it: split multi-purpose functions into helpers; replace a type switch with polymorphism or a table; restructure a hierarchy so children can replace their parent. The last two can change a public API, so each is its own step with tests first and the person's approval.
 4a. If Lean is on for this goal, write and prove the equivalence theorem the plan names for each pure-function step, time-boxed; otherwise record "tests only" ([formal-check.md](../skills/devops-multi-agent-team/references/formal-check.md)).
-4b. Apply `clean-code.md`: intention-revealing names (rename only what the statement asked for), named constants for repeated literals, flag arguments split into two functions. Duplicates: call code that already exists; otherwise keep one implementation and replace the copies with calls. Split
+4b. Apply `clean-code.md`: intention-revealing names (rename only what the statement asked for), named constants for numbers used directly in code, flag arguments split into two functions. Duplicates: call code that already exists; otherwise keep one implementation and replace the copies with calls. Split
    large functions into well-named private helpers and early returns. Keep signatures, ordering, errors, side effects.
 5. Comments: rewrite nothing into a story; cut narratives to a plain sentence. Put every comment in the touched area through the gate (`comment-standards.md` 0a) and the language's
    style guide (`docs.guide`). Delete restating or narrating comments, commented-out code, process notes and questions;

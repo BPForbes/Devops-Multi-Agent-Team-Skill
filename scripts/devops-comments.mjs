@@ -262,7 +262,8 @@ function languageChecks(items, codeRows, syntax, file, readFile) {
  * that starts with a comment marker counts as a comment even when its block opener is not in the diff.
  */
 export function codeRows(rows, syntax) {
-  const commentLines = new Set(extract(rows, syntax).items.map(i => i.line))
+  const comments = extract(rows, syntax).items.filter(i => i.kind !== 'trailing')
+  const commentLines = new Set(comments.map(i => i.line))
   const isCommentMarker = trimmed => /^(\*|\/\*|\/\/)/.test(trimmed)
     || syntax.line.some(m => trimmed.startsWith(m))
     || syntax.block.some(([open]) => trimmed.startsWith(open))

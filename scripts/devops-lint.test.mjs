@@ -71,27 +71,53 @@ test('a hardcoded secret and SQL built from a string are caught in any language'
 })
 
 test('a clean change passes', () => {
-  const text = 'def area(width, height):\n    return width * height\n\n\nprint(area(2, 3))\n'
+  const text = [
+    'HEIGHT = 3', '', '', 'def area(width, height):', '    return width * height', '', '',
+    'print(area(2, HEIGHT))', '',
+  ].join('\n')
   const dir = repo({ 'ok.py': text })
   const result = lintCheck(dir, { staged: true })
   assert.equal(result.verdict, 'PASS', JSON.stringify(result.findings))
 })
 
-test('unused functions, variables and imports are found; used and exported ones are not', () => {
+test('every declared name must be used: functions, variables, imports, constants, exports', () => {
   const dir = repo({
     'u.js': [
       "import { readFile, writeFile } from 'node:fs'",
       'function helper() { return 1 }',
       'function lonely() { return 2 }',
       'export function api() { return helper() }',
-      'const spare = 3',
+      'const spare = 2',
+      'const UNUSED_LIMIT = 9',
       'readFile("x", () => {})',
       '',
     ].join('\n'),
   })
+  const unusedIn = d => lintCheck(d, { staged: true }).findings
+    .filter(f => f.rule === 'unused-symbol').map(f => f.message.split('`')[1]).sort()
+  assert.deepEqual(unusedIn(dir), ['UNUSED_LIMIT', 'api', 'lonely', 'spare', 'writeFile'])
+  const exempt = JSON.stringify({ schemaVersion: 1, lint: { exemptPublic: true } })
+  fs.mkdirSync(path.join(dir, '.devops'))
+  fs.writeFileSync(path.join(dir, '.devops/standards.json'), exempt)
+  assert.ok(!unusedIn(dir).includes('api'), 'a library can exempt its public API')
+})
+
+test('Java, C# and C declarations are checked too, and a mention in the docs is not a use', () => {
+  const dir = repo({
+    'Foo.java': [
+      'public class Foo {',
+      '    private static final int MAX_RETRIES = 2;',
+      '    private int helperCount(int n) { return n; }',
+      '}',
+      '',
+    ].join('\n'),
+    'K.cs': 'class K { const int Limit = 2; }\n',
+    'h.c': 'static int scale(int x) { return x; }\n',
+    'README.md': 'MAX_RETRIES is the retry limit.\n',
+  })
   const unused = lintCheck(dir, { staged: true }).findings.filter(f => f.rule === 'unused-symbol')
   const names = unused.map(f => f.message.split('`')[1]).sort()
-  assert.deepEqual(names, ['lonely', 'spare', 'writeFile'])
+  assert.deepEqual(names, ['Limit', 'MAX_RETRIES', 'helperCount', 'scale'])
 })
 
 test('size rules report a function only where the change touches it', () => {
@@ -147,16 +173,74 @@ test('every rule is documented, and every pattern reports a known rule', () => {
   for (const p of PATTERNS) assert.ok(RULES[p.rule], p.rule)
 })
 
-test('numbers in strings and regexes are not magic numbers; repeated code numbers are', () => {
-  const dir = repo({
-    'n.js': [
-      'export const a = /[0-9]{16}/.test(x)',
-      'export const b = /[0-9]{16}/.test(y)',
-      "export const c = 'v16' + 'v16'",
-      'run(w * 7, h * 7)',
-      '',
-    ].join('\n'),
-  })
-  const magic = lintCheck(dir, { staged: true }).findings.filter(f => f.rule === 'magic-number')
-  assert.deepEqual(magic.map(f => f.message.split(' ')[0]), ['7'])
+const magicIn = files => {
+  const { findings } = lintCheck(repo(files), { staged: true })
+  const found = findings.filter(f => f.rule === 'magic-number')
+  return found.map(f => `${f.file}:${f.line}`)
+}
+
+test('a number used directly in code is a magic number, even once', () => {
+  const bad = [
+    'public class Foo {',
+    '    public void setPassword(String password) {',
+    '        if (password.length() > 7) {',
+    '            throw new IllegalArgumentException("password");',
+    '        }',
+    '    }',
+    '}',
+    '',
+  ].join('\n')
+  assert.deepEqual(magicIn({ 'Foo.java': bad }), ['Foo.java:3'])
+  const good = [
+    'public class Foo {',
+    '    public static final int MAX_PASSWORD_SIZE = 7;',
+    '    public void setPassword(String password) {',
+    '        if (password.length() > MAX_PASSWORD_SIZE) {',
+    '            throw new IllegalArgumentException("password");',
+    '        }',
+    '    }',
+    '}',
+    '',
+  ].join('\n')
+  assert.deepEqual(magicIn({ 'Foo.java': good }), [])
+})
+
+test('only a named constant may hold a number; a plain JS const is not one', () => {
+  const js = [
+    'export const MAX_ITEMS = 50',
+    'export const area = width * 7.5',
+    'export const half = total / 2',
+    'export const mask = flags & 0xFF',
+    '',
+  ].join('\n')
+  assert.deepEqual(magicIn({ 'a.js': js }), ['a.js:2', 'a.js:4'])
+  const go = 'package a\n\nconst maxSize = 64\n\nvar buf = make([]byte, 64)\n'
+  assert.deepEqual(magicIn({ 'a.go': go }), ['a.go:5'])
+})
+
+test('numbers in strings, regexes and comments are not magic; allowed ones are per project', () => {
+  const text = [
+    'export const check = /[0-9]{16}/.test(input)',
+    "export const label = 'v16'",
+    'run(fetch, 3) // retry 3 times',
+    '',
+  ].join('\n')
+  assert.deepEqual(magicIn({ 'n.js': text }), ['n.js:3'])
+  const magicLiterals = { allowed: [0, 1, 2, 3] }
+  const allow = JSON.stringify({ schemaVersion: 1, defaults: { magicLiterals } })
+  assert.deepEqual(magicIn({ '.devops/standards.json': allow, 'n.js': text }), [])
+})
+
+test('test files are not checked for magic numbers unless the project asks', () => {
+  const text = 'assert.equal(add(20, 22), 42)\n'
+  assert.deepEqual(magicIn({ 'a.test.js': text }), [])
+  const magicLiterals = { checkTests: true }
+  const strictTests = JSON.stringify({ schemaVersion: 1, defaults: { magicLiterals } })
+  const found = magicIn({ '.devops/standards.json': strictTests, 'a.test.js': text })
+  assert.deepEqual(found, ['a.test.js:1'])
+})
+
+test('a code line with a trailing comment is still checked as code', () => {
+  const dir = repo({ 'e.js': 'export const run = text => ev' + 'al(text) // parse the input\n' })
+  assert.ok(rulesAt(lintCheck(dir, { staged: true }), 'e.js').includes('sec-eval'))
 })

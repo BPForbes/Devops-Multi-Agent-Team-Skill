@@ -51,6 +51,10 @@ every finding with its rule and its fix. The Reviewer does not pick a few.
   gate.
 - `lint.exclude`: path globs the built-in rules skip (`*` within a directory,
   `**` across directories).
+- `lint.exemptPublic`: `true` stops `unused-symbol` from reporting public and
+  exported names (for libraries). Default `false`.
+- `defaults.magicLiterals.allowed` and `checkTests`: the numbers allowed in code,
+  and whether test files are checked.
 - `linters`: per language id, or `all` for every project, one entry or a list:
   `tool`, `command`, and optionally `configFile` and `options`.
 
@@ -60,9 +64,28 @@ every finding with its rule and its fix. The Reviewer does not pick a few.
 - Pattern rules (security, outdated, debug) are line patterns. A string that
   only looks like a pattern can trip one; the fix is to restructure the line,
   or to have the human exclude the path.
-- `unused-symbol` looks for any other mention of the name in the repository.
-  Exported names (`export`, `pub`, capitalised Go names), test files and names
-  starting with `_` are skipped.
+- **Declared means used** (`unused-symbol`). Every name a change declares must
+  be used somewhere else in the code: functions, variables, imports, constants,
+  and private methods and fields (JavaScript, TypeScript, Python, Go, Rust,
+  Java, C#, Kotlin, Scala, Swift, Dart, PHP, C, C++). A mention in the docs
+  (`.md`, `.rst`, `.txt`, ...) is not a use. Public and exported names are
+  checked too; a library whose public API is used outside the repository sets
+  `lint.exemptPublic: true`. Test files and names starting with `_` are skipped.
+- **Magic numbers** (`magic-number`). A magic number is a number used directly
+  in code ([definition](https://stackoverflow.com/a/47902)). Every number on an
+  added line is one, even if it appears once, except:
+  - the line defines a named constant: an UPPER_CASE name (`MAX_PASSWORD_SIZE = 7`,
+    `public static final int MAX_PASSWORD_SIZE = 7;`), `#define`, or, where the
+    language's `const` means a constant (Go, C#, C, C++, Rust, Java, Kotlin, Swift,
+    Dart, Scala, PHP, Zig), a `const` declaration with any name. In JavaScript
+    and TypeScript `const` is an ordinary variable, so only UPPER_CASE names count;
+  - the number is in `defaults.magicLiterals.allowed` (default `[0, 1, 2]`);
+  - it is inside a string, a regex or a comment;
+  - the file is a test file (`magicLiterals.checkTests: true` checks them too);
+  - the language is markup or data: CSS, HTML, SQL, Terraform, container files,
+    CI workflows.
+  A constant inside a Go `const ( ... )` block is not recognized; write
+  `const name = 7` on its own line or use an UPPER_CASE name.
 - Size rules report a function only where the change touches it.
 
 ## Rules
@@ -111,13 +134,13 @@ every finding with its rule and its fix. The Reviewer does not pick a few.
 | `nesting` | Use early returns or extract the inner block into a helper. |
 | `too-many-params` | Group related parameters into one value or options object. |
 | `flag-argument` | Split into two functions named for what each does. |
-| `magic-number` | Replace the repeated literal with a named constant. |
+| `magic-number` | Define a named constant once (MAX_PASSWORD_SIZE = 7) and use the name instead. |
 
 ### Unused code
 
 | Rule | Fix |
 |------|-----|
-| `unused-symbol` | Delete it, or use it. If it is public API, export it explicitly. |
+| `unused-symbol` | Use it or delete it: every declared name must be used. |
 
 ### Security
 
