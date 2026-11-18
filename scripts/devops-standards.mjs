@@ -83,9 +83,15 @@ function optionProblems(options, where) {
     .map(([name]) => `${where}.options.${name} must be a number, string or boolean`)
 }
 
-/** Problems with one linter entry: a tool name, an optional command, config file and options. */
-function linterProblems(linter, where) {
-  if (!isObject(linter) || !isText(linter.tool)) return [`${where}.tool must be a name`]
+/**
+ * Problems with one linter entry: a tool name, an optional command, config file and options. In the
+ * project file (`partial`) an entry may change only some keys of the default one, so `tool` is optional.
+ */
+function linterProblems(linter, where, partial) {
+  if (!isObject(linter)) return [`${where} must be an object`]
+  const toolGiven = linter.tool !== undefined
+  const toolMissing = (partial ? toolGiven : true) && !isText(linter.tool)
+  if (toolMissing) return [`${where}.tool must be a name`]
   const problems = unknownKeys(linter, LINTER_KEYS, where)
   const badCommand = linter.command !== undefined && !isText(linter.command)
   if (badCommand) problems.push(`${where}.command must be a command line`)
@@ -121,12 +127,13 @@ function lintProblems(lint) {
 const knownId = (id, languageIds) => languageIds.length === 0 || languageIds.includes(id)
 
 /** Problems with the `linters` section: language ids (or `all`) and each entry, alone or in a list. */
-function lintersProblems(linters, languageIds) {
+function lintersProblems(linters, { languageIds, partial }) {
   return Object.entries(linters ?? {}).flatMap(([id, entry]) => {
     const known = id === 'all' || knownId(id, languageIds)
     const unknown = known ? [] : [`linters.${id}: unknown language id`]
-    if (!Array.isArray(entry)) return [...unknown, ...linterProblems(entry, `linters.${id}`)]
-    const each = entry.flatMap((linter, i) => linterProblems(linter, `linters.${id}[${i}]`))
+    const check = (linter, where) => linterProblems(linter, where, partial)
+    if (!Array.isArray(entry)) return [...unknown, ...check(entry, `linters.${id}`)]
+    const each = entry.flatMap((linter, i) => check(linter, `linters.${id}[${i}]`))
     return [...unknown, ...each]
   })
 }
@@ -162,7 +169,7 @@ export function validateStandards(standards, { languageIds = [], partial = false
     ...checkShape(standards.defaults ?? {}, DEFAULTS_SHAPE, 'defaults', mode),
     ...checkShape(standards.interface ?? {}, INTERFACE_SHAPE, 'interface'),
     ...languagesProblems(standards.languages, languageIds),
-    ...lintersProblems(standards.linters, languageIds),
+    ...lintersProblems(standards.linters, { languageIds, partial }),
     ...lintProblems(standards.lint),
   ]
   return partial ? problems : [...problems, ...orderProblems(standards)]
@@ -193,8 +200,11 @@ function readProjectFile(file) {
  * The project's standards: the package's standards.json, with the project's .devops/standards.json merged
  * over it key by key. Throws with every problem listed, so a bad value stops the audit instead of loosening it.
  */
+/** The package's standards.json: the defaults every project starts from. */
+export const packageStandards = () => readJson(path.join(PACKAGE_ROOT, 'standards.json'))
+
 export function loadStandards(dest) {
-  const base = readJson(path.join(PACKAGE_ROOT, 'standards.json'))
+  const base = packageStandards()
   const languageIds = loadLanguages(dest).languages.map(l => l.id)
   assertValid(validateStandards(base, { languageIds }), 'standards.json')
   const projectFile = path.join(dest, '.devops', 'standards.json')

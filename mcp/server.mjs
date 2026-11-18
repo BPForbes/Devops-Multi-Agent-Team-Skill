@@ -17,6 +17,7 @@ import { commentAudit } from '../scripts/devops-comments.mjs'
 import { parseStatement, scanProject, snapshot } from '../scripts/devops-cleanup.mjs'
 import { formalCheck } from '../scripts/devops-formal.mjs'
 import { lintCheck, lintCommands } from '../scripts/devops-lint.mjs'
+import { changeSetting, getSetting } from '../scripts/devops-config.mjs'
 import { ghasPlan } from '../scripts/devops-ghas.mjs'
 import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, parseStory } from '../scripts/devops-stories.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
@@ -41,7 +42,9 @@ let clientRoots = []
 
 function allowedRoots() {
   const fromEnv = (process.env.DEVOPS_MCP_ROOTS ?? '').split(path.delimiter).filter(Boolean)
-  const candidates = fromEnv.length > 0 ? fromEnv : clientRoots.length > 0 ? clientRoots : [process.cwd()]
+  const claudeProject = process.env.CLAUDE_PROJECT_DIR ? [process.env.CLAUDE_PROJECT_DIR] : []
+  const fallback = claudeProject.length > 0 ? claudeProject : [process.cwd()]
+  const candidates = fromEnv.length > 0 ? fromEnv : clientRoots.length > 0 ? clientRoots : fallback
   const roots = []
   for (const candidate of candidates) {
     try {
@@ -287,6 +290,55 @@ const TOOLS = [
       gitAllowed()
       return commentAudit(projectDir(args), { base: args.base, head: args.head, staged: optionalBool(args, 'staged', false), listed: args.listed, docs: args.docs, roots: allowedRoots() })
     },
+  },
+  {
+    name: 'config_get',
+    description: [
+      'Read the project standards in effect (.devops/standards.json over the package defaults):',
+      'line lengths, function limits, magic-number settings, comment density, lint rules and',
+      'excludes, linter commands. Give `path` (dotted, e.g. defaults.lineLength.code) for one',
+      'setting and where it comes from; give `language` to see that language\'s values. Read-only.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { dest, path: { type: 'string' }, language: { type: 'string' } },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => getSetting(projectDir(args), {
+      path: args.path, language: args.language, roots: allowedRoots(),
+    }),
+  },
+  {
+    name: 'config_set',
+    description: [
+      'Change one project standard in .devops/standards.json: op `set` (path, value), `unset`',
+      '(back to the default), `add` or `remove` (an item of a list such as lint.exclude or',
+      'defaults.magicLiterals.allowed). With apply=false (default) it shows the change; apply=true',
+      'writes it. A value the validator rejects is never written. Use it only when the person',
+      'asked for this change in their own words; never to loosen a rule so a gate passes.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        op: { type: 'string', enum: ['set', 'unset', 'add', 'remove'] },
+        path: { type: 'string' },
+        value: {
+          description: 'A number, text, true/false, list or object; JSON text is read as JSON.',
+        },
+        apply: { type: 'boolean' },
+      },
+      required: ['op', 'path'],
+      additionalProperties: false,
+    },
+    run: args => changeSetting(projectDir(args), {
+      op: args.op,
+      path: args.path,
+      value: args.value,
+      apply: optionalBool(args, 'apply', false),
+      roots: allowedRoots(),
+    }),
   },
   {
     name: 'lint_check',

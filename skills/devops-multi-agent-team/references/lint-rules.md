@@ -31,6 +31,9 @@ every finding with its rule and its fix. The Reviewer does not pick a few.
 
 ## Configuration
 
+Change settings by command (`devops-config set|unset|add|remove|rule`, MCP
+`config_set`, or the person's `/devops config ...`); each change is validated
+before it is written. Read them with `devops-config get` or `config_get`.
 `.devops/standards.json`:
 
 ```json

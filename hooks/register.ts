@@ -5,6 +5,7 @@ import { branchNameOf, classify, classifySegments, commitInfo, splitArgs, verdic
 
 const PLUGIN = 'devops-multi-agent-team'
 const SCRIPT_TIMEOUT_MS = 20000
+const CONFIG_WRITES = ['set', 'unset', 'add', 'remove', 'rule']
 const THOUGHT_DIRS = ['devops-skill/thoughts/non-final', 'devops-skill/thoughts/final']
 
 
@@ -19,6 +20,9 @@ const HELP = [
   '/devops monitor on|off (you) turn the failed-check monitor on or off',
   '/devops comments warn|strict|off (you) lint gate on git commit (comment and code rules): ' +
     'warn (default), refuse a commit with blocking findings, or off',
+  '/devops config [show|get PATH] read the project standards (line length, limits, lint rules)',
+  '/devops config set|unset|add|remove PATH [VALUE] | rule RULE error|off (you) change ' +
+    '.devops/standards.json; checked before it is written',
 ].join('\n')
 
 async function detect($: EngineInterface): Promise<Found[]> {
@@ -148,7 +152,8 @@ export const register: Register = on => {
     await $.command.register({
       name: 'devops',
       description: 'DevOps multi-agent team: languages, gates, QA verdict',
-      argumentHint: '[languages|setup|push-ok|push-reset|allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off]',
+      argumentHint: '[languages|setup|push-ok|push-reset|allow-branch NAME|gates on|off|' +
+        'monitor on|off|comments warn|strict|off|config ...]',
     })
     const found = await detect($)
     await $.state.set({ plugin: 'devops-multi-agent-team', key: 'languages' } as const, found.map(f => f.id))
@@ -226,6 +231,21 @@ export const register: Register = on => {
       if (rest !== 'warn' && rest !== 'strict' && rest !== 'off') return { text: 'Usage: /devops comments warn|strict|off' }
       await $.state.set({ plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const, rest)
       return { text: `Comment audit on commit: ${rest}.` }
+    }
+    if (word === 'config') {
+      const args = rest.split(/\s+/).filter(Boolean)
+      if (CONFIG_WRITES.includes(args[0] ?? '')) {
+        const refused = personOnly()
+        if (refused) return refused
+      }
+      const root = await $.session.root()
+      const script = `${$.plugin.root}/scripts/devops-config.mjs`
+      const command = ['node', script, ...(args.length > 0 ? args : ['show']), '--dest', root]
+      const ran = await $.process
+        .run(command, { timeoutMs: SCRIPT_TIMEOUT_MS })
+        .catch(() => undefined)
+      if (ran === undefined) return { text: 'devops-config could not run.' }
+      return { text: `${ran.stdout}${ran.stderr}`.trim() || 'devops-config printed nothing.' }
     }
     if (word === 'monitor') {
       const refused = personOnly()

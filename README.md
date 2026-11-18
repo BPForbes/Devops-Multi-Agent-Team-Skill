@@ -47,7 +47,8 @@ It writes the server into `.mcp.json` (Claude Code), `.cursor/mcp.json` (Cursor)
 
 | Client | How |
 |--------|-----|
-| Claude Code, as a plugin | `claude --plugin-dir /path/to/devops-multi-agent-team` (the plugin's `.mcp.json` registers the server), or after the repo is on GitHub `/plugin install devops-multi-agent-team --marketplace <owner>/devops-multi-agent-team` |
+| Claude Code, as a plugin | `/plugin install devops-multi-agent-team --marketplace BPForbes/Devops-Multi-Agent-Team-Skill`, or locally `claude --plugin-dir /path/to/devops-multi-agent-team`. `plugin.json` registers the server from the plugin folder (`${CLAUDE_PLUGIN_ROOT}`) |
+| Claude Code, this repository opened as a project | nothing to do: the root `.mcp.json` starts `${CLAUDE_PROJECT_DIR:-.}/mcp/server.mjs`; approve it once when Claude Code asks. In plugin mode `plugin.json`'s entry of the same name replaces it |
 | Claude Code, server only | `claude mcp add devops-multi-agent-team -- node /path/to/devops-multi-agent-team/mcp/server.mjs` |
 | Cursor | add to `.cursor/mcp.json`: `{"mcpServers":{"devops-multi-agent-team":{"command":"node","args":["/path/to/devops-multi-agent-team/mcp/server.mjs"]}}}` |
 | Any MCP client | stdio command `node /path/to/devops-multi-agent-team/mcp/server.mjs` |
@@ -80,6 +81,7 @@ prompts) walks the same steps.
 | `reuse_search` | research: where a term (or a spelling variant) already appears in code, comments and docs (Markdown, LaTeX, ...); secret files skipped |
 | `tag_history` | versions: how the project changed between git tags (commits, files, lines, directories, languages, commit types), unreleased work and a suggested bump; `save` keeps a snapshot in `.devops/tags/` |
 | `tag_plan`, `tag_create` | versions: plan the next semver tag; create one annotated local tag. Never pushes, moves or deletes a tag |
+| `config_get`, `config_set` | read the project standards in effect (and where each value comes from); change one in `.devops/standards.json` (`set`, `unset`, `add`, `remove`), validated first, planned unless `apply=true` |
 | `lint_check`, `lint_commands` | the lint gate: every comment rule, line length, function size, unused symbols, security patterns, outdated APIs and debug leftovers on the added lines, each with its fix, verdict PASS or DENY; with the Push JSON it also checks that every open-source linter (ruff, ESLint, clippy, shellcheck, semgrep, gitleaks, osv-scanner, ...) ran in the sandbox and exited 0. `lint_commands` lists those commands |
 | `comment_audit` | the comments a change adds (staged, working tree or `base...head`), as ready-to-paste Conventional Comments: restating comments, commented-out code, questions or notes left in code, process notes, bare TODO/FIXME, signature-only docs, over-commented files, comments that narrate the implementation, concept or usage text that may belong in the docs; with the Push JSON `comments` and `docs` lists it also flags comments the Coder did not justify and unlisted doc changes |
 | `story_parse` | read a story in this format (an issue body) into structure: id, project, baseline, status, depends on, needed by, OLD and NEW blocks |
@@ -152,9 +154,27 @@ value out of range stops the run with the problem named.
   duplicated blocks, magic numbers (allowed numbers, test files), comment density, and scan size.
 - `interface`: the relaxed comment limits for interface files (`.h`, `.d.ts`, ...).
 - `languages`: per-language overrides of any value in `defaults`.
-- `linters`: per language, the linter tool, its config file and the options that
-  file must set. The audit does not run these tools; the project's validation
-  commands do.
+- `linters`: per language (or `all`), the linter tool, the command that runs it, its
+  config file and the options that file must set. The MCP server never runs them;
+  Coders run them in the sandbox.
+- `lint`: rules turned off, excluded paths, and `exemptPublic` for libraries.
+
+### Changing settings by command
+
+Every change is checked before it is written, and only `.devops/standards.json`
+changes. A value the validator rejects is refused with the reason.
+
+| Where | Read | Change |
+|-------|------|--------|
+| Shell | `devops-config show`, `devops-config get defaults.lineLength.code [--language python]` | `devops-config set defaults.lineLength.code 120`, `unset PATH`, `add lint.exclude "vendor/**"`, `remove PATH VALUE`, `rule sec-insecure-url off`; `--dry-run` previews |
+| Chat (MCP) | `config_get` | `config_set` (`op`, `path`, `value`); plans unless `apply=true` |
+| Claude Code mod | `/devops config`, `/devops config get PATH` | `/devops config set PATH VALUE` (and `unset`, `add`, `remove`, `rule`); only you can run these, not an agent |
+| Slash command | `/config get PATH` | `/config set PATH VALUE`; the agent shows the change and applies it after you agree |
+
+Paths are dotted; write `\.` for a dot inside a key
+(`linters.python.options.mccabe\.max-complexity`). Values are JSON when they parse
+(`120`, `true`, `[0,1,2]`), else text. `devops-config` is `node scripts/devops-config.mjs`
+in this repository.
 
 ## Rules built into the workflow
 

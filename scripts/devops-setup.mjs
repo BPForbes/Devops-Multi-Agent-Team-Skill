@@ -636,9 +636,14 @@ export function connectClients({ dest: destInput, clients = 'auto', npx = false,
   const server = npx
     ? { command: 'npx', args: NPX_SPEC, env: { DEVOPS_MCP_ROOTS: dest } }
     : { command: 'node', args: [path.join(PACKAGE_ROOT, 'mcp', 'server.mjs')], env: { DEVOPS_MCP_ROOTS: dest } }
-  const report = { dest, written: [], kept: [], commands: [] }
+  const report = { dest, written: [], kept: [], skipped: [], commands: [] }
   for (const client of wanted) {
     const [rel, key] = locations[client]
+    if (client === 'claude' && dest === fs.realpathSync(PACKAGE_ROOT)) {
+      const why = "this is the package's own file; it already starts the server from this folder"
+      report.skipped.push(`${rel}: ${why}`)
+      continue
+    }
     const target = path.join(dest, rel)
     let config = {}
     if (lexists(target)) {
