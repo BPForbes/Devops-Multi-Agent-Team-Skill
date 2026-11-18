@@ -27,7 +27,7 @@ Async. You never push, open a PR or create a branch. **Ask** by topic through th
 4a. If Lean is on for this goal, write and prove the equivalence theorem the plan names for each pure-function step, time-boxed; otherwise record "tests only" ([formal-check.md](../skills/devops-multi-agent-team/references/formal-check.md)).
 4b. Apply `clean-code.md`: intention-revealing names (rename only what the statement asked for), named constants for repeated literals, flag arguments split into two functions. Duplicates: call code that already exists; otherwise keep one implementation and replace the copies with calls. Split
    large functions into well-named private helpers and early returns. Keep signatures, ordering, errors, side effects.
-5. Comments: put every comment in the touched area through the gate (`comment-standards.md` 0a) and the language's
+5. Comments: rewrite nothing into a story; cut narratives to a plain sentence. Put every comment in the touched area through the gate (`comment-standards.md` 0a) and the language's
    style guide (`docs.guide`). Delete restating or narrating comments, commented-out code, process notes and questions;
    keep the ones that say why. Add none, except moving a design-level explanation from the source into the module's
    interface file (2b) when that removes copies. When the same concept is explained in comments in several places,

@@ -52,7 +52,8 @@ diff; commented-out code; a doc comment that only repeats the signature; a
 algorithm with no source link; a comment that mentions an agent, a prompt or a
 temporary branch. A *missing* comment on self-explanatory code is not a
 finding; a missing explanation of a non-obvious contract, constraint or
-workaround is. Put every new or changed comment through the gate
+workaround is. A comment or doc that tells a story instead of a plain
+explanation is blocking. Put every new or changed comment through the gate
 (`comment-standards.md` 0a: needed? more than the executed code? design choice,
 not implementation narration?) and the language's style guide (`docs.guide`).
 

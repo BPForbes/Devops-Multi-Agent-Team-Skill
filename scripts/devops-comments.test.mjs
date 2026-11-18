@@ -200,3 +200,10 @@ test('doc lines are counted, and with a Push JSON docs list an unlisted doc chan
   const listed = commentAudit(dir, { staged: true, docs: [{ file: 'docs/retry.md', section: 'Retry', from: null, why: 'shared by every client' }] })
   assert.deepEqual(listed.findings.filter(f => f.rule === 'unlisted-doc').map(f => f.file), ['README.md'])
 })
+
+test('narratives are blocked in comments and in docs', () => {
+  const dir = repo({ 'a.ts': '// Originally we tried a map, but it turned out to be slow.\nconst x = 1\n', 'README.md': 'Intro.\n\nAfter much debate we decided to use one queue.\n' })
+  const found = commentAudit(dir, { staged: true }).findings.filter(f => f.rule === 'narrative')
+  assert.deepEqual(found.map(f => `${f.file}:${f.line}`), ['README.md:3', 'a.ts:1'])
+  assert.ok(found.every(f => f.blocking))
+})

@@ -165,6 +165,10 @@ Send-back).
 
 ## 5. Formatting
 
+- **Simple explanations, no narratives.** Comments and docs state the fact or
+  the reason plainly. No story of how the code came to be ("originally", "we
+  tried", "it turned out"), no walkthroughs ("let's take a look"), no filler.
+  One short sentence beats a paragraph.
 - Complete sentences: capital letter first, full stop last.
 - Keep comments short; wrap before 80 columns.
 - When the code follows an external algorithm, a Stack Overflow answer, an

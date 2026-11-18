@@ -8,6 +8,9 @@
   alternative, trap, external rule)? (c) does it explain which existing concept
   or helper this code is built on and why, without narrating the
   implementation? Yes to (a) and to (b) or (c), or it does not go in.
+- **Simple explanations, no narratives**, in comments and docs: state the
+  fact or the reason plainly; no story of how it came to be, no walkthroughs,
+  no filler.
 - **Strict.** Every comment and doc finding is blocking, formatting and the
   language's style guide included.
 - **Interface files** (`.h`, `.hpp`, `.d.ts`, `.pyi`, `.mli`, ...) are where

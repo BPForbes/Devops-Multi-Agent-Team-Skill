@@ -43,6 +43,8 @@ the Orchestrator. Thoughts stay **gitignored**.
   from the signature (or the project publishes API docs); `TODO:` / `FIXME:` /
   `NOTE:` only for real follow-up; complete sentences under 80 columns; a link
   for any borrowed algorithm. List new `TODO` / `FIXME` markers in the Handoff.
+- **Simple explanations, no narratives** in comments and docs: state the fact or the
+  reason plainly; no story of how the code came to be, no walkthroughs.
 - **Comment gate** (`comment-standards.md` 0a) before every comment: (a) is it
   needed, or does the code already say it? (b) does it add what the executed code
   cannot (reason, constraint, rejected alternative, trap)? (c) does it name the
