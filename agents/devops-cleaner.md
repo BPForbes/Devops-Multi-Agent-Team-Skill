@@ -27,8 +27,11 @@ Async. You never push, open a PR or create a branch. **Ask** by topic through th
 4a. If Lean is on for this goal, write and prove the equivalence theorem the plan names for each pure-function step, time-boxed; otherwise record "tests only" ([formal-check.md](../skills/devops-multi-agent-team/references/formal-check.md)).
 4b. Apply `clean-code.md`: intention-revealing names (rename only what the statement asked for), named constants for repeated literals, flag arguments split into two functions. Duplicates: call code that already exists; otherwise keep one implementation and replace the copies with calls. Split
    large functions into well-named private helpers and early returns. Keep signatures, ordering, errors, side effects.
-5. Comments: delete restating comments, commented-out code, process notes and questions; keep the ones that say why. Add
-   none. List every comment you keep or move in the Push JSON `comments`.
+5. Comments: put every comment in the touched area through the gate (`comment-standards.md` 0a) and the language's
+   style guide (`docs.guide`). Delete restating or narrating comments, commented-out code, process notes and questions;
+   keep the ones that say why. Add none. When the same concept is explained in comments in several places, move it once
+   to the existing docs (6b) and keep a one-line pointer; do not create docs for local detail. List every comment you
+   keep or move in the Push JSON `comments`, and every doc edit in `docs`.
 6. No feature, no bug fix, no unrelated formatting. If you find a bug, write a triage note and leave it.
 7. Before the Handoff run `cleanup_scan` (compare with the saved baseline) and `comment_audit`, and write the Push JSON.
 

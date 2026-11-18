@@ -13,6 +13,9 @@ const REASON = /\b(because|since|so that|otherwise|to avoid|avoids?|must|never|a
 const MECHANICAL = /^(?:the\s+)?(increment|decrement|set|get|gets|sets|return|returns|loop|loops|iterate|iterates|call|calls|check|checks|create|creates|initiali[sz]e|initiali[sz]es|init|assign|assigns|add|adds|update|updates|print|prints|declare|declares|define|defines|import|imports|open|opens|close|closes|read|reads|write|writes|increase|decrease|store|stores|convert|converts|remove|removes|delete|deletes|push|pushes|pop|pops|append|appends|compute|computes|calculate|calculates|instantiate|constructor|getter|setter|for each|if)\b/i
 const PROCESS = /(?<![./\w-])(?:claude|gpt|chatgpt|copilot|llm)(?![/\w-])|\b(ai[- ]generated|prompt|agent|reviewer|per review|as requested|as discussed|note to self|i (think|guess|added|changed|fixed|removed|wasn'?t|am not)|we (should|need to|might|could)|new code|old code|previously|used to|was changed|changed from|added (for|by|to)|fixed (a )?(bug|issue)|this (pr|commit|branch|change)|wip|for now)\b/i
 const QUESTION = /(\?(\s|$)|^(q:|question|why |should we|do we|can we|is this|are we|not sure|maybe|perhaps|unclear|wondering|hmm)|\b(please (check|confirm|review)|@\w+))/i
+const NARRATION = /^(?:(?:first|then|next|now|here|finally|after that|afterwards)\b,?\s+(?:we|i|let'?s|it|the code)\b|step\s*\d+\s*[:.)-])/i
+const CONCEPT = /\b(overview|architecture|how (?:it|this) works|usage:|how to (?:use|run|configure|deploy|install)|getting started|design overview|data ?flow|the flow is|this module (?:is|handles|implements|provides))\b/i
+const DOC_FILE = /(\.(md|mdx|markdown|rst|adoc|asciidoc|tex|txt)$|(^|\/)docs?\/)/i
 const STOP = new Set(['the', 'a', 'an', 'of', 'to', 'for', 'this', 'that', 'is', 'in', 'on', 'value', 'param', 'parameter', 'argument', 'input', 'given', 'specified'])
 
 const tokens = text => text.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
@@ -122,6 +125,9 @@ function judge(item, config) {
   if (looksLikeCode(t)) out.push(finding(item, 'commented-out-code', 'issue', true, 'this looks like commented-out code. Delete it; version control keeps history.'))
   if (PROCESS.test(t)) out.push(finding(item, 'process-note', 'issue', true, 'this is a note about the change or the process, not about the code. Say it in the commit or the PR remarks; if a lasting reason exists, state that reason instead.'))
   if (QUESTION.test(t) && !/https?:\/\//.test(t)) out.push(finding(item, 'question', 'issue', true, 'a question or remark to a person does not belong in the code. Put it in the PR Q&A and delete the comment.'))
+  if (item.kind !== 'doc' && NARRATION.test(t)) {
+    out.push(finding(item, 'narrates-code', hasReason ? 'suggestion' : 'issue', !hasReason, 'this narrates the implementation step by step. The code already says how; keep only the reason or the design choice (comment gate, comment-standards.md 0a), or delete it.'))
+  }
   if (item.kind !== 'doc' && MECHANICAL.test(t) && words.length <= 9 && !hasReason && !out.some(f => f.rule === 'commented-out-code')) {
     out.push(finding(item, 'restates-code', 'issue', true, 'this restates what the code does. Delete it, or rename or extract so the code says it.'))
   }
@@ -160,11 +166,22 @@ function listedCovers(listed, group) {
   })
 }
 
-/** Pure: judge the comments a unified diff adds. `listed` is a Push JSON `comments` array (omit to skip the budget check). */
-export function auditDiff(diffText, config, { listed, syntaxFor } = {}) {
+/**
+ * Pure: judge the comments a unified diff adds. `listed` is a Push JSON `comments` array and `docs` its `docs` array;
+ * omit either to skip that budget check.
+ */
+export function auditDiff(diffText, config, { listed, docs, syntaxFor } = {}) {
   const byFile = new Map()
   for (const row of parseAdded(diffText)) byFile.set(row.file, [...(byFile.get(row.file) ?? []), row])
   const findings = []
+  let docLines = 0
+  for (const [file, rows] of byFile) {
+    if (!DOC_FILE.test(file)) continue
+    docLines += rows.filter(r => r.text.trim() !== '').length
+    if (docs && !docs.some(entry => entry.file === file)) {
+      findings.push({ file, line: rows[0].line, rule: 'unlisted-doc', blocking: false, text: '', remark: 'suggestion (non-blocking): this doc change is not in the Push JSON `docs` list. Add it with why it is shared, durable knowledge, or drop it if it only restates the code (comment-standards.md 6b).' })
+    }
+  }
   let commentLines = 0
   let codeTotal = 0
   const settings = config.commentAudit ?? { maxLineColumns: 80, densityWarn: 0.35, densityBlock: 0.5, densityMinComments: 5, longBlockLines: 6 }
@@ -180,7 +197,10 @@ export function auditDiff(diffText, config, { listed, syntaxFor } = {}) {
       const first = group.items[0]
       const last = group.items[group.items.length - 1]
       if (group.kind !== 'doc' && group.kind !== 'trailing' && group.items.length >= settings.longBlockLines) {
-        findings.push(finding(first, 'long-prose', 'suggestion', false, `${group.items.length} lines of prose in code. Shorten it to the one reason the code cannot show, or move the explanation to the docs.`))
+        findings.push(finding(first, 'long-prose', 'suggestion', false, `${group.items.length} lines of prose in code. Shorten it to the one reason the code cannot show, or move the explanation to the existing docs (comment-standards.md 6b).`))
+      }
+      if ((group.kind === 'line' || group.kind === 'block') && group.items.some(i => CONCEPT.test(i.text))) {
+        findings.push(finding(first, 'docs-candidate', 'suggestion', false, 'this explains a concept, a flow or usage. If it spans more than this spot, put it once in the existing docs and leave a one-line pointer here (comment-standards.md 6b); if it is local, cut it to the reason.'))
       }
       if (group.kind === 'line' || group.kind === 'block') {
         const noisy = group.items.some(i => DIVIDER.test(i.text) || /^(TODO|FIXME|NOTE)\b/.test(i.text))
@@ -201,11 +221,11 @@ export function auditDiff(diffText, config, { listed, syntaxFor } = {}) {
   }
   findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line)
   const blocking = findings.filter(f => f.blocking).length
-  return { commentLinesAdded: commentLines, codeLinesAdded: codeTotal, blocking, nonBlocking: findings.length - blocking, findings }
+  return { commentLinesAdded: commentLines, codeLinesAdded: codeTotal, docLinesAdded: docLines, blocking, nonBlocking: findings.length - blocking, findings }
 }
 
 /** Audit the comments a staged change, a working tree or a commit range adds. */
-export function commentAudit(destInput, { base, head = 'HEAD', staged = false, listed, roots } = {}) {
+export function commentAudit(destInput, { base, head = 'HEAD', staged = false, listed, docs, roots } = {}) {
   const dest = resolveDest(destInput, roots)
   const common = ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', '-U0']
   let args
@@ -217,7 +237,7 @@ export function commentAudit(destInput, { base, head = 'HEAD', staged = false, l
   const ran = git(dest, args)
   if (!ran.ok) throw new Error(ran.err || 'git diff failed (is this a git repository?)')
   const config = loadLanguages(dest)
-  const result = auditDiff(ran.out, config, { listed, syntaxFor: syntaxTable(dest) })
+  const result = auditDiff(ran.out, config, { listed, docs, syntaxFor: syntaxTable(dest) })
   return { dest, source: base ? `${base}...${head}` : staged ? 'staged' : 'working tree vs HEAD', ...result }
 }
 
@@ -228,11 +248,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   try {
     if (command !== 'audit') throw new Error('usage: devops-comments audit [--dest DIR] [--base REF [--head REF]] [--staged] [--listed PUSH.json] [--json]')
     const listedFile = opt('--listed')
-    const listed = listedFile ? JSON.parse(fs.readFileSync(listedFile, 'utf8')).comments : undefined
-    const result = commentAudit(opt('--dest') ? path.resolve(opt('--dest')) : process.cwd(), { base: opt('--base'), head: opt('--head'), staged: argv.includes('--staged'), listed })
+    const push = listedFile ? JSON.parse(fs.readFileSync(listedFile, 'utf8')) : undefined
+    const result = commentAudit(opt('--dest') ? path.resolve(opt('--dest')) : process.cwd(), { base: opt('--base'), head: opt('--head'), staged: argv.includes('--staged'), listed: push?.comments, docs: push?.docs })
     if (argv.includes('--json')) console.log(JSON.stringify(result))
     else {
-      console.log(`${result.source}: ${result.commentLinesAdded} comment lines, ${result.codeLinesAdded} code lines added; ${result.blocking} blocking, ${result.nonBlocking} non-blocking`)
+      console.log(`${result.source}: ${result.commentLinesAdded} comment lines, ${result.codeLinesAdded} code lines, ${result.docLinesAdded} doc lines added; ${result.blocking} blocking, ${result.nonBlocking} non-blocking`)
       for (const f of result.findings) console.log(`${f.file}:${f.line}  ${f.remark}`)
     }
     if (result.blocking > 0) process.exitCode = 1

@@ -20,6 +20,7 @@ for (const id of languageIds) need(!serviceIds.has(id), `id ${id} is both a lang
 const langCtx = { layers: languages.layers, codeqlLanguages: languages.codeqlLanguages }
 for (const lang of languages.languages) {
   problems.push(...validateLanguage(lang, langCtx))
+  need(typeof lang.docs?.guide === 'string', `language ${lang.id}: bundled languages need docs.guide (the standard comment style guide)`)
   for (const edge of lang.interactsWith ?? []) need(languageIds.has(edge.with), `language ${lang.id}: interactsWith unknown ${edge.with}`)
 }
 const svcCtx = { categories: services.categories, serviceIds, languageIds }

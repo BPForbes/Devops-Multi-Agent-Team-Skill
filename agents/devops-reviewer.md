@@ -52,7 +52,16 @@ diff; commented-out code; a doc comment that only repeats the signature; a
 algorithm with no source link; a comment that mentions an agent, a prompt or a
 temporary branch. A *missing* comment on self-explanatory code is not a
 finding; a missing explanation of a non-obvious contract, constraint or
-workaround is.
+workaround is. Put every new or changed comment through the gate
+(`comment-standards.md` 0a: needed? more than the executed code? design choice,
+not implementation narration?) and the language's style guide (`docs.guide`).
+
+**Balance comments and docs (`comment-standards.md` 6b-6c):** a concept explained
+in comments across several places belongs once in the docs (`suggestion`); a new
+doc that restates code or one function's detail is noise (`issue`); a shared
+concept the change introduces with no doc at all gets a non-blocking ask; a fact
+in both a comment and a doc keeps one and links. Check that doc edits are listed
+in the Push JSON `docs`. Neither over-comment nor over-document.
 
 **Reimplementation (blocking):** ask of every new function, type, module and
 service "can this be code that already exists?" Check the Researcher's reuse

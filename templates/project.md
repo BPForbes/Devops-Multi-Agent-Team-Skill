@@ -54,7 +54,11 @@ Coders follow `comment-standards.md`: **no comment is added just because code
 was added** (self-explanatory code gets none); intent not mechanics; no comment
 rot; no commented-out code; doc comments only where the contract is not obvious
 or where API docs are published; TODO/FIXME/NOTE only for real follow-up;
-complete sentences; links for borrowed algorithms. Reviewers enforce it as
+complete sentences; links for borrowed algorithms. Every comment passes the
+comment gate (needed? more than the executed code? the design choice, not the
+implementation?) and the language's comment style guide below. Text about a
+concept that spans files, or about usage, goes in the docs (listed in the Push
+JSON `docs`), never a doc per function. Docs live in: `<README.md, docs/, ...>`. Reviewers enforce it as
 blocking, on the virtual PR as line remarks; questions and notes go in the PR Q&A,
 never in code. Coders run `comment_audit` before handoff and list the comments they
 keep in the Push JSON `comments`. Does this project publish generated API docs? `<yes (which packages) | no>`.

@@ -77,6 +77,7 @@ export function validateLanguage(lang, ctx, { partial = false } = {}) {
   }
   if (has('comments')) need(isStringList(lang.comments?.line) && Array.isArray(lang.comments?.block), 'comments needs line (list of markers) and block (list of [open, close])')
   if (has('docs')) need(typeof lang.docs?.format === 'string' && typeof lang.docs?.lineComment === 'string' && typeof lang.docs?.check === 'string', 'docs needs format, lineComment and check (see LANGUAGES.md)')
+  if (has('docs') && lang.docs?.guide !== undefined) need(typeof lang.docs.guide === 'string' && lang.docs.guide.trim() !== '', 'docs.guide must be a non-empty string')
   for (const key of ['style', 'sensitiveHints', 'setupNotes', 'seenIn']) if (key in lang) need(isStringList(lang[key]), `${key} must be a list of strings`)
   for (const edge of lang.interactsWith ?? []) need(edge && typeof edge.with === 'string' && typeof edge.via === 'string' && typeof edge.contract === 'string', 'interactsWith entries need with, via, contract')
   return problems
@@ -349,7 +350,7 @@ export function renderProfile(config, selected, dest, ctx = {}) {
     ? `${bullets(config.codeqlNotes)}\n\n` : ''
   const docsBody = section(selected, l => {
     const d = l.docs ?? {}
-    return `### ${l.name}\n${bullets([`Doc format: ${d.format ?? '_not set_'}`, `Line comment marker: ${code(d.lineComment ?? '')}`, `Doc check (only if the project publishes API docs): ${d.check ?? '_not set_'}`])}`
+    return `### ${l.name}\n${bullets([`Doc format: ${d.format ?? '_not set_'}`, ...(d.guide ? [`Comment style guide: ${d.guide}`] : []), `Line comment marker: ${code(d.lineComment ?? '')}`, `Doc check (only if the project publishes API docs): ${d.check ?? '_not set_'}`])}`
   })
   const docs = config.docsNote ? `${config.docsNote}\n\n${docsBody}` : docsBody
   const presets = Object.entries(config.presets ?? {}).map(([id, p]) => `### Preset \`${id}\` (opt-in)\n${bullets(p.rules)}`).join('\n\n')

@@ -111,3 +111,39 @@ test('a commit range is audited, and a bad ref is refused', () => {
   assert.throws(() => commentAudit(dir, { base: '--upload-pack=x' }), /plain ref/)
   assert.ok(auditDiff('', loadLanguages(dir), { syntaxFor: () => undefined }).findings.length === 0)
 })
+
+test('a comment that narrates the implementation step by step fails the gate, and a design-choice comment passes', () => {
+  const dir = repo({
+    'src/n.ts': [
+      '// First we read the header, then we parse it.',
+      'const h = read()',
+      '// Step 2: build the map.',
+      'const m = build(h)',
+      '// Parsing is delegated to net/header so retry limits stay in one place.',
+      'const p = parseHeader(h)',
+      '',
+    ].join('\n'),
+  })
+  const result = commentAudit(dir, { staged: true })
+  const at = line => result.findings.filter(f => f.line === line).map(f => f.rule)
+  assert.ok(at(1).includes('narrates-code'))
+  assert.ok(result.findings.find(f => f.line === 1 && f.rule === 'narrates-code').blocking)
+  assert.ok(at(3).includes('narrates-code'))
+  assert.deepEqual(at(5), [])
+})
+
+test('a comment that explains a concept or usage is a docs candidate', () => {
+  const dir = repo({ 'src/s.py': '# Architecture: the queue feeds the workers, which write to the store.\nrun()\n' })
+  const found = commentAudit(dir, { staged: true }).findings.find(f => f.rule === 'docs-candidate')
+  assert.ok(found)
+  assert.equal(found.blocking, false)
+})
+
+test('doc lines are counted, and with a Push JSON docs list an unlisted doc change is reported', () => {
+  const dir = repo({ 'docs/retry.md': '# Retry\n\nThe client retries twice.\n', 'README.md': 'Intro.\n', 'a.ts': 'const x = 1\n' })
+  const plain = commentAudit(dir, { staged: true })
+  assert.equal(plain.docLinesAdded, 3)
+  assert.ok(!rules(plain).includes('unlisted-doc'), 'no list given: doc budget check skipped')
+  const listed = commentAudit(dir, { staged: true, docs: [{ file: 'docs/retry.md', section: 'Retry', from: null, why: 'shared by every client' }] })
+  assert.deepEqual(listed.findings.filter(f => f.rule === 'unlisted-doc').map(f => f.file), ['README.md'])
+})

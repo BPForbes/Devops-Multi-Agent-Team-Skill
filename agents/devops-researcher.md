@@ -64,7 +64,9 @@ and [version-tags.md](../skills/devops-multi-agent-team/references/version-tags.
    contracts, invariants other modules rely on, workaround reasons with their issue,
    borrowed algorithms with their link, security-sensitive spots) and the existing
    comments that are wrong, stale, restate code or are commented-out code, each as
-   `path:line` with one clause. The Coder comments those places and no others.
+   `path:line` with one clause. The Coder comments those places and no others. Note
+   doc-worthy concepts (spanning several files, explained nowhere) with the existing
+   doc they belong in; usually there are none.
 3c. Produce the **research brief** (template in research-and-reuse.md): docs
    read, mind map, reuse map, options with citations, open questions.
 4. Append to the review thread `## Research brief` or the

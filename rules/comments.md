@@ -2,6 +2,20 @@
 
 - **Never add a comment because code was added.** If the code is
   self-explanatory, add none. The default for a change is no new comments.
+- **Pass the comment gate** before writing, keeping or changing a comment:
+  (a) is it needed, or do the names, types and tests already say it?
+  (b) does it say more than the code that runs (a reason, constraint, rejected
+  alternative, trap, external rule)? (c) does it explain which existing concept
+  or helper this code is built on and why, without narrating the
+  implementation? Yes to (a) and to (b) or (c), or it does not go in.
+- **Comment or docs?** Text about a concept, flow or decision that spans
+  several files, or about how to use or run something, goes in the docs (extend
+  the existing doc) with at most a one-line pointer in code. Local detail stays
+  a comment or nothing. Do not overdo docs: only durable, shared knowledge, one
+  place per fact, updated in the same change. List doc edits in the Push JSON
+  `docs`.
+- Follow the language's standard style guide for comments (profile
+  "Comments and documentation", `docs.guide`).
 - Prefer self-documenting code: descriptive names and clean structure first.
   Rename or extract before you comment.
 - Explain intent (why, constraints, workarounds), never mechanics. Do not

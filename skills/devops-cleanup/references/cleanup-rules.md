@@ -61,8 +61,16 @@ done; stop and say why.
 2. Do not delete a comment that explains why, and do not rewrite one to look
    tidier. Do not add comments; the aim is fewer.
 3. A question or note found in code goes to the PR Q&A, then is deleted.
-4. List every comment that remains in the files you touched and is new or moved
-   in the Push JSON `comments`.
+4. Put each comment through the gate (comment-standards.md 0a) and the
+   language's style guide (profile, `docs.guide`). Keep a comment only if it is
+   needed and says more than the code that runs, or names the design choice
+   behind the code without narrating it.
+5. Comment or docs (comment-standards.md 6b): when the same concept is
+   explained in comments in several files, move it once into the existing docs
+   and leave a one-line pointer. That move is its own step. Do not create docs
+   for local detail, and do not grow the docs to make up for deleted comments.
+6. List every comment that remains in the files you touched and is new or moved
+   in the Push JSON `comments`, and every doc edit in `docs`.
 
 ## Constants, flag arguments and names
 

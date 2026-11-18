@@ -21,6 +21,59 @@ Before writing a comment, try these in order, and stop at the first that works:
 3. Add a test that pins the behaviour.
 4. Only then, write the comment.
 
+## 0a. The comment gate: three questions before any comment
+
+Coders ask these before writing a comment, Cleaners before keeping or changing
+one, and Reviewers of every comment in the diff. The answer must be yes to (a)
+and to (b) or (c). Otherwise the comment does not go in.
+
+**(a) Is it needed at all?** Read the code without the comment. If the names,
+types, structure and tests already tell the reader what they need, the comment
+is useless: delete it. Try the ladder above first.
+
+**(b) Does it say more than the code that runs?** A comment that describes the
+executed steps (`// loop over users and add the active ones`) only repeats the
+code, and goes stale the day the code changes. A good comment gives the
+maintainer what the code cannot hold: the reason, the constraint, the
+alternative that was rejected and why, the trap, the external rule (an RFC, a
+regulation, a vendor bug), the units or the invariant.
+
+**(c) Does it explain the design choice, not the implementation?** When a part
+of the code is built from existing concepts (shared helpers, a base class, a
+pattern, values imported from another module), a short comment may say *which*
+concept is used and *why* here, so the maintainer knows the structure is
+deliberate and where to change it. Example: `// Parsing is delegated to
+net/header so retry and size limits stay in one place.` It does not walk
+through *how* the helper works or narrate the lines that follow; that is the
+implementation, and the helper's own name and docs carry it. A comment that
+explains the concept for the whole module or many files belongs in the
+documentation (section 6b), with at most a one-line pointer in the code.
+
+Further rules every comment must pass:
+
+- **Right level.** Comment at the declaration (function, type, module) rather
+  than line by line inside the body. A body that needs many inline comments
+  needs extracting instead.
+- **Say why not.** When the obvious approach was rejected, the comment names it
+  and the reason (`A Map is not used: callers rely on insertion order.`).
+- **One source of truth.** Do not copy what the docs, a spec or another comment
+  already say; link to it (`See docs/retry.md.`).
+- **Survives refactoring.** No line numbers, no "above" or "below", no names of
+  callers that may change, no dates, authors or change history (git keeps
+  those).
+- **Domain words.** Use the project's glossary terms, the same word the code
+  and the docs use for a concept.
+- **Nothing sensitive.** No secrets, internal hostnames, customer data or
+  exploit details in a comment.
+- **Tests.** The test name states the behaviour. A test comment is only for a
+  non-obvious fixture or a regression it pins (with the issue number).
+- **Generated and vendored code** is never commented or re-commented by hand.
+- **The language's guide.** Follow the comment rules of the language's standard
+  style guide: marker spacing, placement, doc vs line comment, the doc-comment
+  format. The profile lists them per language ("Comments and documentation",
+  from `languages.json` `docs.guide`). Where the project's own style guide is
+  stricter, it wins.
+
 ## 1. Core philosophy
 
 - **Prefer self-documenting code.** Descriptive variable, function and
@@ -108,10 +161,60 @@ A note, a question or a remark is never left inside a comment. If you want a
 reviewer to look at a line, say so in the PR; delete the question from the
 code once it is answered.
 
+## 6b. Comment or documentation?
+
+Before adding or changing a comment, ask whether the text belongs in the
+documentation instead. The test is **scope and audience**:
+
+| The text... | Put it in... |
+|-------------|--------------|
+| Is only true of these few lines and only someone editing them needs it | a **code comment** |
+| States a function's contract (units, errors, side effects) | a **doc comment** in the language's format |
+| Explains a concept, a pattern or a flow that spans several functions or files (how modules fit together, why the layers are split this way) | the **docs** (`README`, `docs/`, the module's README), with at most a one-line pointer in the code |
+| Tells a user or operator how to use, configure, run or deploy something | the **docs** (usage, configuration, runbook) |
+| Records a decision with its alternatives and trade-offs | an **ADR** or the design doc, if the project keeps them; else the docs |
+| Is longer than about five lines of prose | usually the **docs**; the code keeps the one sentence the next editor must not miss |
+
+Do not overdo the documentation either:
+
+- Document only what is **durable and shared**: a concept many places rely on,
+  a workflow people run, a decision people will ask about again. One function's
+  detail does not get a doc page.
+- **Extend the doc that exists** (the profile names the docs location) before
+  starting a new file. No doc per change, no doc per function, no changelog
+  prose in the docs.
+- Do not duplicate: a fact lives in **one** place, code comment or doc, and the
+  other links to it.
+- The docs change in the same change as the code they describe. A stale doc is
+  a defect, like a stale comment.
+- If the project has no docs folder and the text is not shared knowledge, the
+  answer is usually neither: improve the names instead.
+
+Every doc section the change adds or edits is listed in the Push JSON `docs`
+([push-json.md](push-json.md)): the file, the section, and the comment it
+replaced (`from`), if any.
+
+## 6c. Balance (Reviewers)
+
+Reviewers judge comments and docs together, not each alone:
+
+- Code full of comments that explain one concept again and again: move the
+  concept to the docs once, keep the pointer. (`suggestion`)
+- A new doc page that only restates the code or one function: delete it, or
+  fold the one durable fact into the existing doc. (`issue (blocking)` when it
+  duplicates code that will drift.)
+- A concept the change introduces that the next team will need, documented
+  nowhere: ask for the short doc section. (`issue (non-blocking)`; blocking only
+  when the profile's policy requires docs for it.)
+- A comment and a doc that say the same thing: keep one, link from the other.
+- Missing comments on clear code and missing docs on local detail are **not**
+  findings.
+
 ## 7. How Coders avoid over-commenting
 
 1. **Default to zero new comments.** The number of comments in a diff is never
-   a measure of quality.
+   a measure of quality. Every comment you do write passes the gate (section 0a)
+   and the docs question (section 6b).
 2. **Climb the ladder before commenting:** rename, extract a function, add a
    test that pins the behaviour. Only then write a comment.
 3. **Comment budget.** Every comment the change adds is listed in the Push JSON
@@ -124,6 +227,7 @@ code once it is answered.
    prose. The Claude mod runs it on `git commit` and reports the result
    (`/devops comments strict` refuses a commit with blocking findings).
 5. **Use the research.** The Researcher marks the code that is comment-worthy
+   and the concepts that are doc-worthy
    ([research-and-reuse.md](research-and-reuse.md)); comment those places and
    not others.
 6. **Answer line remarks.** Reviewers leave remarks on over-commented lines in
@@ -147,4 +251,10 @@ code once it is answered.
    their source?
 7. Would a better name remove the need for the comment? (`suggestion`)
 8. Is any question, remark or note to a person left in code? (`issue (blocking)`: move it to the PR Q&A and delete it.)
-9. Run `comment_audit` and post each finding that holds as a **line remark** on the virtual PR (`path:line`, a Conventional Comment); do not edit the code yourself.
+9. Does every new or changed comment pass the gate (section 0a)? A comment that
+   narrates the implementation step by step, or explains a concept that belongs
+   in the docs, fails it.
+10. Is the balance right between comments and docs (section 6c)? Is every doc
+   change listed in the Push JSON `docs`, and does it follow section 6b?
+11. Does each comment follow the language's style guide (profile, `docs.guide`)?
+12. Run `comment_audit` and post each finding that holds as a **line remark** on the virtual PR (`path:line`, a Conventional Comment); do not edit the code yourself.

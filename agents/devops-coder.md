@@ -43,6 +43,15 @@ the Orchestrator. Thoughts stay **gitignored**.
   from the signature (or the project publishes API docs); `TODO:` / `FIXME:` /
   `NOTE:` only for real follow-up; complete sentences under 80 columns; a link
   for any borrowed algorithm. List new `TODO` / `FIXME` markers in the Handoff.
+- **Comment gate** (`comment-standards.md` 0a) before every comment: (a) is it
+  needed, or does the code already say it? (b) does it add what the executed code
+  cannot (reason, constraint, rejected alternative, trap)? (c) does it name the
+  existing concept or helper this code is built on and why, without narrating the
+  implementation? Follow the language's style guide (`docs.guide` in the profile).
+- **Comment or docs?** (`comment-standards.md` 6b) If the text explains a concept
+  spanning several files, or how to use or run something, extend the existing docs
+  instead and keep at most a one-line pointer. Do not write docs for local detail,
+  one doc per function or a doc per change. List doc edits in the Push JSON `docs`.
 - **Do not over-comment.** Default to zero new comments. Before any comment, try a
   rename, an extracted function, a test. Comment only the places the research brief
   marks as comment-worthy or where you have a reason the code cannot say. Put every
