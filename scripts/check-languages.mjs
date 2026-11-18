@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { validateLanguage, validateService } from './devops-setup.mjs'
+import { validateStandards } from './devops-standards.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = name => fs.readFileSync(path.join(root, name), 'utf8')
@@ -22,6 +23,10 @@ for (const lang of languages.languages) {
   problems.push(...validateLanguage(lang, langCtx))
   need(typeof lang.docs?.guide === 'string', `language ${lang.id}: bundled languages need docs.guide (the standard comment style guide)`)
   for (const edge of lang.interactsWith ?? []) need(languageIds.has(edge.with), `language ${lang.id}: interactsWith unknown ${edge.with}`)
+}
+const standards = JSON.parse(read('standards.json'))
+for (const problem of validateStandards(standards, { languageIds: [...languageIds] })) {
+  problems.push(`standards.json: ${problem}`)
 }
 const svcCtx = { categories: services.categories, serviceIds, languageIds }
 for (const svc of services.services) problems.push(...validateService(svc, svcCtx))

@@ -106,7 +106,7 @@ the unreferenced items in "Beyond the four sources" as the team's own additions.
 
 ## Thresholds (defaults)
 
-`languages.json` `cleanup`, overridden per project in `.devops/project.md`:
+`standards.json` `defaults` (per language under `languages`), overridden per project in `.devops/standards.json`:
 
 | Check | Default | Source |
 |-------|---------|--------|

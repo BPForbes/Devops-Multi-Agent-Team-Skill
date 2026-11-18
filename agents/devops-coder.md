@@ -41,7 +41,7 @@ the Orchestrator. Thoughts stay **gitignored**.
   mechanics; update or delete comments your change made stale; delete
   commented-out code; use a doc comment only where the contract is not obvious
   from the signature (or the project publishes API docs); `TODO:` / `FIXME:` /
-  `NOTE:` only for real follow-up; complete sentences under 80 columns; a link
+  `NOTE:` only for real follow-up; complete sentences within `lineLength.comment` (`.devops/standards.json`, 80 by default); a link
   for any borrowed algorithm. List new `TODO` / `FIXME` markers in the Handoff.
 - **Simple explanations, no narratives** in comments and docs: state the fact or the
   reason plainly; no story of how the code came to be, no walkthroughs.

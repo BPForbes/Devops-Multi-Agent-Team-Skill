@@ -2,11 +2,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { assertInside, loadLanguages, resolveDest, walk } from './devops-setup.mjs'
+import { assertInside, resolveDest, walk } from './devops-setup.mjs'
+import { cleanupLimits, loadStandards } from './devops-standards.mjs'
 import { auditDiff, syntaxTable } from './devops-comments.mjs'
 import { extensionTable, languageOf } from './devops-research.mjs'
 
-const DEFAULTS = { minDuplicateLines: 6, minDuplicateChars: 120, maxFunctionLines: 30, maxNesting: 3, maxParams: 4, maxMagicLiteralRepeats: 2, maxFiles: 4000, maxFileBytes: 307200 }
 const BRACE_LANGUAGES = new Set(['c', 'cpp', 'csharp', 'java', 'kotlin', 'typescript', 'javascript', 'go', 'rust', 'php', 'swift', 'dart', 'scala', 'zig', 'shell', 'powershell'])
 const SKIP_FILE = /(\.min\.|\.generated\.|\.pb\.|\.lock$|package-lock\.json$|(^|\/)(dist|build|vendor|node_modules|third_party|deps)\/)/
 const TEST_FILE = /(^|\/)(tests?|__tests__|spec)\/|(\.|_)(test|spec)\.[a-z]+$|^test_|\/test_/i
@@ -57,7 +57,7 @@ export function parseStatement(text, destInput, roots) {
     dest, statement,
     goals: chosen, defaultedGoals: goals.length === 0, generic,
     scope: { paths, exclude },
-    thresholds: { ...DEFAULTS, ...thresholds, ...(loadLanguages(dest).cleanup ?? {}), ...thresholds },
+    thresholds: { ...cleanupLimits(loadStandards(dest), null), ...thresholds },
     constraints: ['Behavior is preserved: the same inputs give the same outputs, errors and side effects.', 'The validation commands pass before the first step and after every step.', 'No public API, wire format or file format changes unless the statement says so.', 'One kind of change per step; no cleanup mixed with a feature or a bug fix.', ...constraints],
     notScanned: chosen.includes('naming') ? ['naming: the scan only finds names that are plainly vague; judging whether a name reveals intent is the Reviewer\'s call, and the Coder renames only what the statement asked for'] : [],
     unrecognized: sentences.filter(s => !understood.includes(s)),
@@ -282,8 +282,8 @@ const F_line = (F, at) => F.norm[at].line
 /** Candidates for cleanup in the scope: duplicate blocks, long or deeply nested functions, noisy comments. */
 export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude = [], thresholds = {}, limit = 40, roots } = {}) {
   const dest = resolveDest(destInput, roots)
-  const config = loadLanguages(dest)
-  const settings = { ...DEFAULTS, ...(config.cleanup ?? {}), ...thresholds }
+  const standards = loadStandards(dest)
+  const settings = cleanupLimits(standards, null, thresholds)
   const syntaxFor = syntaxTable(dest)
   const table = extensionTable(dest)
   const inScope = rel => (paths.length === 0 || paths.some(p => rel === p || rel.startsWith(p.replace(/\/$/, '') + '/'))) && !exclude.some(p => (p === 'tests' ? TEST_FILE.test(rel) : rel === p || rel.startsWith(p.replace(/\/$/, '') + '/')))
@@ -298,6 +298,7 @@ export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude 
     const syntax = syntaxFor(rel)
     const language = languageOf(rel, table)
     if (!syntax || !language) continue
+    const fileSettings = cleanupLimits(standards, language.id, thresholds)
     let text
     try {
       if (fs.statSync(path.join(dest, rel)).size > settings.maxFileBytes) continue
@@ -338,21 +339,34 @@ export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude 
           summary.flagArguments += 1
           candidates.push({ kind: 'flag-argument', file: rel, from: fn.from, to: fn.to, name: fn.name, test: isTest, size: 1, suggestion: `${fn.name} takes a flag argument, so it does two things. Split it into two functions named for what each does, or use a descriptive enum or options value.`, effort: 'low' })
         }
-        if (codeLines > settings.maxFunctionLines) { reasons.push(`${codeLines} code lines (limit ${settings.maxFunctionLines})`); summary.longFunctions += 1 }
-        if (fn.deepest > settings.maxNesting) { reasons.push(`nesting ${fn.deepest} (limit ${settings.maxNesting})`); summary.deepFunctions += 1 }
-        if (params > settings.maxParams) { reasons.push(`${params} parameters (limit ${settings.maxParams})`); summary.manyParams += 1 }
+        const limit = fileSettings
+        if (codeLines > limit.maxFunctionLines) {
+          reasons.push(`${codeLines} code lines (limit ${limit.maxFunctionLines})`)
+          summary.longFunctions += 1
+        }
+        if (fn.deepest > limit.maxNesting) {
+          reasons.push(`nesting ${fn.deepest} (limit ${limit.maxNesting})`)
+          summary.deepFunctions += 1
+        }
+        if (params > limit.maxParams) {
+          reasons.push(`${params} parameters (limit ${limit.maxParams})`)
+          summary.manyParams += 1
+        }
         if (reasons.length > 0) {
           candidates.push({
             kind: 'long-function', file: rel, from: fn.from, to: fn.to, name: fn.name, test: isTest, size: codeLines, reasons,
-            suggestion: `${reasons.join('; ')}. Extract cohesive blocks into well-named private helpers (pure ones first), use early returns to cut nesting${params > settings.maxParams ? ', and group the parameters into one value' : ''}. Keep the signature, error handling, ordering and side effects.`,
-            effort: codeLines > settings.maxFunctionLines * 3 ? 'high' : 'medium',
+            suggestion: `${reasons.join('; ')}. Extract cohesive blocks into well-named private ` +
+              `helpers (pure ones first), use early returns to cut nesting` +
+              `${params > limit.maxParams ? ', and group the parameters into one value' : ''}. ` +
+              'Keep the signature, error handling, ordering and side effects.',
+            effort: codeLines > fileSettings.maxFunctionLines * 3 ? 'high' : 'medium',
           })
         }
       }
     }
 
     if (goals.includes('constants') && !isTest) {
-      for (const e of magicNumbers(lines, syntax.line, settings)) {
+      for (const e of magicNumbers(lines, syntax.line, fileSettings)) {
         summary.magicNumbers += 1
         candidates.push({ kind: 'magic-number', file: rel, literal: e.literal, count: e.count, lines: e.lines, test: false, size: e.count, suggestion: `${e.literal} appears ${e.count} times with no name. Give it a named constant that says what it means, defined once, so a change is made in one place.`, effort: 'low' })
       }
@@ -394,7 +408,7 @@ export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude 
   }
 
   if (syntheticDiff.length > 0) {
-    const audit = auditDiff(syntheticDiff.join('\n'), config, { syntaxFor })
+    const audit = auditDiff(syntheticDiff.join('\n'), standards, { syntaxFor })
     const wanted = audit.findings.filter(f => goals.includes('comments') ? true : f.rule === 'commented-out-code')
     summary.commentBlocking = wanted.filter(f => f.blocking).length
     summary.commentNonBlocking = wanted.length - summary.commentBlocking

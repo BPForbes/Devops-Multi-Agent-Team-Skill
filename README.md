@@ -20,6 +20,7 @@ commands, plus:
 | `agents/` | Nine role prompts: researcher, reviewer, CI, quality (QA), security, ticket lead, verifier, integrator, communicator. |
 | `commands/` | `/goal`, `/create-subagent`, `/code-review`, `/repro`, `/triage`. |
 | `languages.json`, `LANGUAGES.md` | The language setup file (40 languages) and its guide. |
+| `standards.json` | Project standards: line length, function size and nesting, parameters, duplicates, comment density, per-language overrides, and linter settings. Copied as `.devops/standards.json`, where a project overrides only the keys it sets. |
 | `services.json`, `SERVICES.md` | Docker, cloud, AI and VM services, the sandbox policy, and their guide. |
 | `mcp/server.mjs` | The MCP server for installing and managing through chat. |
 | `templates/project.md` | Skeleton of the per-project profile (`.devops/project.md`). |
@@ -128,6 +129,32 @@ which holds the committed profile `.devops/project.md`. The tests check this aga
   with your OK). `.devops/sandbox.md` has the commands.
   Cloud and Kubernetes: seats plan, the human applies.
 
+## Standards (`standards.json`)
+
+One JSON file sets the limits the audit and the cleanup scan use. The package
+ships `standards.json`; the installer creates `.devops/standards.json`, and a
+project sets only the keys it wants to change. Any other key, a wrong type or a
+value out of range stops the run with the problem named.
+
+```json
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "lineLength": { "comment": 80, "code": 100 },
+    "function": { "maxLines": 30, "maxNesting": 3, "maxParams": 4 }
+  },
+  "languages": { "python": { "lineLength": { "code": 88 } } }
+}
+```
+
+- `defaults`: line lengths (comments and code), function size, nesting, parameters,
+  duplicated blocks, repeated literals, comment density, and scan size.
+- `interface`: the relaxed comment limits for interface files (`.h`, `.d.ts`, ...).
+- `languages`: per-language overrides of any value in `defaults`.
+- `linters`: per language, the linter tool, its config file and the options that
+  file must set. The audit does not run these tools; the project's validation
+  commands do.
+
 ## Rules built into the workflow
 
 | Rule | Where | Enforced by |
@@ -154,7 +181,7 @@ The installer also copies the reuse and comment rules into `.cursor/rules/`
 ## How it fits together
 
 ```text
-languages.json + services.json ──▶ MCP server / devops-setup ──▶ .devops/project.md, sandbox.md, .gitignore block
+languages.json + services.json + standards.json ──▶ MCP server / devops-setup ──▶ .devops/project.md, sandbox.md, .gitignore block
                                            │                          ▲
                                            └──▶ mod: status line, /devops │ read first by every seat (SKILL.md, Step 0)
 ```

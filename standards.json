@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "about": "Project standards for devops-multi-agent-team: line lengths, function size, nesting, parameters, duplication, comment density, and linter rules. The installer copies this file to .devops/standards.json, where a project edits it. Keys the project does not set keep these defaults. Per-language values go under languages.<id>. Every value is checked by devops-setup's validator, and an unknown key is an error, so a typo cannot pass silently.",
+  "defaults": {
+    "lineLength": {
+      "comment": 80,
+      "code": 100
+    },
+    "function": {
+      "maxLines": 30,
+      "maxNesting": 3,
+      "maxParams": 4
+    },
+    "duplicates": {
+      "minLines": 6,
+      "minChars": 120
+    },
+    "magicLiterals": {
+      "maxRepeats": 2
+    },
+    "comments": {
+      "densityWarn": 0.35,
+      "densityBlock": 0.5,
+      "minCommentLines": 5,
+      "maxProseLines": 6
+    },
+    "scan": {
+      "maxFiles": 4000,
+      "maxFileBytes": 307200
+    }
+  },
+  "interface": {
+    "comments": {
+      "densityWarn": 0.6,
+      "densityBlock": 0.75,
+      "maxProseLines": 12
+    }
+  },
+  "languages": {
+    "python": {
+      "lineLength": { "code": 88 },
+      "function": { "maxLines": 40 }
+    },
+    "go": {
+      "function": { "maxLines": 50 }
+    }
+  },
+  "linters": {
+    "python": {
+      "tool": "ruff",
+      "configFile": "ruff.toml",
+      "options": { "line-length": 88, "mccabe.max-complexity": 10 }
+    },
+    "typescript": {
+      "tool": "eslint",
+      "configFile": "eslint.config.mjs",
+      "options": { "max-lines-per-function": 40, "max-depth": 3, "max-params": 4, "complexity": 10 }
+    },
+    "javascript": {
+      "tool": "eslint",
+      "configFile": "eslint.config.mjs",
+      "options": { "max-lines-per-function": 40, "max-depth": 3, "max-params": 4, "complexity": 10 }
+    }
+  }
+}

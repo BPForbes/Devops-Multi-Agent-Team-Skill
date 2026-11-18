@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { assertInside, loadLanguages, resolveDest } from './devops-setup.mjs'
+import { commentLimits, loadStandards } from './devops-standards.mjs'
 import { REF, git } from './devops-tags.mjs'
 
 const FALLBACK = { '.yml': ['#'], '.yaml': ['#'], '.toml': ['#'], '.mk': ['#'], '.conf': ['#'], 'Dockerfile': ['#'], 'Makefile': ['#'] }
@@ -164,7 +165,12 @@ function judge(item, config) {
     if (['HACK', 'XXX'].includes(marker[1])) out.push(finding(item, 'marker', 'issue', true, `use TODO or FIXME with an issue reference instead of ${marker[1]}.`))
     else if (marker[1] !== 'NOTE' && !/(#\d+|\([\w.@-]+\)|https?:\/\/)/.test(marker[2])) out.push(finding(item, 'marker', 'issue', true, `${marker[1]} has no issue reference or owner. Add one (TODO(#123)) and list it in the Handoff.`))
   } else if (/^(todo|fixme)\b/.test(t)) out.push(finding(item, 'marker', 'issue', true, 'write markers in capitals (TODO, FIXME).'))
-  if (item.kind !== 'doc' && item.raw.length > config.maxLineColumns && !/https?:\/\//.test(t)) out.push(finding(item, 'long-line', 'issue', true, `this line is ${item.raw.length} columns; wrap comments before ${config.maxLineColumns}.`))
+  if (item.kind !== 'doc' && item.raw.length > config.maxLineColumns && !/https?:\/\//.test(t)) {
+    const limit = config.maxLineColumns
+    const remark = `this line is ${item.raw.length} columns; wrap comments before ${limit}`
+    const source = '(lineLength.comment in .devops/standards.json).'
+    out.push(finding(item, 'long-line', 'issue', true, `${remark} ${source}`))
+  }
   return out
 }
 
@@ -187,7 +193,6 @@ function listedCovers(listed, group) {
   })
 }
 
-const STRICT = { maxLineColumns: 80, densityWarn: 0.35, densityBlock: 0.5, densityMinComments: 5, longBlockLines: 6, interface: { densityWarn: 0.6, densityBlock: 0.75, longBlockLines: 12 } }
 const blockingIssue = (file, line, rule, remark) => ({ file, line, rule, blocking: true, text: '', remark: `issue (blocking): ${remark}` })
 
 /** A source file and its interface file share a directory and a stem, whatever the language. */
@@ -252,13 +257,34 @@ function languageChecks(items, codeRows, syntax, file, readFile) {
   return out
 }
 
+/** Added code lines longer than the project's code line limit. Comment lines are judged by `judge`. */
+function longCodeLines(rows, items, limits, syntax) {
+  const commentLines = new Set(items.map(i => i.line))
+  const isCommentMarker = trimmed => /^(\*|\/\*|\/\/)/.test(trimmed)
+    || syntax.line.some(m => trimmed.startsWith(m))
+    || syntax.block.some(([open]) => trimmed.startsWith(open))
+  const out = []
+  for (const row of rows) {
+    const text = row.text
+    const skip = commentLines.has(row.line) || isCommentMarker(text.trim()) || text.trim() === ''
+    if (skip || /https?:\/\//.test(text)) continue
+    if (text.length > limits.codeLineColumns) {
+      const limit = limits.codeLineColumns
+      const remark = `this line is ${text.length} columns; the code limit is ${limit}`
+      const source = '(lineLength.code in .devops/standards.json).'
+      out.push(blockingIssue(row.file, row.line, 'long-code-line', `${remark} ${source}`))
+    }
+  }
+  return out
+}
+
 /**
  * Pure: judge the comments a unified diff adds. Strict: every finding blocks, except that interface files (.h, .d.ts,
- * .pyi, ...) get the relaxed limits in `commentAudit.interface`. `listed` is the Push JSON `comments` array and `docs`
- * its `docs` array; omit either to skip that budget check. `readFile(rel)` lets the audit read a source file's
+ * .pyi, ...) get the relaxed limits in `interface.comments` of `standards.json`.
+ * `listed` is the Push JSON `comments` array and `docs` its `docs` array; omit either to skip that budget check. `readFile(rel)` lets the audit read a source file's
  * interface sibling to catch comments that repeat it.
  */
-export function auditDiff(diffText, config, { listed, docs, syntaxFor, readFile } = {}) {
+export function auditDiff(diffText, standards, { listed, docs, syntaxFor, readFile } = {}) {
   const byFile = new Map()
   for (const row of parseAdded(diffText)) byFile.set(row.file, [...(byFile.get(row.file) ?? []), row])
   const created = newFiles(diffText)
@@ -274,8 +300,6 @@ export function auditDiff(diffText, config, { listed, docs, syntaxFor, readFile 
       findings.push(blockingIssue(file, rows[0].line, 'new-doc', 'a new doc file. Update the existing docs instead; a new file is only for a new system or module, named in the Push JSON `docs` row as `new` (comment-standards.md 6b).'))
     }
   }
-  const settings = { ...STRICT, ...(config.commentAudit ?? {}) }
-  const relaxed = { ...settings, ...STRICT.interface, ...(settings.interface ?? {}) }
   let commentLines = 0
   let codeTotal = 0
   const interfaceGroups = new Map()
@@ -283,12 +307,13 @@ export function auditDiff(diffText, config, { listed, docs, syntaxFor, readFile 
   for (const [file, rows] of byFile) {
     const syntax = syntaxFor(file)
     if (!syntax) continue
-    const limits = syntax.interface ? relaxed : settings
+    const limits = commentLimits(standards, syntax.id, { isInterface: syntax.interface })
     const { items, codeLines, codeRows } = extract(rows, syntax)
     const code = codeLines.get(file) ?? 0
     codeTotal += code
     commentLines += items.filter(i => i.text !== '').length
-    for (const item of items) findings.push(...judge(item, settings))
+    for (const item of items) findings.push(...judge(item, limits))
+    findings.push(...longCodeLines(rows, items, limits, syntax))
     findings.push(...languageChecks(items, codeRows, syntax, file, readFile))
     for (const group of groups(items.filter(i => i.text !== ''))) {
       const first = group.items[0]
@@ -356,7 +381,7 @@ export function commentAudit(destInput, { base, head = 'HEAD', staged = false, l
   else args = [...common, 'HEAD']
   const ran = git(dest, args)
   if (!ran.ok) throw new Error(ran.err || 'git diff failed (is this a git repository?)')
-  const config = loadLanguages(dest)
+  const standards = loadStandards(dest)
   const readFile = rel => {
     try {
       const abs = path.join(dest, rel)
@@ -364,7 +389,12 @@ export function commentAudit(destInput, { base, head = 'HEAD', staged = false, l
       return fs.readFileSync(abs, 'utf8')
     } catch { return null }
   }
-  const result = auditDiff(ran.out, config, { listed, docs, syntaxFor: syntaxTable(dest), readFile })
+  const result = auditDiff(ran.out, standards, {
+    listed,
+    docs,
+    syntaxFor: syntaxTable(dest),
+    readFile,
+  })
   return { dest, source: base ? `${base}...${head}` : staged ? 'staged' : 'working tree vs HEAD', ...result }
 }
 

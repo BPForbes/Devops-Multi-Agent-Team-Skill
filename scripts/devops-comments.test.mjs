@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { auditDiff, commentAudit, parseAdded } from './devops-comments.mjs'
-import { loadLanguages } from './devops-setup.mjs'
+import { loadStandards } from './devops-standards.mjs'
 
 function repo(files) {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dmat-cm-')))
@@ -109,7 +109,7 @@ test('a commit range is audited, and a bad ref is refused', () => {
   const result = commentAudit(dir, { base: 'HEAD~1', head: 'HEAD' })
   assert.ok(rules(result).includes('restates-code'))
   assert.throws(() => commentAudit(dir, { base: '--upload-pack=x' }), /plain ref/)
-  assert.ok(auditDiff('', loadLanguages(dir), { syntaxFor: () => undefined }).findings.length === 0)
+  assert.ok(auditDiff('', loadStandards(dir), { syntaxFor: () => undefined }).findings.length === 0)
 })
 
 test('a comment that narrates the implementation step by step fails the gate, and a design-choice comment passes', () => {

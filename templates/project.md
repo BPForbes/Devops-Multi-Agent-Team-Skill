@@ -56,7 +56,9 @@ rot; no commented-out code; doc comments only where the contract is not obvious
 or where API docs are published; TODO/FIXME/NOTE only for real follow-up;
 complete sentences; links for borrowed algorithms. Every comment passes the
 comment gate (needed? more than the executed code? the design choice, not the
-implementation?) and the language's comment style guide below. Every finding is
+implementation?) and the language's comment style guide below. Limits (line length, function
+size, nesting, parameters, comment density, linter rules) are in
+`.devops/standards.json`; a Coder reads it before writing code. Every finding is
 blocking. Interface files (`.h`, `.d.ts`, `.pyi`, ...) carry the design-level
 explanation of their source, under relaxed limits. Text about a concept that
 spans files, or about usage, updates the existing docs with the smallest edit

@@ -121,7 +121,7 @@ language is `comments.interface` in `languages.json`).
 - Relaxed, not loose: the gate (section 0a) still applies, and restating the
   signature, narrating the implementation line by line, commented-out code,
   questions and process notes are blocking here too. Interface files get higher
-  limits for comment density (`commentAudit.interface`: a warning from 60%,
+  limits for comment density (`interface.comments` in `standards.json`: a warning from 60%,
   blocking from 75%) and for prose length (12 lines instead of 6), and concept
   text there is a suggestion, not a blocking finding.
 - Do not overdo it: a short module overview and a contract per declaration
@@ -170,7 +170,7 @@ Send-back).
   tried", "it turned out"), no walkthroughs ("let's take a look"), no filler.
   One short sentence beats a paragraph.
 - Complete sentences: capital letter first, full stop last.
-- Keep comments short; wrap before 80 columns.
+- Keep comments short; wrap at `lineLength.comment` in `.devops/standards.json` (80 by default).
 - When the code follows an external algorithm, a Stack Overflow answer, an
   RFC or a regulation, put a Markdown link to the original in the comment.
 - Comments are written for a future reader: no mention of an AI agent, a

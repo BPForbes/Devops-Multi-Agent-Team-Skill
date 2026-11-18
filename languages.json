@@ -3605,27 +3605,5 @@
     "Run CodeQL for every affected language, and always for changes to authentication, secrets, cryptography, HTTP handling, SQL/ORM, file uploads, command execution, deserialization, XSS/SSRF surfaces and security configuration.",
     "Unaffected languages may be NOT APPLICABLE when CI does not require all of them."
   ],
-  "docsNote": "Doc formats apply only where a doc comment is warranted: when the contract is not obvious from the name and signature, or when the project publishes generated API docs. Self-explanatory code gets no comment, and no comment is added just because code was added.",
-  "commentAudit": {
-    "maxLineColumns": 80,
-    "densityWarn": 0.35,
-    "densityBlock": 0.5,
-    "densityMinComments": 5,
-    "longBlockLines": 6,
-    "interface": {
-      "densityWarn": 0.6,
-      "densityBlock": 0.75,
-      "longBlockLines": 12
-    }
-  },
-  "cleanup": {
-    "minDuplicateLines": 6,
-    "minDuplicateChars": 120,
-    "maxFunctionLines": 30,
-    "maxNesting": 3,
-    "maxParams": 4,
-    "maxFiles": 4000,
-    "maxFileBytes": 307200,
-    "maxMagicLiteralRepeats": 2
-  }
+  "docsNote": "Doc formats apply only where a doc comment is warranted: when the contract is not obvious from the name and signature, or when the project publishes generated API docs. Self-explanatory code gets no comment, and no comment is added just because code was added."
 }

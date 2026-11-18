@@ -590,6 +590,12 @@ export function install({ dest: destInput, roots, target = 'auto', lang = 'auto'
     copyFile(path.join(PACKAGE_ROOT, name), path.join(dest, '.devops', name), opts, report)
   }
   writeText(path.join(dest, '.devops', 'languages.local.json'), '{\n  "languages": []\n}\n', { ...opts, force: false }, report)
+  writeText(
+    path.join(dest, '.devops', 'standards.json'),
+    '{\n  "schemaVersion": 1\n}\n',
+    { ...opts, force: false },
+    report,
+  )
   writeText(path.join(dest, '.devops', 'project.md'), renderProfile(config, selected, dest, { servicesConfig, services: chosenServices, sandbox }), opts, report)
   if (sandbox) writeText(path.join(dest, '.devops', 'sandbox.md'), renderSandboxDoc(servicesConfig, selected), opts, report)
   const projectName = path.basename(dest)
