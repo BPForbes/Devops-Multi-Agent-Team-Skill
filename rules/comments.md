@@ -8,12 +8,20 @@
   alternative, trap, external rule)? (c) does it explain which existing concept
   or helper this code is built on and why, without narrating the
   implementation? Yes to (a) and to (b) or (c), or it does not go in.
+- **Strict.** Every comment and doc finding is blocking, formatting and the
+  language's style guide included.
+- **Interface files** (`.h`, `.hpp`, `.d.ts`, `.pyi`, `.mli`, ...) are where
+  comments are welcome: they describe how and why the source file is
+  implemented, at the design level, so the source needs fewer. Relaxed limits,
+  not loose ones: no restating, no line-by-line narration, no tutorial. A
+  source comment that repeats the interface is deleted.
 - **Comment or docs?** Text about a concept, flow or decision that spans
   several files, or about how to use or run something, goes in the docs (extend
   the existing doc) with at most a one-line pointer in code. Local detail stays
-  a comment or nothing. Do not overdo docs: only durable, shared knowledge, one
-  place per fact, updated in the same change. List doc edits in the Push JSON
-  `docs`.
+  a comment or nothing. Docs only as needed: update the existing doc with the
+  smallest edit that makes it true; a new doc file only for a new system or
+  module (named in the Push JSON `docs` row as `new`). One place per fact,
+  updated in the same change. List every doc edit in the Push JSON `docs`.
 - Follow the language's standard style guide for comments (profile
   "Comments and documentation", `docs.guide`).
 - Prefer self-documenting code: descriptive names and clean structure first.

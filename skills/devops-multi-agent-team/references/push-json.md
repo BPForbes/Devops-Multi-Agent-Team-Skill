@@ -63,11 +63,13 @@ executed code, or which design choice it names. Questions never go here or in
 code: use `qa`.
 
 `docs` is the **doc budget**: one row per documentation section the change adds
-or edits, `{ "file", "section", "from": "path:line" | null, "why" }`. `from` is
-the comment the text replaced, if any; `why` says why it is durable, shared
-knowledge rather than a comment ([comment-standards.md](comment-standards.md)
-6b). `[]` is the default. `comment_audit` with `docs` flags a doc file the change
-touches that no row lists. Example head:
+or edits, `{ "file", "section", "from": "path:line" | null, "why", "new"? }`.
+`from` is the comment the text replaced, if any; `why` says why it is durable,
+shared knowledge rather than a comment ([comment-standards.md](comment-standards.md)
+6b). `new` is set only on a new doc file and names the new system or module it
+documents; existing docs are updated instead. `[]` is the default.
+`comment_audit` with `docs` blocks a doc file the change touches that no row
+lists, and always blocks a new doc file without `new`. Example head:
 `"seat": "coder-0a0a0a", "authors": ["coder-0a0a0a"],
 "to": "reviewer-0b0b0b"`. Reviewers use `authors`, unioned with the Handoff `Authors:`
 line ([role-identity.md](role-identity.md), Seat ids), for the

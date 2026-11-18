@@ -132,11 +132,63 @@ test('a comment that narrates the implementation step by step fails the gate, an
   assert.deepEqual(at(5), [])
 })
 
-test('a comment that explains a concept or usage is a docs candidate', () => {
-  const dir = repo({ 'src/s.py': '# Architecture: the queue feeds the workers, which write to the store.\nrun()\n' })
-  const found = commentAudit(dir, { staged: true }).findings.find(f => f.rule === 'docs-candidate')
-  assert.ok(found)
-  assert.equal(found.blocking, false)
+test('concept or usage text blocks in a source file and is only a suggestion in an interface file', () => {
+  const text = '# Architecture: the queue feeds the workers, which write to the store.\nrun()\n'
+  const dir = repo({ 'src/s.py': text, 'src/t.pyi': text })
+  const found = commentAudit(dir, { staged: true }).findings.filter(f => f.rule === 'docs-candidate')
+  assert.equal(found.find(f => f.file === 'src/s.py').blocking, true)
+  assert.equal(found.find(f => f.file === 'src/t.pyi').blocking, false)
+})
+
+test('interface files allow more comment density, but not unlimited', () => {
+  const comment = i => `// Callers must hold the queue lock before slot ${i} is used.`
+  const body = n => [...Array.from({ length: n }, (_, i) => comment(i)), 'int run(void);', 'int stop(void);', 'int size(void);', ''].join('\n')
+  const dir = repo({ 'q.h': body(6), 'q.cpp': body(6), 'z.h': body(12) })
+  const density = commentAudit(dir, { staged: true }).findings.filter(f => f.rule === 'density')
+  assert.equal(density.find(f => f.file === 'q.cpp').blocking, true)
+  assert.equal(density.find(f => f.file === 'q.h').blocking, false)
+  assert.equal(density.find(f => f.file === 'z.h').blocking, true)
+})
+
+test('a source comment that repeats its interface comment is flagged, also when the header is already committed', () => {
+  const header = '// Retries the send twice because the broker drops the first frame after reconnect.\nint send_frame(int fd);\n'
+  const source = '#include "net.h"\n// Retries the send twice because the broker drops the first frame after reconnect.\nint send_frame(int fd) { return fd; }\n'
+  const together = repo({ 'net.h': header, 'net.c': source })
+  assert.deepEqual(commentAudit(together, { staged: true }).findings.filter(f => f.rule === 'repeats-interface').map(f => f.file), ['net.c'])
+  const later = repo({ 'net.h': header })
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'h'], { cwd: later })
+  fs.writeFileSync(path.join(later, 'net.c'), source)
+  execFileSync('git', ['add', '-A'], { cwd: later })
+  assert.ok(rules(commentAudit(later, { staged: true })).includes('repeats-interface'))
+})
+
+test('a new doc file blocks unless the docs row names the new system', () => {
+  const dir = repo({ 'docs/queue.md': '# Queue\n\nWorkers pull from one queue.\n' })
+  assert.ok(rules(commentAudit(dir, { staged: true })).includes('new-doc'))
+  const named = commentAudit(dir, { staged: true, docs: [{ file: 'docs/queue.md', section: 'Queue', from: null, why: 'new queue system', new: 'job queue' }] })
+  assert.ok(!rules(named).includes('new-doc'))
+})
+
+test('language style-guide checks: marker spacing, PEP 8 inline gap, Go doc names, Rust SAFETY, TS JSDoc types, C# and Terraform', () => {
+  const dir = repo({
+    'a.py': 'x = 1 # Offset because the API counts from one.\n#Tight comment here.\ny = 2\n',
+    'b.go': 'package b\n\n// Parses the frame header because callers pass raw bytes.\nfunc Parse() {}\n',
+    'c.rs': 'fn f(p: *const u8) -> u8 {\n    unsafe { *p }\n}\n',
+    'd.ts': '/** @param {string} id The order number from the billing system. */\nexport function load(id: string) {}\n',
+    'e.cs': 'var n = 1; // Starts at one because the ledger is one-based.\n',
+    'f.tf': '// Pinned because 5.x renames the bucket argument.\nresource "x" "y" {}\n',
+  })
+  const found = commentAudit(dir, { staged: true }).findings
+  const has = (file, rule) => found.some(f => f.file === file && f.rule === rule && f.blocking)
+  assert.ok(has('a.py', 'inline-gap'))
+  assert.ok(has('a.py', 'marker-space'))
+  assert.ok(has('b.go', 'go-doc-name'))
+  assert.ok(has('c.rs', 'rust-safety'))
+  assert.ok(has('d.ts', 'jsdoc-types'))
+  assert.ok(has('e.cs', 'trailing'))
+  assert.ok(has('f.tf', 'hash-only'))
+  const good = repo({ 'g.go': 'package g\n\n// Parse reads the header because callers pass raw bytes.\nfunc Parse() {}\n', 'h.rs': 'fn f(p: *const u8) -> u8 {\n    // SAFETY: callers pass a pointer from a live slice.\n    unsafe { *p }\n}\n' })
+  assert.deepEqual(commentAudit(good, { staged: true }).findings.map(f => f.rule), [])
 })
 
 test('doc lines are counted, and with a Push JSON docs list an unlisted doc change is reported', () => {
@@ -144,6 +196,7 @@ test('doc lines are counted, and with a Push JSON docs list an unlisted doc chan
   const plain = commentAudit(dir, { staged: true })
   assert.equal(plain.docLinesAdded, 3)
   assert.ok(!rules(plain).includes('unlisted-doc'), 'no list given: doc budget check skipped')
+  assert.ok(rules(plain).includes('new-doc'), 'new doc files are refused unless a new system is named')
   const listed = commentAudit(dir, { staged: true, docs: [{ file: 'docs/retry.md', section: 'Retry', from: null, why: 'shared by every client' }] })
   assert.deepEqual(listed.findings.filter(f => f.rule === 'unlisted-doc').map(f => f.file), ['README.md'])
 })

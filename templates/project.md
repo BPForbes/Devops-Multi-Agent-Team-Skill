@@ -56,9 +56,12 @@ rot; no commented-out code; doc comments only where the contract is not obvious
 or where API docs are published; TODO/FIXME/NOTE only for real follow-up;
 complete sentences; links for borrowed algorithms. Every comment passes the
 comment gate (needed? more than the executed code? the design choice, not the
-implementation?) and the language's comment style guide below. Text about a
-concept that spans files, or about usage, goes in the docs (listed in the Push
-JSON `docs`), never a doc per function. Docs live in: `<README.md, docs/, ...>`. Reviewers enforce it as
+implementation?) and the language's comment style guide below. Every finding is
+blocking. Interface files (`.h`, `.d.ts`, `.pyi`, ...) carry the design-level
+explanation of their source, under relaxed limits. Text about a concept that
+spans files, or about usage, updates the existing docs with the smallest edit
+(listed in the Push JSON `docs`); a new doc file only for a new system or module.
+Docs live in: `<README.md, docs/, ...>`. Reviewers enforce it as
 blocking, on the virtual PR as line remarks; questions and notes go in the PR Q&A,
 never in code. Coders run `comment_audit` before handoff and list the comments they
 keep in the Push JSON `comments`. Does this project publish generated API docs? `<yes (which packages) | no>`.

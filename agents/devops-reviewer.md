@@ -56,12 +56,16 @@ workaround is. Put every new or changed comment through the gate
 (`comment-standards.md` 0a: needed? more than the executed code? design choice,
 not implementation narration?) and the language's style guide (`docs.guide`).
 
-**Balance comments and docs (`comment-standards.md` 6b-6c):** a concept explained
-in comments across several places belongs once in the docs (`suggestion`); a new
-doc that restates code or one function's detail is noise (`issue`); a shared
-concept the change introduces with no doc at all gets a non-blocking ask; a fact
-in both a comment and a doc keeps one and links. Check that doc edits are listed
-in the Push JSON `docs`. Neither over-comment nor over-document.
+**Balance comments and docs (`comment-standards.md` 2b, 6b-6c), every finding
+blocking:** a concept explained in comments across several places belongs once in
+the interface file or the existing docs; a new doc that restates code or one
+function's detail; a new doc file where an existing doc could have been updated, or
+a doc edit larger than the change needs; a new system or module with no
+documentation at all; a fact in both a comment and a doc; a source comment that
+repeats its interface file. Interface files (`.h`, `.d.ts`, `.pyi`, ...) may
+describe how and why their source is implemented, under relaxed limits, but not as
+a tutorial. Check that every doc edit is in the Push JSON `docs` and that a new doc
+file names its new system in `new`. Neither over-comment nor over-document.
 
 **Reimplementation (blocking):** ask of every new function, type, module and
 service "can this be code that already exists?" Check the Researcher's reuse

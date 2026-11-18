@@ -271,13 +271,13 @@ const TOOLS = [
   },
   {
     name: 'comment_audit',
-    description: 'Audit the comments a change adds (staged, working tree vs HEAD, or base...head) and return ready-to-paste Conventional Comments remarks: comments that restate the code, commented-out code, questions or notes to a person left in code, process notes, bare TODO/FIXME, signature-only doc lines, over-commented files, long prose, comments that narrate the implementation step by step, and comments that explain a concept or usage and may belong in the docs. Coders run it before handoff; Reviewers use the findings as line remarks on the virtual PR. Pass `listed` (the Push JSON `comments` array) to also flag comments the Coder did not justify, and `docs` (the Push JSON `docs` array) to flag doc changes nobody listed. Read-only.',
+    description: 'Audit the comments a change adds (staged, working tree vs HEAD, or base...head) and return ready-to-paste Conventional Comments remarks: comments that restate the code, commented-out code, questions or notes to a person left in code, process notes, bare TODO/FIXME, signature-only doc lines, over-commented files, long prose, comments that narrate the implementation step by step, concept or usage text that belongs in the interface file or the docs, source comments that repeat their interface file (.h, .d.ts, .pyi, ...), new doc files with no new system named, and the language style-guide checks. Strict: every finding blocks, except the relaxed limits for interface files. Coders run it before handoff; Reviewers use the findings as line remarks on the virtual PR. Pass `listed` (the Push JSON `comments` array) to also flag comments the Coder did not justify, and `docs` (the Push JSON `docs` array) to flag doc changes nobody listed. Read-only.',
     inputSchema: {
       type: 'object',
       properties: {
         dest, base: { type: 'string' }, head: { type: 'string' }, staged: { type: 'boolean' },
         listed: { type: 'array', maxItems: 500, items: { type: 'object', properties: { file: { type: 'string' }, line: { type: ['string', 'number'] }, why: { type: 'string' } }, required: ['file'] } },
-        docs: { type: 'array', maxItems: 200, items: { type: 'object', properties: { file: { type: 'string' }, section: { type: 'string' }, from: { type: ['string', 'null'] }, why: { type: 'string' } }, required: ['file'] } },
+        docs: { type: 'array', maxItems: 200, items: { type: 'object', properties: { file: { type: 'string' }, section: { type: 'string' }, from: { type: ['string', 'null'] }, why: { type: 'string' }, new: { type: 'string' } }, required: ['file'] } },
       },
       additionalProperties: false,
     },

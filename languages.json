@@ -131,6 +131,12 @@
             "/*",
             "*/"
           ]
+        ],
+        "interface": [
+          ".h"
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -226,6 +232,15 @@
             "/*",
             "*/"
           ]
+        ],
+        "interface": [
+          ".hpp",
+          ".hh",
+          ".hxx",
+          ".h++"
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -300,6 +315,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -403,6 +421,10 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space",
+          "rust-safety"
         ]
       }
     },
@@ -486,6 +508,10 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space",
+          "go-doc-name"
         ]
       }
     },
@@ -586,6 +612,10 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space",
+          "no-trailing"
         ]
       }
     },
@@ -675,6 +705,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -753,6 +786,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -846,7 +882,14 @@
           "#"
         ],
         "block": [],
-        "docstring": true
+        "docstring": true,
+        "interface": [
+          ".pyi"
+        ],
+        "checks": [
+          "marker-space",
+          "inline-two-spaces"
+        ]
       }
     },
     {
@@ -944,6 +987,15 @@
             "/*",
             "*/"
           ]
+        ],
+        "interface": [
+          ".d.ts",
+          ".d.mts",
+          ".d.cts"
+        ],
+        "checks": [
+          "marker-space",
+          "jsdoc-no-types"
         ]
       }
     },
@@ -1027,6 +1079,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -1094,7 +1149,8 @@
             "/*",
             "*/"
           ]
-        ]
+        ],
+        "checks": []
       }
     },
     {
@@ -1165,7 +1221,10 @@
         "line": [
           "#"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -1233,6 +1292,9 @@
             "<#",
             "#>"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -1305,6 +1367,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -1380,6 +1445,10 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space",
+          "hash-only"
         ]
       }
     },
@@ -1457,7 +1526,10 @@
         "line": [
           "#"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -1527,7 +1599,10 @@
         "line": [
           "#"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -1608,7 +1683,8 @@
             "<!--",
             "-->"
           ]
-        ]
+        ],
+        "checks": []
       }
     },
     {
@@ -1703,6 +1779,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -1796,6 +1875,9 @@
             "=begin",
             "=end"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -1882,6 +1964,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -1968,6 +2053,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -2068,6 +2156,12 @@
             "/*",
             "*/"
           ]
+        ],
+        "interface": [
+          ".swiftinterface"
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -2152,6 +2246,9 @@
             "=pod",
             "=cut"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -2241,6 +2338,9 @@
             "--[[",
             "]]"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -2319,7 +2419,10 @@
           "#",
           "##"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -2392,7 +2495,10 @@
           "///",
           "//!"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -2485,6 +2591,9 @@
             "(;",
             ";)"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -2566,7 +2675,10 @@
         "line": [
           "!"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -2641,7 +2753,11 @@
           "*>",
           "      *"
         ],
-        "block": []
+        "block": [],
+        "interface": [
+          ".cpy"
+        ],
+        "checks": []
       }
     },
     {
@@ -2723,7 +2839,10 @@
         "line": [
           "#"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -2805,7 +2924,10 @@
             "=#"
           ]
         ],
-        "docstring": true
+        "docstring": true,
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -2891,6 +3013,9 @@
             "{-",
             "-}"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -2971,7 +3096,11 @@
             "(*",
             "*)"
           ]
-        ]
+        ],
+        "interface": [
+          ".mli"
+        ],
+        "checks": []
       }
     },
     {
@@ -3051,7 +3180,13 @@
           "%",
           "%%"
         ],
-        "block": []
+        "block": [],
+        "interface": [
+          ".hrl"
+        ],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -3138,7 +3273,10 @@
           "#"
         ],
         "block": [],
-        "docstring": true
+        "docstring": true,
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -3220,7 +3358,10 @@
           ";",
           ";;"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -3306,6 +3447,12 @@
             "(*",
             "*)"
           ]
+        ],
+        "interface": [
+          ".fsi"
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -3389,6 +3536,9 @@
             "/-",
             "-/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     }
@@ -3423,7 +3573,12 @@
     "densityWarn": 0.35,
     "densityBlock": 0.5,
     "densityMinComments": 5,
-    "longBlockLines": 6
+    "longBlockLines": 6,
+    "interface": {
+      "densityWarn": 0.6,
+      "densityBlock": 0.75,
+      "longBlockLines": 12
+    }
   },
   "cleanup": {
     "minDuplicateLines": 6,

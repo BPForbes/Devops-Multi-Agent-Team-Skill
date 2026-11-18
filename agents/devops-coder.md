@@ -48,10 +48,17 @@ the Orchestrator. Thoughts stay **gitignored**.
   cannot (reason, constraint, rejected alternative, trap)? (c) does it name the
   existing concept or helper this code is built on and why, without narrating the
   implementation? Follow the language's style guide (`docs.guide` in the profile).
+- **Interface files** (`.h`, `.hpp`, `.d.ts`, `.pyi`, `.mli`, ...; `comment-standards.md`
+  2b): put the design-level explanation of a module (what it does, how and why it is
+  implemented, which helpers it builds on) there, so the source stays lean. Do not
+  repeat it in the source. Relaxed limits, not a tutorial.
 - **Comment or docs?** (`comment-standards.md` 6b) If the text explains a concept
-  spanning several files, or how to use or run something, extend the existing docs
-  instead and keep at most a one-line pointer. Do not write docs for local detail,
-  one doc per function or a doc per change. List doc edits in the Push JSON `docs`.
+  spanning several files, or how to use or run something, update the existing docs
+  with the smallest edit that makes them true, and keep at most a one-line pointer.
+  A new doc file only for a new system or module, named in the Push JSON `docs` row
+  as `new`; a new system with no docs at all is a blocking finding. Do not write docs
+  for local detail, one doc per function or a doc per change. List every doc edit in
+  the Push JSON `docs`.
 - **Do not over-comment.** Default to zero new comments. Before any comment, try a
   rename, an extracted function, a test. Comment only the places the research brief
   marks as comment-worthy or where you have a reason the code cannot say. Put every

@@ -44,6 +44,8 @@ export function parseVerify(text) {
 }
 
 const KEBAB = /^[a-z][a-z0-9-]*$/
+/** Language-specific comment checks the audit knows; `comments.checks` in languages.json picks from these. */
+export const COMMENT_CHECKS = ['marker-space', 'inline-two-spaces', 'go-doc-name', 'no-trailing', 'rust-safety', 'jsdoc-no-types', 'hash-only']
 const isStringList = value => Array.isArray(value) && value.every(item => typeof item === 'string')
 
 /** `partial` is for an override of a known id: only the fields given are checked. */
@@ -76,6 +78,8 @@ export function validateLanguage(lang, ctx, { partial = false } = {}) {
     if (s?.sast?.tool === 'codeql') need(ctx.codeqlLanguages.includes(s.sast.language), `unknown CodeQL language ${s.sast.language}`)
   }
   if (has('comments')) need(isStringList(lang.comments?.line) && Array.isArray(lang.comments?.block), 'comments needs line (list of markers) and block (list of [open, close])')
+  if (has('comments') && lang.comments?.interface !== undefined) need(isStringList(lang.comments.interface) && lang.comments.interface.every(e => e.startsWith('.')), 'comments.interface must be a list of extensions (".h", ".d.ts")')
+  if (has('comments') && lang.comments?.checks !== undefined) need(isStringList(lang.comments.checks) && lang.comments.checks.every(c => COMMENT_CHECKS.includes(c)), `comments.checks must be a list from: ${COMMENT_CHECKS.join(', ')}`)
   if (has('docs')) need(typeof lang.docs?.format === 'string' && typeof lang.docs?.lineComment === 'string' && typeof lang.docs?.check === 'string', 'docs needs format, lineComment and check (see LANGUAGES.md)')
   if (has('docs') && lang.docs?.guide !== undefined) need(typeof lang.docs.guide === 'string' && lang.docs.guide.trim() !== '', 'docs.guide must be a non-empty string')
   for (const key of ['style', 'sensitiveHints', 'setupNotes', 'seenIn']) if (key in lang) need(isStringList(lang[key]), `${key} must be a list of strings`)
