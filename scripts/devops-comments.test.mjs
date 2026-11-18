@@ -209,3 +209,16 @@ test('narratives are blocked in comments and in docs', () => {
   assert.ok(!rules(commentAudit(quoted, { staged: true })).includes('narrative'), 'quoted examples are not narratives')
   assert.ok(found.every(f => f.blocking))
 })
+
+test('a C++ source and its .h interface share one check, and a SAFETY comment above an unchanged line counts', () => {
+  const header = '// Retries the send twice because the broker drops the first frame after reconnect.\nint send_frame(int fd);\n'
+  const source = '#include "net.h"\n// Retries the send twice because the broker drops the first frame after reconnect.\nint send_frame(int fd) { return fd; }\n'
+  const dir = repo({ 'net.h': header, 'net.cpp': source })
+  assert.deepEqual(commentAudit(dir, { staged: true }).findings.filter(f => f.rule === 'repeats-interface').map(f => f.file), ['net.cpp'])
+
+  const rust = repo({ 'r.rs': 'fn f(p: *const u8) -> u8 {\n    // SAFETY: callers pass a pointer from a live slice.\n    unsafe { *p }\n}\n' })
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'r'], { cwd: rust })
+  fs.writeFileSync(path.join(rust, 'r.rs'), 'fn f(p: *const u8) -> u8 {\n    // SAFETY: callers pass a pointer from a live slice.\n    unsafe { *p.add(0) }\n}\n')
+  execFileSync('git', ['add', '-A'], { cwd: rust })
+  assert.ok(!rules(commentAudit(rust, { staged: true })).includes('rust-safety'))
+})

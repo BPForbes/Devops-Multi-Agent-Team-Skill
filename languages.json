@@ -234,6 +234,7 @@
           ]
         ],
         "interface": [
+          ".h",
           ".hpp",
           ".hh",
           ".hxx",

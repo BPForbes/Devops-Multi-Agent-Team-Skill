@@ -189,6 +189,12 @@ function listedCovers(listed, group) {
 const STRICT = { maxLineColumns: 80, densityWarn: 0.35, densityBlock: 0.5, densityMinComments: 5, longBlockLines: 6, interface: { densityWarn: 0.6, densityBlock: 0.75, longBlockLines: 12 } }
 const blockingIssue = (file, line, rule, remark) => ({ file, line, rule, blocking: true, text: '', remark: `issue (blocking): ${remark}` })
 
+/** A source file and its interface file share a directory and a stem, whatever the language. */
+const pairKey = (file, syntax) => {
+  const at = file.lastIndexOf('/')
+  return `${at === -1 ? '' : file.slice(0, at + 1)}${stemOf(file, syntax)}`
+}
+
 const stemOf = (file, syntax) => {
   const name = file.split('/').pop()
   const ext = [...(syntax.interface ? syntax.interfaceExts : syntax.sourceExts)].sort((a, b) => b.length - a.length).find(e => name.toLowerCase().endsWith(e.toLowerCase()))
@@ -204,8 +210,22 @@ function overlap(a, b) {
   return shared / Math.max(1, Math.min(left.size, right.size))
 }
 
+/**
+ * A `// SAFETY:` comment that sits above an unsafe line the diff does not touch is not in the diff (-U0), so read the
+ * audited file: the nearest non-blank line above must be the SAFETY comment.
+ */
+function hasSafetyAbove(readFile, file, line) {
+  if (!readFile) return false
+  const lines = (readFile(file) ?? '').split('\n')
+  for (let at = line - 2; at >= 0; at--) {
+    if (lines[at].trim() === '') continue
+    return /^\s*(\/\/|#|--)\s*SAFETY:/.test(lines[at])
+  }
+  return false
+}
+
 /** Checks a language's standard style guide makes on comments; `syntax.checks` lists the ones that apply. */
-function languageChecks(items, codeRows, syntax, file) {
+function languageChecks(items, codeRows, syntax, file, readFile) {
   const out = []
   const on = check => syntax.checks.includes(check)
   for (const item of items) {
@@ -224,7 +244,7 @@ function languageChecks(items, codeRows, syntax, file) {
       const words = above[0].text.split(/\s+/)
       if (declared && !words.slice(0, 2).includes(declared[1])) out.push(finding(above[0], 'go-doc-name', 'issue', true, `a doc comment on ${declared[1]} starts with its name (Go Doc Comments).`))
     }
-    if (on('rust-safety') && /\bunsafe\s*(\{|impl\b)/.test(row.text) && !above.some(i => /^SAFETY:/.test(i.text)) && !/\/\/\s*SAFETY:/.test(row.text)) {
+    if (on('rust-safety') && /\bunsafe\s*(\{|impl\b)/.test(row.text) && !above.some(i => /^SAFETY:/.test(i.text)) && !/\/\/\s*SAFETY:/.test(row.text) && !hasSafetyAbove(readFile, row.file, row.line)) {
       out.push(blockingIssue(row.file, row.line, 'rust-safety', 'an unsafe block needs a `// SAFETY:` comment above it saying why the invariants hold (Rust API Guidelines, clippy undocumented_unsafe_blocks).'))
     }
   }
@@ -268,12 +288,12 @@ export function auditDiff(diffText, config, { listed, docs, syntaxFor, readFile 
     codeTotal += code
     commentLines += items.filter(i => i.text !== '').length
     for (const item of items) findings.push(...judge(item, settings))
-    findings.push(...languageChecks(items, codeRows, syntax, file))
+    findings.push(...languageChecks(items, codeRows, syntax, file, readFile))
     for (const group of groups(items.filter(i => i.text !== ''))) {
       const first = group.items[0]
       const last = group.items[group.items.length - 1]
       const words = meaningful(group.items.map(i => i.text).join(' '))
-      if (syntax.interface) interfaceGroups.set(`${syntax.id}:${stemOf(file, syntax)}`, [...(interfaceGroups.get(`${syntax.id}:${stemOf(file, syntax)}`) ?? []), { file, line: first.line, words }])
+      if (syntax.interface) interfaceGroups.set(pairKey(file, syntax), [...(interfaceGroups.get(pairKey(file, syntax)) ?? []), { file, line: first.line, words }])
       else if (group.kind !== 'trailing' && words.length >= 5) sourceGroups.push({ file, syntax, first, words })
       if (group.kind !== 'doc' && group.kind !== 'trailing' && group.items.length >= limits.longBlockLines) {
         findings.push(finding(first, 'long-prose', 'issue', true, `${group.items.length} lines of prose in code. Shorten it to the one reason the code cannot show, or move the explanation to the existing docs (comment-standards.md 6b).`))
@@ -302,7 +322,7 @@ export function auditDiff(diffText, config, { listed, docs, syntaxFor, readFile 
     }
   }
   for (const source of sourceGroups) {
-    const key = `${source.syntax.id}:${stemOf(source.file, source.syntax)}`
+    const key = pairKey(source.file, source.syntax)
     if (!interfaceGroups.has(key) && readFile) {
       const dir = source.file.includes('/') ? source.file.slice(0, source.file.lastIndexOf('/') + 1) : ''
       for (const ext of source.syntax.interfaceExts) {
