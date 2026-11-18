@@ -17,6 +17,7 @@ const NARRATION = /^(?:(?:first|then|next|now|here|finally|after that|afterwards
 const CONCEPT = /\b(overview|architecture|how (?:it|this) works|usage:|how to (?:use|run|configure|deploy|install)|getting started|design overview|data ?flow|the flow is|this module (?:is|handles|implements|provides))\b/i
 const DOC_FILE = /(\.(md|mdx|markdown|rst|adoc|asciidoc|tex|txt)$|(^|\/)docs?\/)/i
 const NARRATIVE = /\b(originally|at first|in the beginning|we (tried|decided|realized|realised|found|discovered|noticed|wanted|ended up)|it turned out|turns out|after (much|some|a lot of|many)|eventually|long story|the story|journey|back when|over time we|little did|interestingly|as you can see|let'?s (take a look|dive|walk))\b/i
+const unquoted = text => text.replace(/`[^`]*`|"[^"]*"|“[^”]*”/g, '')
 const STOP = new Set(['the', 'a', 'an', 'of', 'to', 'for', 'this', 'that', 'is', 'in', 'on', 'value', 'param', 'parameter', 'argument', 'input', 'given', 'specified'])
 
 const tokens = text => text.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
@@ -143,7 +144,7 @@ function judge(item, config) {
   if (looksLikeCode(t)) out.push(finding(item, 'commented-out-code', 'issue', true, 'this looks like commented-out code. Delete it; version control keeps history.'))
   if (PROCESS.test(t)) out.push(finding(item, 'process-note', 'issue', true, 'this is a note about the change or the process, not about the code. Say it in the commit or the PR remarks; if a lasting reason exists, state that reason instead.'))
   if (QUESTION.test(t) && !/https?:\/\//.test(t)) out.push(finding(item, 'question', 'issue', true, 'a question or remark to a person does not belong in the code. Put it in the PR Q&A and delete the comment.'))
-  if (NARRATIVE.test(t)) out.push(finding(item, 'narrative', 'issue', true, 'this tells a story. State the fact or the reason in one plain sentence (comment-standards.md 5).'))
+  if (NARRATIVE.test(unquoted(t))) out.push(finding(item, 'narrative', 'issue', true, 'this tells a story. State the fact or the reason in one plain sentence (comment-standards.md 5).'))
   if (item.kind !== 'doc' && NARRATION.test(t)) {
     out.push(finding(item, 'narrates-code', 'issue', true, 'this narrates the implementation step by step. The code already says how; keep only the reason or the design choice (comment gate, comment-standards.md 0a), or delete it.'))
   }
@@ -245,7 +246,7 @@ export function auditDiff(diffText, config, { listed, docs, syntaxFor, readFile 
   for (const [file, rows] of byFile) {
     if (!DOC_FILE.test(file)) continue
     docLines += rows.filter(r => r.text.trim() !== '').length
-    for (const row of rows) if (NARRATIVE.test(row.text)) findings.push(blockingIssue(file, row.line, 'narrative', 'this doc line tells a story. State the fact plainly (comment-standards.md 5).'))
+    for (const row of rows) if (NARRATIVE.test(unquoted(row.text))) findings.push(blockingIssue(file, row.line, 'narrative', 'this doc line tells a story. State the fact plainly (comment-standards.md 5).'))
     const entry = (docs ?? []).find(e => e.file === file)
     if (docs && !entry) findings.push(blockingIssue(file, rows[0].line, 'unlisted-doc', 'this doc change is not in the Push JSON `docs` list. Add it with why it is shared, durable knowledge, or drop it if it only restates the code (comment-standards.md 6b).'))
     if (created.has(file) && !(typeof entry?.new === 'string' && entry.new.trim() !== '')) {
