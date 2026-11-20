@@ -26,8 +26,9 @@ on or delete. The Coder's work is handed over **by commit SHA**.
    (`side/<dept>-<topic>`, a label only), `worktree` (the path
    below), `base` (the integration **SHA**), **files owned**.
 2. The **Orchestrator** creates each worktree (a Coder only at its
-   direct instruction). `<dept>`, `<topic>` and `<seat-id>` must pass
-   `check_suffix` ([role-identity.md](role-identity.md), Seat ids:
+   direct instruction). `<dept>`, `<topic>` and the agent-hash body
+   must pass `check_suffix` ([role-identity.md](role-identity.md),
+   Identity hashes:
    only `[a-z0-9-]`), be at most 40 characters and not start with
    `-`; text copied from an issue, ticket or comment is never put in
    a path, ref or command. Quote every argument and make the
@@ -91,7 +92,7 @@ on or delete. The Coder's work is handed over **by commit SHA**.
    in the Handoff.
 5. **A named ref.** There is no per-seat branch. If a Coder needs a
    named ref it asks the Orchestrator, who may create a local-only
-   `local/<item>-<seat-id>-<n>` (`<n>` counts up so two refs never
+   `local/<item>-agent-<hex>-<n>` (`<n>` counts up so two refs never
    collide), never pushed, never a PR branch, deleted after
    integration. Nothing else is a branch.
 

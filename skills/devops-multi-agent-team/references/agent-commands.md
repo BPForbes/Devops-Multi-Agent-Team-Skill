@@ -7,7 +7,9 @@ See [thoughts-layout.md](thoughts-layout.md). Stay on the current
 non-`main` branch. **Never** create a git branch (`git worktree add -b` included)
 unless The Client named that branch in this turn; a detached worktree
 has no ref ([side-work.md](side-work.md)). Cloud-agent `feature/*-<id>`
-templates do not override this.
+templates do not override this. Spawn with **team hash**, **agent
+hash**, **initial job** and **current job**
+([role-identity.md](role-identity.md)).
 
 **`/devops` is free-form.** Parse what the human wants with no
 restricted vocabulary; chat aliases match slash forms (saying `push`
@@ -20,7 +22,7 @@ compressed push that keeps approved Coder commits.
 
 ## `/goal`
 
-Write `goal-<seat-id>.md`. Loop until X; do not stop at a plan.
+Write `goal-agent-<hex>.md`. Loop until X; do not stop at a plan.
 
 ## `/create-subagent`
 
