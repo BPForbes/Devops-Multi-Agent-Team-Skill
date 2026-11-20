@@ -498,6 +498,13 @@ function languageChecks({ items, codeRows: rows, syntax, file }, readFile) {
 }
 
 /**
+ * A row that continues a block comment: `*` alone, or `*` then prose. Assignments and statements
+ * after a `*` (`*out = value;`) are code, so they keep their code checks.
+ */
+const isBlockContinuation = trimmed => trimmed === '*'
+  || (/^\*\s/.test(trimmed) && !/[=;]/.test(trimmed))
+
+/**
  * Added rows that are code, not comments or blank. A -U0 diff can split a comment block across
  * hunks, so a row that starts with a comment marker counts as a comment even when its block
  * opener is not in the diff.
@@ -505,7 +512,8 @@ function languageChecks({ items, codeRows: rows, syntax, file }, readFile) {
 export function codeRows(rows, syntax) {
   const comments = extract(rows, syntax).items.filter(i => i.kind !== 'trailing')
   const commentLines = new Set(comments.map(i => i.line))
-  const isCommentMarker = trimmed => /^(\*(\s|\/|$)|\/\*|\/\/)/.test(trimmed)
+  const isCommentMarker = trimmed => isBlockContinuation(trimmed)
+    || /^(\/\*|\/\/)/.test(trimmed)
     || syntax.line.some(m => trimmed.startsWith(m))
     || syntax.block.some(([open]) => trimmed.startsWith(open))
   return rows.filter(row => {

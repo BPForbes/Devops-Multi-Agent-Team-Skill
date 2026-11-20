@@ -270,6 +270,15 @@ test('file types a human edits are audited with their language syntax', () => {
   assert.equal(found.commentLinesAdded, 7)
 })
 
+test('a spaced Go assignment after `*` is code; prose after `*` is a comment continuation', () => {
+  const long = `* out = ${'value + '.repeat(15)}1`
+  const dir = repo({ 'a.go': `package a\n\nfunc f(out *int, value int) {\n\t${long}\n}\n` })
+  assert.ok(rules(commentAudit(dir, { staged: true })).includes('long-code-line'))
+  const prose = `/*\n * ${'word '.repeat(30)}\n */\n`
+  const commented = repo({ 'b.go': `package b\n${prose}` })
+  assert.ok(!rules(commentAudit(commented, { staged: true })).includes('long-code-line'))
+})
+
 test('a Go pointer assignment is a code row, and `++ x` inside a hunk is an added line', () => {
   const long = `*out = ${'value + '.repeat(15)}1`
   const dir = repo({ 'a.go': `package a\n\nfunc f(out *int, value int) {\n\t${long}\n}\n` })
