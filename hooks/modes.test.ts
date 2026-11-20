@@ -27,17 +27,20 @@ test('free-form phrases route to skill modes', () => {
   expect(interpretSkillIntent('how does total work')).toEqual({
     word: 'question', mode: 'search', rest: 'how does total work',
   })
-  expect(interpretSkillIntent('map this project')).toMatchObject({
-    word: 'mind-map', mode: 'build',
+  expect(interpretSkillIntent('map this project')).toEqual({
+    word: 'mind-map', mode: 'build', rest: 'map this project',
   })
   expect(interpretSkillIntent('clean up comments in src')).toEqual({
     word: 'clean', mode: 'brief', rest: 'clean up comments in src',
   })
-  expect(interpretSkillIntent('run research on auth')).toMatchObject({
-    word: 'stage', mode: 'research',
+  expect(interpretSkillIntent('run research on auth')).toEqual({
+    word: 'stage', mode: 'research', rest: 'run research on auth',
   })
-  expect(interpretSkillIntent('allocate agents for billing')).toMatchObject({
-    word: 'allocate', mode: 'agent',
+  expect(interpretSkillIntent('allocate agents for billing')).toEqual({
+    word: 'allocate', mode: 'agent', rest: 'allocate agents for billing',
+  })
+  expect(interpretSkillIntent('map --mode tree total')).toEqual({
+    word: 'mind-map', mode: 'tree', rest: 'total',
   })
   expect(interpretSkillIntent('something novel')).toBeUndefined()
 })

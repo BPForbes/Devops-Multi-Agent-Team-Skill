@@ -270,9 +270,6 @@ export function interpretSkillIntent(args: string): SkillMode | undefined {
   const trimmed = args.trim()
   if (trimmed === '') return undefined
   const lower = trimmed.toLowerCase()
-  const first = splitFirst(trimmed)
-  const direct = parseSkillMode(first.word, first.rest)
-  if (direct !== undefined) return direct
   if (/^(how does|where is|what (is|does)|who (calls|uses)|explain)\b/.test(lower)) {
     return parseSkillMode('question', trimmed)
   }
@@ -295,7 +292,8 @@ export function interpretSkillIntent(args: string): SkillMode | undefined {
     const mode = which.startsWith('agent') ? 'agent' : which.startsWith('job') ? 'job' : 'pod'
     return parseSkillMode('allocate', `--mode ${mode} ${trimmed}`)
   }
-  return undefined
+  const first = splitFirst(trimmed)
+  return parseSkillMode(first.word, first.rest)
 }
 
 function splitFirst(args: string): { word: string; rest: string } {
