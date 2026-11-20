@@ -40,7 +40,8 @@ pass.
   profile says the project publishes API docs.
 - **Reuse:** the research brief has a module mind map and a reuse map, no
   open blocking finding says new code duplicates existing code, and every
-  "new, because ..." row holds.
+  "new, because ..." row holds. The brief carries the mind map's date and the
+  possible duplicates in scope (the Researcher owns the map).
 - **Checks that failed along the way** (see [monitoring.md](monitoring.md))
   are `verified` or `escalated` in the check ledger, and none was made to
   pass by skipping, loosening or disabling a check.

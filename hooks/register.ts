@@ -13,6 +13,7 @@ const THOUGHT_DIRS = ['devops-skill/thoughts/non-final', 'devops-skill/thoughts/
 const LANGUAGES_REF = { plugin: 'devops-multi-agent-team', key: 'languages' } as const
 const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
 const LINT_MODE_REF = { plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const
+const BRIEFED_REF = { plugin: 'devops-multi-agent-team', key: 'briefed' } as const
 const STANDARDS_REF = { plugin: 'devops-multi-agent-team', key: 'standards' } as const
 const STANDARDS_FILE_REF = { plugin: 'devops-multi-agent-team', key: 'standardsFile' } as const
 
@@ -27,6 +28,11 @@ async function currentStandards($: EngineInterface, root: string): Promise<strin
   await $.state.set(STANDARDS_FILE_REF, text)
   return summary
 }
+const MINDMAP_OVERVIEW = '.devops/mindmap/OVERVIEW.md'
+/** The mind map's wording: the package defaults, then the project's own file, key by key. */
+const MINDMAP_TEXT_OVERRIDE = '.devops/mindmap/text.json'
+/** Keeps the session prompt small: the overview is about forty lines, this is a guard against a huge README summary. */
+const MAX_OVERVIEW_CHARS = 4000
 
 
 const HELP = [
@@ -47,6 +53,20 @@ const HELP = [
   '/devops config set|unset|add|remove PATH [VALUE] | rule RULE error|off (you) change ' +
     '.devops/standards.json; checked before it is written',
 ].join('\n')
+
+async function mindmapText($: EngineInterface, root: string): Promise<Record<string, string>> {
+  const parse = (raw: unknown): Record<string, string> => {
+    try {
+      const text = (JSON.parse(typeof raw === 'string' ? raw : '') as { text?: Record<string, unknown> }).text ?? {}
+      return Object.fromEntries(Object.entries(text).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+    } catch {
+      return {}
+    }
+  }
+  const defaults = parse(await $.fs.read(`${$.plugin.root}/mindmap-text.json`).catch(() => ''))
+  const project = parse(await $.fs.read(`${root}/${MINDMAP_TEXT_OVERRIDE}`).catch(() => ''))
+  return { ...defaults, ...project }
+}
 
 async function detect($: EngineInterface): Promise<Found[]> {
   const root = await $.session.root()
@@ -189,7 +209,7 @@ export const register: Register = on => {
 
   on('command.run', { command: 'devops' }, async ($, e) => {
     const { word, rest } = splitArgs(e.args)
-    const isPerson = e.origin.kind === 'composer'
+    const isPerson = e.origin?.kind === 'composer'
     const personOnly = (): { text: string } | undefined =>
       isPerson ? undefined : { text: `/devops ${word} changes a gate, so only you can run it by typing it; an agent cannot.` }
 
@@ -366,23 +386,39 @@ export const register: Register = on => {
 
   on('tool.run', { tool: `mcp__${PLUGIN}__${BRIEF_TOOL}` }, async ($, e) => {
     const input = e as unknown as { topic?: unknown; role?: unknown }
+    await $.state.set(BRIEFED_REF, true)
     return { result: await briefFor($, input) }
   })
 
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
-    const languages = await $.state.get(LANGUAGES_REF)
+    const root = await $.session.root()
+    const languages = (await $.state.get(LANGUAGES_REF)).value ?? []
+    const hasProfile = await $.fs.exists(`${root}/.devops/project.md`).catch(() => false)
+    const overview = await $.fs.read(`${root}/${MINDMAP_OVERVIEW}`).catch(() => '')
+    const wording = await mindmapText($, root)
+    const mindmapSection = typeof overview === 'string' && overview.trim() !== ''
+      ? [{
+          id: `${PLUGIN}:mindmap`,
+          text: [
+            wording.chatPrompt,
+            overview.length > MAX_OVERVIEW_CHARS ? `${overview.slice(0, MAX_OVERVIEW_CHARS)}\n${wording.chatOverviewCut ?? ''}` : overview,
+          ].filter(Boolean).join('\n\n'),
+          scope: 'session' as const,
+        }]
+      : []
+    const briefed = (await $.state.get(BRIEFED_REF)).value === true
+    if (languages.length === 0 && !hasProfile && !briefed) return { sections: [...composed.sections, ...mindmapSection] }
     const gates = await $.state.get(GATES_REF)
     const lint = await $.state.get(LINT_MODE_REF)
-    const root = await $.session.root()
     const standards = await currentStandards($, root)
     const text = card({
-      languages: languages.value ?? [],
-      hasProfile: await $.fs.exists(`${root}/.devops/project.md`).catch(() => false),
+      languages,
+      hasProfile,
       gates: gates.value ?? true,
       lintMode: lint.value ?? 'warn',
       standards: standards || undefined,
     })
-    return { sections: [...composed.sections, { id: `${PLUGIN}:context`, text, scope: 'session' as const }] }
+    return { sections: [...composed.sections, { id: `${PLUGIN}:context`, text, scope: 'session' as const }, ...mindmapSection] }
   })
 }

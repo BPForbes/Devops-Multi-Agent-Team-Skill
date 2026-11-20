@@ -512,7 +512,7 @@ export const KIT_DIR = 'devops-skill/kit'
 const KIT_SERVER = `${KIT_DIR}/mcp/server.mjs`
 /** Package parts a plugin needs but a project install does not. */
 const KIT_LEAVE_OUT = new Set(['.claude-plugin', '.mcp.json', 'hooks', 'types'])
-const OWN_SKILLS = ['devops-multi-agent-team', 'devops-cleanup']
+const OWN_SKILLS = ['devops-multi-agent-team', 'devops-cleanup', 'project-mindmap']
 const MODE_LOCAL = '# mode: local-only (nothing the install wrote is committed)'
 const MODE_SHARED = '# mode: share-config (.devops/ is committed; tools and copies stay local)'
 /** Local artifacts the team writes, ignored in every mode. */
