@@ -34,7 +34,13 @@ const INSTRUCTIONS = [
   'Sets up the DevOps multi-agent team (skill, agents, commands, per-language profile, services, sandbox) in a project.',
   'Flow: detect_project, then install_devops_team with apply=false and show the plan, then apply=true only after the user agrees.',
   'Any language can be used for any purpose; layers are only sorting tags. Use list_languages / get_language / add_language for languages not yet defined.',
-  'The server only writes .cursor/, .claude/, .devops/, devops-skill/ (thought files and cleanup snapshots), .gitignore and (ghas_plan with apply) the .github security files and SECURITY.md inside the project, and never runs project commands; sandbox_plan only prints a container command; tag tools never push, move or delete a tag.',
+  [
+    'The server only writes .cursor/, .claude/, .devops/, devops-skill/ (tools, thought files and',
+    'cleanup snapshots), .git/info/exclude (or .gitignore outside git), the removal of its own old',
+    'block from .gitignore, and (ghas_plan with apply) the .github security files and SECURITY.md',
+    'inside the project, and never runs project commands; sandbox_plan only prints a container',
+    'command; tag tools never push, move or delete a tag.',
+  ].join(' '),
   'Researchers: read documentation first, then module_map and reuse_search before any code is written.',
 ].join(' ') + '\n\n' + SETUP_SCRIPT
 
@@ -126,14 +132,24 @@ const TOOLS = [
   },
   {
     name: 'status',
-    description: 'What is installed in the project: skill for Cursor/Claude, profile, sandbox doc, .gitignore block.',
+    description: [
+      'What is installed in the project: skill for Cursor/Claude, profile, sandbox doc, the tools',
+      'in devops-skill/kit/, and the ignore block (gitignoreOk, ignoreFile).',
+    ].join(' '),
     inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
     annotations: { readOnlyHint: true },
     run: args => status(projectDir(args), allowedRoots()),
   },
   {
     name: 'install_devops_team',
-    description: 'Install the DevOps multi-agent team into a project: skill, agents, commands (Cursor and/or Claude), .devops/ language and service data, the project profile, the sandbox doc, and the .gitignore block that keeps devops-skill/thoughts/ out of git. With apply=false (default) it only reports the plan. Existing files that differ are kept unless force=true.',
+    description: [
+      'Install the DevOps multi-agent team into a project: skill, agents and commands (Cursor',
+      'and/or Claude), the tools in devops-skill/kit/ (MCP server, lint, config), the profile, the',
+      'sandbox doc and the standards file. Nothing it writes is committed: it all goes into',
+      '.git/info/exclude. shareConfig=true keeps .devops/ committable so a team shares the profile',
+      'and standards. With apply=false (default) it only reports the plan. Existing files that',
+      'differ are kept unless force=true.',
+    ].join(' '),
     inputSchema: {
       type: 'object',
       properties: {
@@ -144,12 +160,14 @@ const TOOLS = [
         sandbox: { type: 'boolean', description: 'Write .devops/sandbox.md (default true).' },
         skipRules: { type: 'array', items: { type: 'string' }, description: 'Rule files not to install (reuse-before-implement, comments) because the project already has an equivalent.' },
         force: { type: 'boolean', description: 'Overwrite files that differ (default false).' },
+        shareConfig: { type: 'boolean', description: 'Commit .devops/ (default false: local).' },
         apply: { type: 'boolean', description: 'false (default) = plan only; true = write.' },
       },
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     run: args => install({
+      shareConfig: args.shareConfig === undefined ? undefined : args.shareConfig === true,
       dest: projectDir(args), roots: allowedRoots(),
       target: ['auto', 'cursor', 'claude', 'both'].includes(args.target) ? args.target : 'auto',
       lang: idList(args.languages, 'languages'),
@@ -172,7 +190,14 @@ const TOOLS = [
   },
   {
     name: 'ensure_gitignore',
-    description: 'Add or repair the managed .gitignore block that keeps devops-skill/thoughts/ (research notes, review threads, QA notes, scratch) out of git while keeping its .gitkeep and the committed .devops/project.md. Plan only unless apply=true.',
+    description: [
+      'Add or repair the managed ignore block that keeps everything the install wrote out of git:',
+      'the tools (devops-skill/kit/), thought files, the copies in .claude/ and .cursor/, the MCP',
+      'config files it created and, unless the project shares its config, .devops/. In a git',
+      'repository it writes .git/info/exclude, which is never committed, so no tracked file',
+      'changes. It also lists files git already tracks with the command to untrack them. Plan',
+      'only unless apply=true.',
+    ].join(' '),
     inputSchema: { type: 'object', properties: { dest, apply: { type: 'boolean' } }, additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     run: args => {

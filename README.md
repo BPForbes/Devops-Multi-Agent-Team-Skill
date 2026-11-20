@@ -33,13 +33,34 @@ The package ships an MCP server (`mcp/server.mjs`, Node 18+, no dependencies)
 so you can set up any project by talking to your assistant instead of copying
 files.
 
-**Fastest: one command** installs the skill (into the `.cursor/` and/or `.claude/` folders the project already has, else both) and connects the MCP server:
+**Fastest: one command** installs the skill (into the `.cursor/` and/or `.claude/` folders the project already has, else both), copies the tools into the project and connects the MCP server:
 
 ```bash
 node scripts/devops-setup.mjs init --dest ~/my-project        # or: scripts/install.sh --dest ~/my-project
 ```
 
-It writes the server into `.mcp.json` (Claude Code), `.cursor/mcp.json` (Cursor) and `.vscode/mcp.json` where those clients are used, keeps any other servers already listed, and refuses a config file that is not valid JSON. `connect --client claude,cursor,vscode [--npx]` does only the connection. The `--npx` form points at `npx -y -p github:BPForbes/Devops-Multi-Agent-Team-Skill devops-multi-agent-team-mcp` (not tried by me).
+**Self-contained and kept out of git.** The project gets its own copy of the tools (MCP server,
+lint, config, data) in `devops-skill/kit/`, so it needs nothing outside its own folder and the
+clone can be moved or deleted. Nothing the install writes is committed: the tools, thought files,
+the copies in `.claude/` and `.cursor/`, the MCP config files it created and `.devops/` are listed
+in `.git/info/exclude`, git's own local ignore file, so no tracked file changes and `git status`
+stays clean. Each person runs `init` once in their clone. Re-running it updates the kit.
+
+- `--share-config` keeps `.devops/` (profile, standards, stories) committable so a team shares them;
+  the tools and copies stay local.
+- A file of the project's own with the same name as one of ours (say `.claude/commands/goal.md`)
+  is kept and stays visible to git.
+- An earlier install that committed copies: the report lists the files git still tracks and the
+  `git rm -r --cached ...` command that untracks them (files stay on disk). It never runs it. An
+  old block in `.gitignore` is removed.
+- Outside a git repository the block goes into `.gitignore`; run `ensure_gitignore` after `git init`.
+
+`connect` points `.mcp.json` (Claude Code), `.cursor/mcp.json` (Cursor) and `.vscode/mcp.json` at
+the project's own server by a relative path (`${CLAUDE_PROJECT_DIR:-.}/devops-skill/kit/mcp/server.mjs`,
+`${workspaceFolder}/...`), keeping any other servers listed. If git tracks that config file, it is
+left alone and a local alternative is printed (`claude mcp add ... --scope local`, or the user-level
+Cursor file). `connect --client claude,cursor,vscode [--npx]` does only the connection; `--npx` runs
+the published package instead of the kit (not tried by me).
 
 **The MCP server carries its own setup script.** When a client connects, the server's instructions include [`mcp/setup-script.md`](mcp/setup-script.md): detect, choose languages and services, plan, ask, apply, check the toolchain, remind about the profile. Any assistant that connects knows how to do the install without further prompting, and the same text is the `setup_project` prompt and the resource `devops://setup`. Edit that file to change how the install is run.
 
@@ -107,11 +128,10 @@ never returns a secret. Commands inside language and service entries are
 guidance for the team; the server does not execute them.
 
 **Thought files stay out of git.** Research notes, review threads, QA notes and scratch live in
-`devops-skill/thoughts/non-final/` (open work) and `devops-skill/thoughts/final/` (closed work).
-Installing creates both folders and adds a managed block to `.gitignore` that ignores them. The
-block is repaired if damaged, and a warning appears if another rule ignores all of `.devops/`,
-which holds the committed profile `.devops/project.md`. The tests check this against real
-`git check-ignore`.
+`devops-skill/thoughts/non-final/` (open work) and `devops-skill/thoughts/final/` (closed work),
+next to the tools in `devops-skill/kit/`. The managed block in `.git/info/exclude` ignores all of
+`devops-skill/`, and is repaired if damaged. The tests check this against real `git check-ignore`
+and `git status`.
 
 ## Languages, services and the sandbox
 
@@ -203,7 +223,7 @@ The installer also copies the reuse and comment rules into `.cursor/rules/`
 ## How it fits together
 
 ```text
-languages.json + services.json + standards.json ──▶ MCP server / devops-setup ──▶ .devops/project.md, sandbox.md, .gitignore block
+languages.json + services.json + standards.json ──▶ MCP server / devops-setup ──▶ .devops/project.md, sandbox.md, devops-skill/kit/, .git/info/exclude block
                                            │                          ▲
                                            └──▶ mod: status line, /devops │ read first by every seat (SKILL.md, Step 0)
 ```

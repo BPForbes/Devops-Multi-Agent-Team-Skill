@@ -174,7 +174,7 @@ test('the process puts notes in the PR and not in code, and gives Coders, Resear
   assert.match(read('skills/devops-multi-agent-team/references/push-json.md'), /comment budget/)
 })
 
-test('install creates the story catalog with a project code, committed rather than ignored', () => {
+test('install creates the story catalog with a project code; local unless shared', () => {
   const dir = project({ 'a.py': '' })
   fs.renameSync(dir, dir + '-ProjectX')
   const named = dir + '-ProjectX'
@@ -185,7 +185,13 @@ test('install creates the story catalog with a project code, committed rather th
   assert.ok(fs.existsSync(path.join(named, '.claude/skills/devops-multi-agent-team/references/story-template.md')))
   assert.ok(fs.existsSync(path.join(named, '.claude/commands/story.md')))
   execFileSyncGit(named, ['init', '-q'])
-  assert.notEqual(spawnSync('git', ['check-ignore', '-q', '.devops/stories/catalog.json'], { cwd: named }).status, 0)
+  const check = ['check-ignore', '-q', '.devops/stories/catalog.json']
+  const ignored = dir => spawnSync('git', check, { cwd: dir }).status === 0
+  assert.ok(ignored(named), 'nothing the install writes is committed by default')
+  const shared = project({ 'a.py': '' })
+  execFileSyncGit(shared, ['init', '-q'])
+  install({ dest: shared, target: 'claude', shareConfig: true })
+  assert.ok(!ignored(shared), 'with shareConfig the catalog is committed')
 })
 
 function execFileSyncGit(dir, args) {
@@ -210,8 +216,10 @@ test('init installs and connects the MCP server, keeping other servers, and conn
   assert.deepEqual(first.connected.written, [path.join(dir, '.cursor/mcp.json')])
   const config = JSON.parse(fs.readFileSync(path.join(dir, '.cursor/mcp.json'), 'utf8'))
   assert.equal(config.mcpServers.other.command, 'x')
-  assert.equal(config.mcpServers['devops-multi-agent-team'].env.DEVOPS_MCP_ROOTS, dir)
-  assert.ok(config.mcpServers['devops-multi-agent-team'].args[0].endsWith('mcp/server.mjs'))
+  const server = config.mcpServers['devops-multi-agent-team']
+  assert.equal(server.env.DEVOPS_MCP_ROOTS, '${workspaceFolder}', 'no machine-specific path')
+  assert.equal(server.args[0], '${workspaceFolder}/devops-skill/kit/mcp/server.mjs')
+  assert.ok(fs.existsSync(path.join(dir, 'devops-skill/kit/mcp/server.mjs')))
   assert.ok(!fs.existsSync(path.join(dir, '.mcp.json')), 'only the clients the project uses')
 
   const again = connectClients({ dest: dir, clients: 'cursor' })
@@ -219,7 +227,7 @@ test('init installs and connects the MCP server, keeping other servers, and conn
   const several = connectClients({ dest: dir, clients: 'claude,vscode', npx: true })
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, '.vscode/mcp.json'), 'utf8')).servers['devops-multi-agent-team'].type, 'stdio')
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, '.mcp.json'), 'utf8')).mcpServers['devops-multi-agent-team'].command, 'npx')
-  assert.ok(several.commands[0].includes('claude mcp add'))
+  assert.deepEqual(several.skipped, [])
   assert.throws(() => connectClients({ dest: dir, clients: 'emacs' }), /unknown client/)
 
   fs.writeFileSync(path.join(dir, '.mcp.json'), '{ not json')

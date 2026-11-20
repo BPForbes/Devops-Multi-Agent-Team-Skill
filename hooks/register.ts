@@ -200,7 +200,9 @@ export const register: Register = on => {
           'Or one command from a shell (installs and connects the MCP server):',
           `  node ${$.plugin.root}/scripts/devops-setup.mjs init --dest .`,
           '--dry-run previews; --lang rust,typescript chooses languages; --target cursor|claude|both overrides the auto-detected host folders.',
-          'Then fill in the "Fill in by hand" section of .devops/project.md and commit it.',
+          'It copies the tools into devops-skill/kit/ and keeps everything it writes out of git',
+          '(.git/info/exclude). --share-config commits .devops/ so the team shares the profile.',
+          'Then fill in the "Fill in by hand" section of .devops/project.md.',
         ].join('\n'),
       }
     }
