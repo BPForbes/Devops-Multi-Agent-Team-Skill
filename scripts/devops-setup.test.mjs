@@ -319,3 +319,14 @@ test('init --plugin prints its report and exits 0', () => {
   assert.equal(ran.status, 0, ran.stderr)
   assert.match(ran.stdout, /plugin provides the MCP server/)
 })
+
+test('a root install leaves an older unnamed block that belongs to a subproject', () => {
+  const repo = gitProject({ 'api/a.py': '', 'b.py': '' })
+  const old = '# >>> devops-multi-agent-team (managed block; do not edit between the markers)\n'
+    + '# mode: local-only (nothing the install wrote is committed)\n/api/devops-skill/\n'
+    + '# <<< devops-multi-agent-team\n'
+  fs.appendFileSync(path.join(repo, '.git/info/exclude'), old)
+  install({ dest: repo, target: 'claude' })
+  assert.ok(ignored(repo, 'api/devops-skill/kit/x.mjs'), 'the /api block is kept')
+  assert.ok(ignored(repo, 'devops-skill/kit/x.mjs'))
+})

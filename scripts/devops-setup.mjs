@@ -642,7 +642,7 @@ function ownedPaths(dest, { shareConfig }) {
 }
 
 /** One block per project folder, so projects that share a repository keep their own blocks. */
-const beginFor = prefix => (prefix ? `${GITIGNORE_BEGIN} [${prefix}]` : GITIGNORE_BEGIN)
+const beginFor = prefix => `${GITIGNORE_BEGIN} [${prefix || '/'}]`
 
 /**
  * This project's block in `text`, as line numbers: its own markers, or a block from before blocks
@@ -658,7 +658,8 @@ function findBlock(text, prefix, { any = false } = {}) {
     if (end === -1) return null
     const body = lines.slice(start + 1, end)
     const firstPath = body.find(line => line.startsWith('/'))
-    const oldStyleMine = unnamed && (!prefix || firstPath === `${prefix}/devops-skill/`)
+    const ownPath = firstPath === undefined ? !prefix : firstPath === `${prefix}/devops-skill/`
+    const oldStyleMine = unnamed && ownPath
     if (any || lines[start] === beginFor(prefix) || oldStyleMine) return { lines, start, end, body }
     start = end
   }

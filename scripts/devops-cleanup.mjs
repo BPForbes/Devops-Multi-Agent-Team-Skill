@@ -350,7 +350,10 @@ const F_line = (F, at) => F.norm[at].line
 /** Candidates for cleanup in the scope: duplicate blocks, long or deeply nested functions, noisy comments. */
 const SCAN_LIMIT = 40
 
-/** `readFile(rel)` reads a file from a snapshot (the index, a commit) instead of the working tree. */
+/**
+ * `readFile(rel)` reads a file from a snapshot (the index, a commit) instead of the working tree;
+ * then `paths` are the files to scan, even ones the working tree no longer has.
+ */
 export function scanProject(destInput, options = {}) {
   const { goals = ALL_GOALS, paths = [], exclude = [], thresholds = {} } = options
   const { limit = SCAN_LIMIT, roots, readFile } = options
@@ -360,7 +363,8 @@ export function scanProject(destInput, options = {}) {
   const syntaxFor = syntaxTable(dest)
   const table = extensionTable(dest)
   const inScope = rel => (paths.length === 0 || paths.some(p => rel === p || rel.startsWith(p.replace(/\/$/, '') + '/'))) && !exclude.some(p => (p === 'tests' ? TEST_FILE.test(rel) : rel === p || rel.startsWith(p.replace(/\/$/, '') + '/')))
-  const files = walk(dest).files.filter(rel => inScope(rel) && !SKIP_FILE.test(rel)).slice(0, settings.maxFiles)
+  const listed = readFile ? paths : walk(dest).files.filter(inScope)
+  const files = listed.filter(rel => !SKIP_FILE.test(rel)).slice(0, settings.maxFiles)
   const entries = []
   const candidates = []
   const unsupported = {}
