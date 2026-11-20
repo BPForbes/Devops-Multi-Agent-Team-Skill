@@ -268,7 +268,8 @@ test('an added `++ i` is a code line, not a file header', () => {
 
 test('the size scan reads a staged file that the working tree no longer has', () => {
   const body = Array.from({ length: 40 }, (_, i) => `  total += input[${i}]`).join('\n')
-  const dir = repo({ 'long.js': `export function sum(input) {\n  let total = 0\n${body}\n  return total\n}\n` })
+  const text = `export function sum(input) {\n  let total = 0\n${body}\n  return total\n}\n`
+  const dir = repo({ 'long.js': text })
   fs.rmSync(path.join(dir, 'long.js'))
   assert.ok(rulesAt(lintCheck(dir, { staged: true }), 'long.js').includes('function-length'))
 })
