@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { bareCode, scanProject } from './devops-cleanup.mjs'
 import {
-  auditDiff, codeRows, parseAdded, readDiff, snapshotReader, syntaxTable,
+  auditDiff, blockInterior, codeRows, parseAdded, readDiff, snapshotReader, syntaxTable,
 } from './devops-comments.mjs'
 import { PATTERNS, RULES } from './devops-lint-rules.mjs'
 import { detectLanguages, resolveDest } from './devops-setup.mjs'
@@ -248,10 +248,11 @@ function codeFindings(dest, diffText, { standards, roots, snapshot }) {
   }
   const out = []
   const addedByFile = new Map()
+  const readFile = snapshotReader(dest, snapshot)
   for (const [file, rows] of byFile) {
     const syntax = syntaxFor(file)
     if (!syntax) continue
-    const code = codeRows(rows, syntax)
+    const code = codeRows(rows, syntax, blockInterior(readFile(file) ?? '', syntax))
     addedByFile.set(file, new Set(rows.map(r => r.line)))
     const unit = { file, rows: code, languageId: syntax.id, markers: syntax.line, snapshot }
     out.push(...patternFindings(file, code, syntax.id))

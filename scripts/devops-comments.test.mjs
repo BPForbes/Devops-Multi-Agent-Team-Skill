@@ -294,3 +294,22 @@ test('a staged audit reads the staged file, not an unstaged edit', () => {
   fs.writeFileSync(path.join(dir, 'c.rs'), unstaged)
   assert.ok(rules(commentAudit(dir, { staged: true })).some(r => /safety/i.test(r)))
 })
+
+test('a Go `*` statement is code; a long line inside a block comment is not', () => {
+  const statement = `\t* out++ + ${'value + '.repeat(12)}1`
+  const code = repo({ 'a.go': `package a\n\nfunc f(out *int, value int) {\n${statement}\n}\n` })
+  assert.ok(rules(commentAudit(code, { staged: true })).includes('long-code-line'))
+  const prose = ` * ${'word '.repeat(30)}`
+  const block = repo({ 'b.go': `package b\n\n/*\n${prose}\n*/\nfunc g() {}\n` })
+  assert.ok(!rules(commentAudit(block, { staged: true })).includes('long-code-line'))
+})
+
+test('a continuation is recognised when its opener is in the file, not the diff', () => {
+  const dir = repo({ 'c.go': 'package c\n\n/*\n * short\n*/\nfunc h() {}\n' })
+  const who = ['-c', 'user.name=t', '-c', 'user.email=t@t']
+  execFileSync('git', [...who, 'commit', '-q', '-m', 'base'], { cwd: dir })
+  const long = ` * ${'word '.repeat(30)}`
+  fs.writeFileSync(path.join(dir, 'c.go'), `package c\n\n/*\n * short\n${long}\n*/\nfunc h() {}\n`)
+  execFileSync('git', ['add', '-A'], { cwd: dir })
+  assert.ok(!rules(commentAudit(dir, { staged: true })).includes('long-code-line'))
+})

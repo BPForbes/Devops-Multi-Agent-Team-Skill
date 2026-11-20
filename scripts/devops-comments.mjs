@@ -498,34 +498,62 @@ function languageChecks({ items, codeRows: rows, syntax, file }, readFile) {
 }
 
 /**
- * A row that continues a block comment: `*` alone, or `*` then prose. Assignments and statements
- * after a `*` (`*out = value;`) are code, so they keep their code checks.
+ * Without the file, a row that starts with `*` is taken as a continuation only when it is `*` alone
+ * or `*` then prose: no `=`, `;` or `++`/`--`. Go statements such as `* out++` are code.
  */
 const isBlockContinuation = trimmed => trimmed === '*'
-  || (/^\*\s/.test(trimmed) && !/[=;]/.test(trimmed))
+  || (/^\*\s/.test(trimmed) && !/[=;]|\+\+|--/.test(trimmed))
+
+/** The block-comment lines of a file as the audit reads it, or null when there is no reader. */
+const interiorFor = (file, syntax, readFile) => (readFile
+  ? blockInterior(readFile(file) ?? '', syntax)
+  : null)
+
+/**
+ * The 1-based lines of `text` inside a block comment: the lines after an opener, through its closer.
+ * The opener's own line is not included.
+ */
+export function blockInterior(text, syntax) {
+  const inside = new Set()
+  let close = null
+  text.split('\n').forEach((line, index) => {
+    if (close !== null) {
+      inside.add(index + 1)
+      if (line.includes(close)) close = null
+      return
+    }
+    const opening = syntax.block.find(([open]) => line.includes(open))
+    if (!opening) return
+    const [open, end] = opening
+    if (!line.slice(line.indexOf(open) + open.length).includes(end)) close = end
+  })
+  return inside
+}
 
 /**
  * Added rows that are code, not comments or blank. A -U0 diff can split a comment block across
  * hunks, so a row that starts with a comment marker counts as a comment even when its block
  * opener is not in the diff.
  */
-export function codeRows(rows, syntax) {
+export function codeRows(rows, syntax, interior = null) {
   const comments = extract(rows, syntax).items.filter(i => i.kind !== 'trailing')
   const commentLines = new Set(comments.map(i => i.line))
-  const isCommentMarker = trimmed => isBlockContinuation(trimmed)
+  const isCommentMarker = (trimmed, line) => (interior
+    ? trimmed.startsWith('*') && interior.has(line)
+    : isBlockContinuation(trimmed))
     || /^(\/\*|\/\/)/.test(trimmed)
     || syntax.line.some(m => trimmed.startsWith(m))
     || syntax.block.some(([open]) => trimmed.startsWith(open))
   return rows.filter(row => {
     const trimmed = row.text.trim()
-    return trimmed !== '' && !commentLines.has(row.line) && !isCommentMarker(trimmed)
+    return trimmed !== '' && !commentLines.has(row.line) && !isCommentMarker(trimmed, row.line)
   })
 }
 
 /** Added code lines over the project's code line limit; comment lines are judged by `judge`. */
-function longCodeLines(rows, limits, syntax) {
+function longCodeLines(rows, limits, syntax, interior) {
   const limit = limits.codeLineColumns
-  return codeRows(rows, syntax)
+  return codeRows(rows, syntax, interior)
     .filter(row => row.text.length > limit && !URL.test(row.text))
     .map(row => {
       const remark = `this line is ${row.text.length} columns; the code limit is ${limit}`
@@ -592,7 +620,8 @@ function fileFindings(file, rows, ctx) {
   const code = extracted.codeLines.get(file) ?? 0
   const items = extracted.items
   const findings = [
-    ...items.flatMap(item => judge(item, limits)), ...longCodeLines(rows, limits, syntax),
+    ...items.flatMap(item => judge(item, limits)),
+    ...longCodeLines(rows, limits, syntax, interiorFor(file, syntax, ctx.readFile)),
     ...languageChecks({ ...extracted, syntax, file }, ctx.readFile),
   ]
   for (const group of groups(items.filter(i => i.text !== ''))) {
