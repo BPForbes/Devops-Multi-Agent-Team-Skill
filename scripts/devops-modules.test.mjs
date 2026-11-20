@@ -61,6 +61,8 @@ test('reuse search finds definitions, docs and variants, skips secrets and redac
 test('tags: history between releases, warnings, unreleased bump, plan and create', () => {
   const dir = project({ 'src/a.ts': 'a\n' })
   git(dir, 'init', '-q', '-b', 'main')
+  git(dir, 'config', 'user.name', 't')
+  git(dir, 'config', 'user.email', 't@t')
   git(dir, 'add', '.')
   git(dir, 'commit', '-q', '-m', 'feat: first')
   git(dir, 'tag', '-a', 'v1.0.0', '-m', 'one')

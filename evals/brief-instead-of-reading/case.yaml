@@ -1,8 +1,0 @@
-schema_version: "1.1"
-name: brief-instead-of-reading
-description: A reviewer question is answered from devops_brief, not by reading the skill whole.
-tags: [mod, tokens, merge]
-runs: 1
-expected_outcome: >-
-  The agent calls devops_brief for the reviewer role or the lint gate and answers from it,
-  without reading the skill's reference files whole.
