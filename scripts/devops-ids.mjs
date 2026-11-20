@@ -52,20 +52,43 @@ export function isHex6(value) {
   return typeof value === 'string' && HEX6.test(value)
 }
 
-/** Refuse a judge that authored the work or shares an authoring pod. */
+/** All team hashes on a record: current `team` plus `teams` history. */
+export function teamsOf(record) {
+  if (!record || typeof record !== 'object') return []
+  const listed = [
+    ...(record.team ? [record.team] : []),
+    ...(Array.isArray(record.teams) ? record.teams : []),
+  ]
+  return [...new Set(listed.filter(isTeamId))]
+}
+
+/** Refuse a judge that authored the work or shares any authoring pod. */
 export function independenceOk(judge, authors) {
   if (!judge || !isAgentId(judge.agent)) {
     return { ok: false, reason: 'judge needs an agent id' }
   }
-  for (const author of authors ?? []) {
+  const judgeTeams = teamsOf(judge)
+  if (judgeTeams.length === 0) {
+    return { ok: false, reason: 'incomplete: judge teams required' }
+  }
+  const list = authors ?? []
+  if (list.length === 0) {
+    return { ok: false, reason: 'incomplete: authors required' }
+  }
+  for (const author of list) {
     if (author.agent && author.agent === judge.agent) {
       return { ok: false, reason: `own work: ${judge.agent}` }
     }
     if (judge.handle && author.handle && author.handle === judge.handle) {
       return { ok: false, reason: `own handle: ${judge.handle}` }
     }
-    if (judge.team && author.team && author.team === judge.team) {
-      return { ok: false, reason: `own pod: ${judge.team}` }
+    const authorTeams = teamsOf(author)
+    if (authorTeams.length === 0) {
+      return { ok: false, reason: `incomplete: author teams for ${author.agent ?? '?'}` }
+    }
+    const shared = judgeTeams.find(team => authorTeams.includes(team))
+    if (shared !== undefined) {
+      return { ok: false, reason: `own pod: ${shared}` }
     }
   }
   return { ok: true }
@@ -111,19 +134,23 @@ export function itemRecord({ item, kind, notes, authors = [], team, path }) {
 function usage() {
   return [
     'Usage:',
-    '  devops-ids mint team|agent|item',
+    '  devops-ids mint team',
+    '  devops-ids mint agent',
+    '  devops-ids mint item',
     '  devops-ids check team|agent|item|job VALUE',
-    '  devops-ids independence --judge AGENT [--team TEAM] [--handle H] \\',
-    '      --author AGENT[:TEAM[:HANDLE]] ...',
+    '  devops-ids independence --judge AGENT --team TEAM [--teams T1,T2] \\',
+    '      [--handle H] --author AGENT:TEAM[+TEAM...][:HANDLE] ...',
     '  devops-ids free --registry JSON [--want JOB] [--initial JOB]',
   ].join('\n')
 }
 
 function parseAuthor(spec) {
-  const [agent, team, handle] = String(spec).split(':')
+  const [agent, teamPart, handle] = String(spec).split(':')
+  const teamList = (teamPart ?? '').split('+').map(t => t.trim()).filter(Boolean)
   return {
     agent,
-    ...(team ? { team } : {}),
+    ...(teamList[0] ? { team: teamList[0] } : {}),
+    ...(teamList.length > 1 ? { teams: teamList.slice(1) } : {}),
     ...(handle ? { handle } : {}),
   }
 }
@@ -162,9 +189,19 @@ function runCheck(rest) {
 
 function takeFlag(rest, i, judge, authors) {
   const arg = rest[i]
-  if (arg === '--judge') return { i: i + 1, judge: { ...judge, agent: rest[i + 1] }, authors }
-  if (arg === '--team') return { i: i + 1, judge: { ...judge, team: rest[i + 1] }, authors }
-  if (arg === '--handle') return { i: i + 1, judge: { ...judge, handle: rest[i + 1] }, authors }
+  if (arg === '--judge') {
+    return { i: i + 1, judge: { ...judge, agent: rest[i + 1] }, authors }
+  }
+  if (arg === '--team') {
+    return { i: i + 1, judge: { ...judge, team: rest[i + 1] }, authors }
+  }
+  if (arg === '--teams') {
+    const teams = String(rest[i + 1] ?? '').split(',').map(t => t.trim()).filter(Boolean)
+    return { i: i + 1, judge: { ...judge, teams }, authors }
+  }
+  if (arg === '--handle') {
+    return { i: i + 1, judge: { ...judge, handle: rest[i + 1] }, authors }
+  }
   if (arg === '--author') {
     return { i: i + 1, judge, authors: [...authors, parseAuthor(rest[i + 1])] }
   }

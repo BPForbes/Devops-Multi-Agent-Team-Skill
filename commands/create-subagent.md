@@ -21,9 +21,11 @@ Spawn specialized roles. They run **asynchronously in pods**, not a linear queue
 5. Subagents accept any `/` command or the same words (`/goal`, `/code-review`, `/repro`, `/buildkite-*`, `/sonar-*`, and so on).
 6. Give every spawned seat a **team hash**, **agent hash**, **initial
    job** and **current job** (minted by the Orchestrator, see
-   `role-identity.md` Identity hashes; `node scripts/devops-ids.mjs
-   mint team|agent`) and put all four in the spawn description.
-   Resume standing seats; do not mint a new agent hash for them.
+   `role-identity.md` Identity hashes; run
+   `node scripts/devops-ids.mjs mint team` and
+   `node scripts/devops-ids.mjs mint agent`) and put all four in the
+   spawn description. Resume standing seats; do not mint a new agent
+   hash for them.
 7. Working Markdown goes in `devops-skill/thoughts/non-final/` while open.
    Agent files set `is_background: true`. Always spawn with
    `run_in_background: true`.

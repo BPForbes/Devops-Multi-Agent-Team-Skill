@@ -14,6 +14,7 @@ import {
   mintAgentId,
   mintItemId,
   mintTeamId,
+  teamsOf,
 } from './devops-ids.mjs'
 
 test('minted ids match the team/agent/item forms', () => {
@@ -40,16 +41,44 @@ test('independence refuses own agent, own handle and own pod', () => {
     true,
   )
   assert.match(
-    independenceOk(judge, [{ agent: 'agent-aaaaaa' }]).reason,
+    independenceOk(judge, [{ agent: 'agent-aaaaaa', team: 'team-111111' }]).reason,
     /own work/,
   )
   assert.match(
-    independenceOk(judge, [{ agent: 'agent-bbbbbb', handle: 'h1' }]).reason,
+    independenceOk(judge, [{
+      agent: 'agent-bbbbbb', team: 'team-222222', handle: 'h1',
+    }]).reason,
     /own handle/,
   )
   assert.match(
     independenceOk(judge, [{ agent: 'agent-bbbbbb', team: 'team-111111' }]).reason,
     /own pod/,
+  )
+})
+
+test('independence uses team history and fails closed when incomplete', () => {
+  const judge = {
+    agent: 'agent-aaaaaa',
+    team: 'team-999999',
+    teams: ['team-111111'],
+  }
+  assert.deepEqual(teamsOf(judge).sort(), ['team-111111', 'team-999999'])
+  assert.match(
+    independenceOk(judge, [{ agent: 'agent-bbbbbb', team: 'team-111111' }]).reason,
+    /own pod: team-111111/,
+  )
+  assert.match(
+    independenceOk({ agent: 'agent-aaaaaa' }, [{
+      agent: 'agent-bbbbbb', team: 'team-222222',
+    }]).reason,
+    /incomplete: judge teams/,
+  )
+  assert.match(
+    independenceOk(
+      { agent: 'agent-aaaaaa', team: 'team-111111' },
+      [{ agent: 'agent-bbbbbb' }],
+    ).reason,
+    /incomplete: author teams/,
   )
 })
 

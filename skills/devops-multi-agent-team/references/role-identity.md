@@ -77,9 +77,14 @@ who is currently on a job: need more coders → prefer agents whose
 Fixed name under `non-final/`. One row per agent:
 
 ```text
-agent | team | handle | initial_job | current_job | job_history | replaced_by
+agent | team | teams | handle | initial_job | current_job | job_history | replaced_by
 ```
 
+- **team:** the pod the agent is on **now**.
+- **teams:** every team hash the agent has ever joined this PR
+  (current included). Independence checks this full set, not only
+  the current pod. Moving an agent to another pod **adds** the new
+  team hash; it never drops an old one.
 - **job_history:** one entry per `item: job (from, to)` in order
   (item label, job function, ISO from, ISO to or `open`). A rotated
   agent gains a history entry, never a new agent hash and never a
@@ -87,8 +92,10 @@ agent | team | handle | initial_job | current_job | job_history | replaced_by
 - Standing seats (Reviewer, Security, QA) keep one agent hash for
   the PR; resume them (SendMessage), do not re-mint, unless
   replaced (replacement gets a new agent hash and a new team hash
-  only if it joins a different pod).
+  only if it joins a different pod — still recorded in `teams`).
 - Rows stay after the agent ends so "never reused" is checkable.
+- `devops-ids independence` **fails closed** when judge or author
+  team membership is missing.
 
 ### Shared items (item hash + notes)
 
@@ -163,8 +170,8 @@ when any of these hold (Orchestrator checks before routing):
 A rotated agent keeps its hashes; see
 [department-pods.md](department-pods.md), Multiple teams. Every
 Handoff to a reviewer names `Authors:` (agent hashes) and `Teams:`
-(team hashes). Machine check:
-`node scripts/devops-ids.mjs independence --judge agent-… --team team-… --author agent-…:team-…`.
+(team hashes). Machine check (pass every team the judge has joined via `--teams`):
+`node scripts/devops-ids.mjs independence --judge agent-… --team team-… --teams team-old,… --author agent-…:team-…`.
 
 ## Interrupt, goals, Handoff
 

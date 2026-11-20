@@ -307,12 +307,13 @@ follows the *agent hash* and the *team hash*:
   not judge that change either — pod-mates are excluded even when
   they never touched the files.
 - Reallocation moves an agent to *other* work (often another team's
-  item, which means a **new team hash** only when the Orchestrator
-  reassigns the agent onto that other pod; same-pod rotation keeps
-  the team hash). An agent moved from coding to review reviews only
-  changes it and its pod did not author; a seat that gave design
-  advice on a plan may review the diff only if the Orchestrator
-  records that call from the registry; the agent does not decide it.
+  item: the Orchestrator sets `team` to that pod's hash and **appends**
+  it to `teams` history; same-pod rotation keeps `team` unchanged).
+  Independence still refuses any pod in that history. An agent moved
+  from coding to review reviews only changes it and its pods did not
+  author; a seat that gave design advice on a plan may review the diff
+  only if the Orchestrator records that call from the registry; the
+  agent does not decide it.
 - Reviewer, Security and QA must come from a **different team hash**
   than the authors, and the three must be three different agent
   hashes. The Orchestrator does not review code it wrote or touched
