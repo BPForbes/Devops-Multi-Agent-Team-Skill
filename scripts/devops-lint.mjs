@@ -2,9 +2,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { bareCode, scanProject } from './devops-cleanup.mjs'
-import { auditDiff, codeRows, parseAdded, readDiff, syntaxTable } from './devops-comments.mjs'
+import {
+  auditDiff, codeRows, parseAdded, readDiff, snapshotReader, syntaxTable,
+} from './devops-comments.mjs'
 import { PATTERNS, RULES } from './devops-lint-rules.mjs'
-import { assertInside, detectLanguages, resolveDest } from './devops-setup.mjs'
+import { detectLanguages, resolveDest } from './devops-setup.mjs'
 import { loadStandards, magicLimits } from './devops-standards.mjs'
 import { git } from './devops-tags.mjs'
 import { isMain } from './devops-main.mjs'
@@ -110,6 +112,9 @@ function constantName(text, languageId) {
   return KEYWORD_CONSTANT_LANGUAGES.has(languageId) ? KEYWORD_CONSTANT.exec(text)?.[1] : undefined
 }
 
+/** Go exports by capital letter, not by keyword. */
+const isPublicName = (name, languageId) => languageId === 'go' && /^[A-Z]/.test(name)
+
 function declaredNames(text, languageId, { exemptPublic }) {
   if (exemptPublic && PUBLIC_LINE.test(text)) return []
   const names = (DECLARATIONS[languageId] ?? []).map(re => re.exec(text)?.[1])
@@ -117,23 +122,30 @@ function declaredNames(text, languageId, { exemptPublic }) {
   const hasImports = ['javascript', 'typescript', 'python'].includes(languageId)
   if (hasImports) names.push(...importedNames(text))
   const wanted = name => name && name !== '*' && !KEYWORDS.has(name) && !EXEMPT_NAME.test(name)
+    && !(exemptPublic && isPublicName(name, languageId))
   return [...new Set(names.filter(wanted))]
 }
 
-/** Lines in the repository's code (tracked and untracked, docs left out) that mention `name`. */
-function mentions(dest, name) {
-  const args = ['grep', '-w', '-c', '-F', '--untracked', '-e', name, '--', '.', ...DOC_PATHS]
-  const ran = git(dest, args)
-  if (!ran.ok) return 0
-  const counts = ran.out.split('\n').filter(Boolean).map(row => Number(row.split(':').pop()))
-  return counts.reduce((sum, count) => sum + count, 0)
+/** Where to search: the index, the range's head commit, or the working tree with untracked files. */
+function snapshotArgs({ base, head = 'HEAD', staged }) {
+  if (base) return { flags: [], revision: [head] }
+  return { flags: [staged ? '--cached' : '--untracked'], revision: [] }
 }
 
-function unusedSymbols(dest, { file, rows, languageId }, lint) {
+/** How often `name` appears in the code of the audited snapshot (docs left out). */
+function mentions(dest, name, snapshot) {
+  const { flags, revision } = snapshotArgs(snapshot)
+  const pattern = ['-w', '-o', '-F', ...flags, '-e', name]
+  const args = ['grep', ...pattern, ...revision, '--', '.', ...DOC_PATHS]
+  const ran = git(dest, args)
+  return ran.ok ? ran.out.split('\n').filter(Boolean).length : 0
+}
+
+function unusedSymbols(dest, { file, rows, languageId, snapshot }, lint) {
   if (NOT_CODE.has(languageId) || TEST_FILE.test(file)) return []
   const exemptPublic = lint?.exemptPublic === true
   return rows.flatMap(row => declaredNames(row.text, languageId, { exemptPublic })
-    .filter(name => mentions(dest, name) <= 1)
+    .filter(name => mentions(dest, name, snapshot) <= 1)
     .map(name => `\`${name}\` is declared but never used.`)
     .map(message => finding(file, row.line, 'unused-symbol', message)))
 }
@@ -188,10 +200,11 @@ function candidateFindings(c, added) {
 }
 
 /** Size rules from the cleanup scan, kept where the function touches an added line. */
-function sizeFindings(dest, addedByFile, roots) {
+function sizeFindings(dest, addedByFile, { roots, snapshot }) {
   const paths = [...addedByFile.keys()]
   if (paths.length === 0) return []
-  const scan = scanProject(dest, { goals: ['split'], paths, limit: SCAN_LIMIT, roots })
+  const readFile = snapshotReader(dest, snapshot)
+  const scan = scanProject(dest, { goals: ['split'], paths, limit: SCAN_LIMIT, roots, readFile })
   return scan.candidates
     .filter(c => addedByFile.has(c.file))
     .flatMap(c => candidateFindings(c, addedByFile.get(c.file)))
@@ -226,21 +239,12 @@ function toolFindings(commands, push) {
   })
 }
 
-function readFileIn(dest) {
-  return rel => {
-    try {
-      const abs = path.join(dest, rel)
-      assertInside(dest, abs)
-      return fs.readFileSync(abs, 'utf8')
-    } catch { return null }
-  }
-}
-
-function codeFindings(dest, diffText, { standards, roots }) {
+function codeFindings(dest, diffText, { standards, roots, snapshot }) {
   const syntaxFor = syntaxTable(dest)
   const byFile = new Map()
   for (const row of parseAdded(diffText)) {
-    byFile.set(row.file, [...(byFile.get(row.file) ?? []), row])
+    if (!byFile.has(row.file)) byFile.set(row.file, [])
+    byFile.get(row.file).push(row)
   }
   const out = []
   const addedByFile = new Map()
@@ -249,17 +253,18 @@ function codeFindings(dest, diffText, { standards, roots }) {
     if (!syntax) continue
     const code = codeRows(rows, syntax)
     addedByFile.set(file, new Set(rows.map(r => r.line)))
-    const unit = { file, rows: code, languageId: syntax.id, markers: syntax.line }
+    const unit = { file, rows: code, languageId: syntax.id, markers: syntax.line, snapshot }
     out.push(...patternFindings(file, code, syntax.id))
     out.push(...unusedSymbols(dest, unit, standards.lint))
     out.push(...magicNumbers(unit, magicLimits(standards, syntax.id)))
   }
-  return [...out, ...sizeFindings(dest, addedByFile, roots)]
+  return [...out, ...sizeFindings(dest, addedByFile, { roots, snapshot })]
 }
 
 /** The comment audit's findings under the same rule ids, with their fix. */
-function commentFindings(dest, diffText, standards, { listed, docs }) {
-  const options = { listed, docs, syntaxFor: syntaxTable(dest), readFile: readFileIn(dest) }
+function commentFindings(dest, diffText, standards, { listed, docs, snapshot }) {
+  const readFile = snapshotReader(dest, snapshot)
+  const options = { listed, docs, syntaxFor: syntaxTable(dest), readFile }
   return auditDiff(diffText, standards, options).findings.map(f => {
     const message = f.remark.replace(/^[a-z]+ \([a-z-]+\): /, '')
     const level = f.blocking ? 'blocking' : 'non-blocking'
@@ -294,11 +299,12 @@ export function lintCheck(destInput, options = {}) {
   const { base, head, staged = false, listed, docs, push, roots } = options
   const dest = resolveDest(destInput, roots)
   const standards = loadStandards(dest)
-  const diff = readDiff(dest, { base, head, staged })
+  const snapshot = { base, head, staged }
+  const diff = readDiff(dest, snapshot)
   const tools = push ? toolFindings(lintCommands(dest, { roots }).commands, push) : []
   const all = [
-    ...commentFindings(dest, diff.text, standards, { listed, docs }),
-    ...codeFindings(dest, diff.text, { standards, roots }),
+    ...commentFindings(dest, diff.text, standards, { listed, docs, snapshot }),
+    ...codeFindings(dest, diff.text, { standards, roots, snapshot }),
     ...tools,
   ]
   return { dest, source: diff.source, ...summarize(applyConfig(all, standards.lint)) }

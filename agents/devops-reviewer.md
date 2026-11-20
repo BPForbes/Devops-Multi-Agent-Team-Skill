@@ -34,8 +34,8 @@ push** (except review-bot feedback fixes outside the exceptions: references/qa-p
 
 ## Review bar
 
-**Lint gate first: hard deny.** Before reading the diff, run `lint_check` on the
-side branch (`base` = the integration base) with the Push JSON as `push`
+**Lint gate first: hard deny.** Before reading the diff, run `lint_check` with
+`base` = the integration base, `head` = the side-branch commit SHA and the Push JSON as `push`
 ([lint-rules.md](../skills/devops-multi-agent-team/references/lint-rules.md)).
 It covers every comment rule, line length, function size, unused functions,
 variables and imports, security patterns, outdated APIs and debug leftovers,
@@ -57,7 +57,7 @@ When Lean is on, start from the Push JSON `formal` rows and write-ups: check tha
 
 Also check [oop-principles.md](../skills/devops-multi-agent-team/references/oop-principles.md): `issue (blocking)` for a new type switch on concrete types, a child that throws or no-ops what its parent promises, an `instanceof` guard that exists only to avoid a child, a function named for two jobs. Ask what the next variant would cost and what the parent's tests say about this child. `cleanup_scan` with goal `oop` finds `type-switch` and `lsp-risk` candidates.
 
-Check the diff against [clean-code.md](../skills/devops-multi-agent-team/references/clean-code.md) too: `issue (blocking)` for misleading or vague names in new code, copy-pasted logic, a magic number (any number used directly in code), a swallowed error, a flag argument, or a function far over the limits in new code; `suggestion (non-blocking)` for smaller simplifications. Run `cleanup_scan` on the files the change touched.
+Check the diff against [clean-code.md](../skills/devops-multi-agent-team/references/clean-code.md) too: `issue (blocking)` for misleading or vague names in new code, copy-pasted logic, a magic number (a number used directly in code that is not in `magicLiterals.allowed`), a swallowed error, a flag argument, or a function far over the limits in new code; `suggestion (non-blocking)` for smaller simplifications. Run `cleanup_scan` on the files the change touched.
 
 Be strict. Label every finding with a Conventional Comments label and the
 reviewer id (`issue (blocking): ...`, `suggestion (non-blocking): ...`).

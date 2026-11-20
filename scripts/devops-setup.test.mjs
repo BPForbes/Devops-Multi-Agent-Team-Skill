@@ -282,3 +282,40 @@ test('a language can be used whatever its layer: any id installs', () => {
   const report = install({ dest: dir, target: 'claude', lang: 'gdscript,cobol,r,html,zig', services: 'none', dryRun: true })
   assert.deepEqual(report.languages, ['gdscript', 'cobol', 'r', 'html', 'zig'])
 })
+
+test('two projects in one repository keep their own ignore blocks', () => {
+  const repo = gitProject({ 'api/a.py': '', 'web/b.ts': '' })
+  install({ dest: path.join(repo, 'api'), target: 'claude' })
+  install({ dest: path.join(repo, 'web'), target: 'claude' })
+  install({ dest: path.join(repo, 'api'), target: 'claude' })
+  assert.ok(ignored(repo, 'api/devops-skill/kit/mcp/server.mjs'))
+  assert.ok(ignored(repo, 'web/devops-skill/kit/mcp/server.mjs'))
+  const exclude = fs.readFileSync(path.join(repo, '.git/info/exclude'), 'utf8')
+  assert.equal(exclude.split('[/api]').length - 1, 1, 'the api block is replaced, not repeated')
+})
+
+test('the share-config choice made before git init is kept after it', () => {
+  const dir = project({ 'a.py': '' })
+  install({ dest: dir, target: 'claude', shareConfig: true })
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: dir })
+  install({ dest: dir, target: 'claude' })
+  assert.ok(!ignored(dir, '.devops/project.md'))
+  assert.ok(ignored(dir, 'devops-skill/thoughts/final/x.md'))
+})
+
+test('an npx connection is ignored, and a tracked config gets an npx alternative', () => {
+  const dir = gitProject({ 'a.py': '', '.claude/.keep': '' })
+  connectClients({ dest: dir, clients: 'claude', npx: true })
+  assert.ok(ignored(dir, '.mcp.json'))
+  const shared = gitProject({ 'a.py': '', '.mcp.json': '{}\n', '.claude/.keep': '' })
+  const report = connectClients({ dest: shared, clients: 'claude', npx: true })
+  assert.ok(report.commands.some(c => c.includes('DEVOPS_MCP_ROOTS=') && c.includes(' npx ')))
+})
+
+test('init --plugin prints its report and exits 0', () => {
+  const dir = gitProject({ 'a.py': '' })
+  const script = path.join(path.dirname(new URL(import.meta.url).pathname), 'devops-setup.mjs')
+  const ran = spawnSync('node', [script, 'init', '--plugin', '--dest', dir], { encoding: 'utf8' })
+  assert.equal(ran.status, 0, ran.stderr)
+  assert.match(ran.stdout, /plugin provides the MCP server/)
+})

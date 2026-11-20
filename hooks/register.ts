@@ -1,7 +1,9 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Found } from '../types'
-import { branchNameOf, classify, classifySegments, commitInfo, splitArgs, verdictOf } from './guard'
+import {
+  branchNameOf, classify, classifySegments, commitInfo, shellWords, splitArgs, verdictOf,
+} from './guard'
 import { BRIEF_SPEC, BRIEF_TOOL, briefFor, card, readStandards, setupClaude } from './orchestrate'
 
 const PLUGIN = 'devops-multi-agent-team'
@@ -12,6 +14,19 @@ const LANGUAGES_REF = { plugin: 'devops-multi-agent-team', key: 'languages' } as
 const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
 const LINT_MODE_REF = { plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const
 const STANDARDS_REF = { plugin: 'devops-multi-agent-team', key: 'standards' } as const
+const STANDARDS_FILE_REF = { plugin: 'devops-multi-agent-team', key: 'standardsFile' } as const
+
+/** The standards summary, read again only when .devops/standards.json changed since the last read. */
+async function currentStandards($: EngineInterface, root: string): Promise<string> {
+  const text = await $.fs.read(`${root}/.devops/standards.json`).catch(() => '')
+  const seen = await $.state.get(STANDARDS_FILE_REF)
+  const cached = await $.state.get(STANDARDS_REF)
+  if (seen.value === text && cached.value !== undefined) return cached.value
+  const summary = (await readStandards($, root)) ?? ''
+  await $.state.set(STANDARDS_REF, summary)
+  await $.state.set(STANDARDS_FILE_REF, text)
+  return summary
+}
 
 
 const HELP = [
@@ -164,8 +179,7 @@ export const register: Register = on => {
         'allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off|config ...]',
     })
     await $.tool.register(BRIEF_SPEC).catch(() => undefined)
-    const standards = await readStandards($, await $.session.root())
-    await $.state.set(STANDARDS_REF, standards ?? '')
+    await currentStandards($, await $.session.root())
     const found = await detect($)
     await $.state.set({ plugin: 'devops-multi-agent-team', key: 'languages' } as const, found.map(f => f.id))
     $.ui.status(found.length === 0 ? undefined : `devops: ${found.slice(0, 4).map(f => f.id).join('+')}`)
@@ -258,7 +272,7 @@ export const register: Register = on => {
       return { text: `Comment audit on commit: ${rest}.` }
     }
     if (word === 'config') {
-      const args = rest.split(/\s+/).filter(Boolean)
+      const args = shellWords(rest)
       if (CONFIG_WRITES.includes(args[0] ?? '')) {
         const refused = personOnly()
         if (refused) return refused
@@ -360,14 +374,14 @@ export const register: Register = on => {
     const languages = await $.state.get(LANGUAGES_REF)
     const gates = await $.state.get(GATES_REF)
     const lint = await $.state.get(LINT_MODE_REF)
-    const standards = await $.state.get(STANDARDS_REF)
     const root = await $.session.root()
+    const standards = await currentStandards($, root)
     const text = card({
       languages: languages.value ?? [],
       hasProfile: await $.fs.exists(`${root}/.devops/project.md`).catch(() => false),
       gates: gates.value ?? true,
       lintMode: lint.value ?? 'warn',
-      standards: standards.value || undefined,
+      standards: standards || undefined,
     })
     return { sections: [...composed.sections, { id: `${PLUGIN}:context`, text, scope: 'session' as const }] }
   })

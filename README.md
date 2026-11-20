@@ -43,8 +43,8 @@ node scripts/devops-setup.mjs init --dest ~/my-project        # or: scripts/inst
 lint, config, data) in `devops-skill/kit/`, so it needs nothing outside its own folder and the
 clone can be moved or deleted. Nothing the install writes is committed: the tools, thought files,
 the copies in `.claude/` and `.cursor/`, the MCP config files it created and `.devops/` are listed
-in `.git/info/exclude`, git's own local ignore file, so no tracked file changes and `git status`
-stays clean. Each person runs `init` once in their clone. Re-running it updates the kit.
+in `.git/info/exclude`, git's own local ignore file, so on a fresh install no tracked file changes
+and `git status` stays clean. Each person runs `init` once in their clone. Re-running it updates the kit.
 
 - `--share-config` keeps `.devops/` (profile, standards, stories) committable so a team shares them;
   the tools and copies stay local.
@@ -52,7 +52,7 @@ stays clean. Each person runs `init` once in their clone. Re-running it updates 
   is kept and stays visible to git.
 - An earlier install that committed copies: the report lists the files git still tracks and the
   `git rm -r --cached ...` command that untracks them (files stay on disk). It never runs it. An
-  old block in `.gitignore` is removed.
+  old block in `.gitignore` is removed; that `.gitignore` change is yours to review and commit.
 - Outside a git repository the block goes into `.gitignore`; run `ensure_gitignore` after `git init`.
 
 `connect` points `.mcp.json` (Claude Code), `.cursor/mcp.json` (Cursor) and `.vscode/mcp.json` at
@@ -92,9 +92,9 @@ prompts) walks the same steps.
 | `list_languages`, `get_language` | the 40 languages, each with install, validation, security tools, style and how it interacts with the others |
 | `list_services`, `get_service` | Docker, Podman, devcontainers, Kubernetes, AWS, GCP, Azure, Cloudflare, Claude, GPT, Gemini, Ollama, Multipass, Lima, Vagrant, QEMU |
 | `detect_project`, `status` | what the project's files show; what is installed |
-| `install_devops_team` | skill, agents, commands for Cursor and/or Claude, `.devops/` data, profile, sandbox doc, `.gitignore` block (plan unless `apply=true`) |
+| `install_devops_team` | skill, agents, commands for Cursor and/or Claude, `.devops/` data, profile, sandbox doc, ignore block in `.git/info/exclude` (`.gitignore` outside git) (plan unless `apply=true`) |
 | `get_profile` | the profile it would write, without writing |
-| `ensure_gitignore` | add or repair the block that keeps `devops-skill/thoughts/` out of git |
+| `ensure_gitignore` | add or repair the ignore block (`.git/info/exclude`, or `.gitignore` outside git) |
 | `add_language` | define a language that is not listed; validated, saved to `.devops/languages.local.json` |
 | `check_toolchain` | is each tool installed? (`<tool> --version` only; env vars reported as set/unset, never their values) |
 | `sandbox_plan` | prints the container command that runs a command for a language in the sandbox; runs nothing |

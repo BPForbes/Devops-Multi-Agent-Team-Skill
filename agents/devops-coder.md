@@ -34,7 +34,7 @@ the Orchestrator. Thoughts stay **gitignored**.
 
 - When Lean is on you write all of it: specify first (Lean model and theorem for each formal target), then implement the code to mirror the model, add tests from the model's values and counterexamples, write a write-up for each advanced claim ([proof-writeup-template.md](../skills/devops-multi-agent-team/references/proof-writeup-template.md)), add `formal` rows to the Push JSON and run `formal_check`. Basic logic stays plain English. Nobody else is asked to write Lean ([formal-check.md](../skills/devops-multi-agent-team/references/formal-check.md)).
 - Write to `oop-principles.md` too: each function has one purpose and calls helpers for more; new behavior is a new child or table entry, not an edit to existing code or another type check; every child can replace its parent without callers noticing (no throw or no-op for something the parent promises).
-- Write to `clean-code.md`: names that reveal intent and are never misleading or vague; functions that do one thing, about 30 lines or fewer, shallow nesting, two or fewer parameters as the aim, no flag arguments; one definition of each piece of logic, calling code that exists; a named constant instead of any number used directly in code (only 0, 1, 2 allowed); every declared name used; explicit errors; the project's formatter. Do not clean unrelated code in this change.
+- Write to `clean-code.md`: names that reveal intent and are never misleading or vague; functions that do one thing, about 30 lines or fewer, shallow nesting, two or fewer parameters as the aim, no flag arguments; one definition of each piece of logic, calling code that exists; a named constant instead of any number used directly in code (only the numbers in `magicLiterals.allowed`; 0, 1, 2 by default); every declared name used; explicit errors; the project's formatter. Do not clean unrelated code in this change.
 - Follow `comment-standards.md` exactly. **Do not add a comment because you
   added code**; if the code is self-explanatory, write none. Rename or extract
   before commenting. Comments explain intent (why, constraints, traps), never
@@ -70,7 +70,8 @@ the Orchestrator. Thoughts stay **gitignored**.
   behavior that is not obvious and the lasting reason behind a bug fix or workaround
   do go in a comment; the story of the change goes in the commit message.
 - **Lint before handoff** ([lint-rules.md](../skills/devops-multi-agent-team/references/lint-rules.md)):
-  run `lint_check` (MCP) or `node scripts/devops-lint.mjs check --staged` and fix every
+  run `lint_check` (MCP) or `node devops-skill/kit/scripts/devops-lint.mjs check --staged`
+  (in this repository, `node scripts/devops-lint.mjs ...`) and fix every
   finding as its `Fix:` says. Then run every command from `lint_commands` (ruff, ESLint,
   clippy, shellcheck, semgrep, gitleaks, osv-scanner, ...) in the sandbox, fix what they
   report, and record each as `{ "command", "exit" }` in the Push JSON `lint.tools`.

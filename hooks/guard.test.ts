@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { branchNameOf, classify, commitInfo, splitArgs, verdictOf } from './guard'
+import { branchNameOf, classify, commitInfo, shellWords, splitArgs, verdictOf } from './guard'
 
 test('git push and gh pr publishing are found, however they are spelled', () => {
   expect(classify('git push origin HEAD')).toEqual([{ kind: 'publish', what: 'git push' }])
@@ -39,6 +39,9 @@ test('a QA note is read by its last verdict line', () => {
 test('command arguments and branch names are parsed strictly', () => {
   expect(splitArgs('  allow-branch  feature/x ')).toEqual({ word: 'allow-branch', rest: 'feature/x' })
   expect(splitArgs('')).toEqual({ word: '', rest: '' })
+  expect(shellWords('set linters.python.command "ruff check ." 7')).toEqual(
+    ['set', 'linters.python.command', 'ruff check .', '7'])
+  expect(shellWords(`add lint.exclude 'vendor/**'`)).toEqual(['add', 'lint.exclude', 'vendor/**'])
   expect(branchNameOf('feature/ok-1.2')).toBe('feature/ok-1.2')
   expect(branchNameOf('a..b')).toBeUndefined()
   expect(branchNameOf('x; rm -rf /')).toBeUndefined()

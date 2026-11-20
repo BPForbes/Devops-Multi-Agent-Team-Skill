@@ -77,7 +77,9 @@ export function findSection(docs: Doc[], topic: string): string {
   const best = ranked[0]?.section
   if (!best) return `Nothing in the skill matches "${topic}".\n\n${indexOf(docs)}`
   const cut = best.body.length > MAX_SECTION_CHARS
-  const shortened = `${best.body.slice(0, MAX_SECTION_CHARS)}\n[cut: ask with a narrower topic]`
+  const rest = `read the rest of "${best.heading}" in ${best.file}`
+  const note = `[cut at ${MAX_SECTION_CHARS} characters: ${rest}]`
+  const shortened = `${best.body.slice(0, MAX_SECTION_CHARS)}\n${note}`
   const body = cut ? shortened : best.body
   const more = ranked.slice(1, 1 + SEE_ALSO).map(r => `- ${title(r.section)}`)
   const also = more.length > 0 ? ['', 'Also matching:', ...more] : []

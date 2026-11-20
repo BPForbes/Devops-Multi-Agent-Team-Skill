@@ -29,7 +29,7 @@ test('a topic returns the one best section and names the next ones', () => {
   expect(answer).not.toContain('Coders and reviewers')
   expect(findSection(docs, 'zzz nothing')).toContain('Nothing in the skill matches')
   const long = [{ file: 'big.md', text: `## Huge\n\n${'word '.repeat(MAX_SECTION_CHARS)}` }]
-  expect(findSection(long, 'huge')).toContain('[cut: ask with a narrower topic]')
+  expect(findSection(long, 'huge')).toContain('[cut at 6000 characters: read the rest of')
 })
 
 test('a role returns that seat\'s brief, and an unknown one lists the roles', () => {

@@ -13,8 +13,10 @@ declare module 'claude-code' {
       commentAudit: 'warn' | 'strict' | 'off'
       /** Cleared by a pass. */
       checkFailures: Record<string, number>
-      /** The project's standards in one line, read at session start; empty when there are none. */
+      /** The project's standards in one line; empty when there are none. */
       standards: string
+      /** The .devops/standards.json text the summary was read from, to see when it changes. */
+      standardsFile: string
     }
   }
 }

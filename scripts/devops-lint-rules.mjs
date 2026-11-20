@@ -150,7 +150,7 @@ export const PATTERNS = [
     use: 'Buffer.from or Buffer.alloc' },
   { rule: 'outdated', languages: JS, re: /\.substr\s*\(/, use: 'slice or substring' },
   { rule: 'outdated', languages: JS, re: /\burl\.parse\s*\(/, use: 'new URL()' },
-  { rule: 'outdated', languages: JS, re: /\b__proto__\b/,
+  { rule: 'outdated', languages: JS, re: /\.__(?:proto)__\b|\b__(?:proto)__\s*:/,
     use: 'Object.getPrototypeOf / Object.setPrototypeOf' },
   { rule: 'outdated', languages: ['python'],
     re: /^\s*(import imp\b|from imp import|import distutils|from distutils)/,

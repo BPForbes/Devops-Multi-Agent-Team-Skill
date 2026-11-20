@@ -49,7 +49,7 @@
 - Use `TODO:`, `FIXME:` and `NOTE:` (all caps) for incomplete work, known
   bugs or workarounds, and subtle or security-sensitive spots.
 - Write comments as complete sentences: capital letter, full stop, wrapped
-  before 80 columns. Link the source of any borrowed algorithm or protocol.
+  at `lineLength.comment` (80 columns by default). Link the source of any borrowed algorithm or protocol.
 - Review feedback uses Conventional Comments: `<label> [decorations]: <subject>`,
   for example `issue (blocking): ...` or `suggestion (non-blocking): ...`.
 

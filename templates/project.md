@@ -99,7 +99,7 @@ pinning them in tooling.
 - **Release rules:** `<changelog / version / lock rules the QA seat checks, or "none">`
 - **Tooling wired:** CI `<GitHub Actions | Buildkite | none>` · quality `<Sonar | none>` · security `<Snyk | none>` · tickets `<Linear | GitHub issues | none>` · browser `<MCP | none>`
 - **Story catalog:** project code `<XX>`, baseline `<branch sha>`, linked catalogs `<other repos' .devops/stories paths>`, issue tracker `<GitHub issues>`
-- **Cleanup thresholds** (defaults in `languages.json` `cleanup`, from `clean-code.md`; change here when the project wants different ones): function lines `30`, nesting `3`, parameters `4`, duplicate block `6` lines, repeated literal `2`
+- **Cleanup thresholds** (set in `.devops/standards.json` over the package `standards.json`; the scan does not read this line): function lines `30`, nesting `3`, parameters `4`, duplicate block `6` lines, repeated literal `2`
 - **Lean default** (`ask`, `on` or `off`; whether the Orchestrator asks at the start of a goal when Lean is present): `ask`
 - **Formal check rounds** (review rounds on one thread before the Orchestrator offers Lean again, if it is off): `3`
 - **Extension points** (the parents, interfaces or registries new behavior must plug into, and where children are listed): `<...>`

@@ -635,29 +635,55 @@ function ownedPaths(dest, { shareConfig }) {
   for (const rel of Object.values(MCP_FILES)) {
     const target = path.join(dest, rel)
     if (!lexists(target) || trackedPaths(dest, [rel]).length > 0) continue
-    if (fs.readFileSync(target, 'utf8').includes(KIT_SERVER)) owned.push(rel)
+    const text = fs.readFileSync(target, 'utf8')
+    if (text.includes(KIT_SERVER) || text.includes(NPX_PACKAGE)) owned.push(rel)
   }
   return owned
 }
 
-function modeOf(text) {
-  if (text.includes(MODE_SHARED)) return true
-  if (text.includes(MODE_LOCAL)) return false
+/** One block per project folder, so projects that share a repository keep their own blocks. */
+const beginFor = prefix => (prefix ? `${GITIGNORE_BEGIN} [${prefix}]` : GITIGNORE_BEGIN)
+
+/**
+ * This project's block in `text`, as line numbers: its own markers, or a block from before blocks
+ * named their folder whose first path is this project's. `any` takes the first block of either kind.
+ */
+function findBlock(text, prefix, { any = false } = {}) {
+  const lines = text.split('\n')
+  for (let start = 0; start < lines.length; start++) {
+    const unnamed = lines[start] === GITIGNORE_BEGIN
+    const named = lines[start].startsWith(GITIGNORE_BEGIN)
+    if (!named) continue
+    const end = lines.indexOf(GITIGNORE_END, start + 1)
+    if (end === -1) return null
+    const body = lines.slice(start + 1, end)
+    const firstPath = body.find(line => line.startsWith('/'))
+    const oldStyleMine = unnamed && (!prefix || firstPath === `${prefix}/devops-skill/`)
+    if (any || lines[start] === beginFor(prefix) || oldStyleMine) return { lines, start, end, body }
+    start = end
+  }
+  return null
+}
+
+function modeOf(text, prefix, options) {
+  const body = findBlock(text, prefix, options)?.body ?? []
+  if (body.includes(MODE_SHARED)) return true
+  if (body.includes(MODE_LOCAL)) return false
   return undefined
 }
 
 function managedBlock(owned, { prefix, shareConfig }) {
   const anchored = owned.map(rel => `${prefix}/${rel}`)
   const lines = [shareConfig ? MODE_SHARED : MODE_LOCAL, ...anchored, ...GITIGNORE_LINES]
-  return [GITIGNORE_BEGIN, ...lines, GITIGNORE_END].join('\n')
+  return [beginFor(prefix), ...lines, GITIGNORE_END].join('\n')
 }
 
-/** `text` with the managed block (and the oldest marker style) taken out. */
-function withoutBlock(text) {
-  const begin = text.indexOf(GITIGNORE_BEGIN)
-  const end = text.indexOf(GITIGNORE_END)
-  const hasBlock = begin !== -1 && end > begin
-  let rest = hasBlock ? text.slice(0, begin) + text.slice(end + GITIGNORE_END.length) : text
+/** `text` with this project's managed block (and the oldest marker style) taken out. */
+function withoutBlock(text, prefix, options) {
+  const found = findBlock(text, prefix, options)
+  const before = found?.lines.slice(0, found.start)
+  const outside = found && [...before, ...found.lines.slice(found.end + 1)]
+  let rest = outside ? outside.join('\n') : text
   const legacy = rest.search(LEGACY_LINE)
   if (legacy !== -1) {
     const blank = rest.indexOf('\n\n', legacy)
@@ -675,6 +701,12 @@ function writeIgnore(target, next, current, { opts, report }) {
   fs.writeFileSync(target, next)
 }
 
+/** The project's .gitignore, where an install made before `git init` kept its block. */
+const oldGitignore = root => {
+  const file = path.join(root, '.gitignore')
+  return lexists(file) ? fs.readFileSync(file, 'utf8') : ''
+}
+
 /** An earlier install put the block in the tracked .gitignore; take it out so the project file is clean. */
 function migrateGitignore(root, opts, report) {
   const target = path.join(root, '.gitignore')
@@ -683,7 +715,7 @@ function migrateGitignore(root, opts, report) {
   const legacy = LEGACY_LINE.test(current)
   if (!current.includes(GITIGNORE_BEGIN) && !legacy) return
   assertInside(root, target)
-  writeIgnore(target, withoutBlock(current), current, { opts, report })
+  writeIgnore(target, withoutBlock(current, '', { any: true }), current, { opts, report })
   report.warnings.push('removed the old devops-multi-agent-team block from .gitignore; commit it')
 }
 
@@ -706,10 +738,11 @@ export function ensureGitignore(root, opts, report) {
   report.commands ??= []
   const where = ignoreFile(root)
   const current = lexists(where.file) ? fs.readFileSync(where.file, 'utf8') : ''
-  const shareConfig = opts.shareConfig ?? modeOf(current) ?? false
+  const shareConfig = opts.shareConfig ?? modeOf(current, where.prefix)
+    ?? (where.local ? modeOf(oldGitignore(root), '', { any: true }) : undefined) ?? false
   const owned = ownedPaths(root, { shareConfig })
   const block = managedBlock(owned, { prefix: where.prefix, shareConfig })
-  const base = withoutBlock(current)
+  const base = withoutBlock(current, where.prefix)
   const next = `${base}${base ? '\n' : ''}${block}\n`
   if (!where.local) assertInside(root, where.file)
   writeIgnore(where.file, next, current, { opts, report })
@@ -719,11 +752,9 @@ export function ensureGitignore(root, opts, report) {
 }
 
 export function gitignoreOk(root) {
-  const { file } = ignoreFile(root)
+  const { file, prefix } = ignoreFile(root)
   if (!lexists(file)) return false
-  const text = fs.readFileSync(file, 'utf8')
-  const complete = text.includes(GITIGNORE_BEGIN) && text.includes(GITIGNORE_END)
-  return complete && modeOf(text) !== undefined
+  return modeOf(fs.readFileSync(file, 'utf8'), prefix) !== undefined
 }
 
 /**
@@ -852,7 +883,8 @@ export function hostFolders(dest, target) {
 }
 
 const SERVER_NAME = 'devops-multi-agent-team'
-const NPX_SPEC = ['-y', '-p', 'github:BPForbes/Devops-Multi-Agent-Team-Skill', 'devops-multi-agent-team-mcp']
+const NPX_PACKAGE = 'github:BPForbes/Devops-Multi-Agent-Team-Skill'
+const NPX_SPEC = ['-y', '-p', NPX_PACKAGE, 'devops-multi-agent-team-mcp']
 
 /**
  * The server entry for one client. It starts the project's own copy (devops-skill/kit/) by a path
@@ -866,10 +898,16 @@ function serverFor(client, { npx, dest }) {
 }
 
 /** How to connect without touching a config file that git tracks: a user-level or local-scope entry. */
-function localAlternative(client, dest) {
-  const server = path.join(dest, KIT_SERVER)
-  if (client === 'claude') return `claude mcp add ${SERVER_NAME} --scope local -- node ${server}`
-  const entry = JSON.stringify({ [SERVER_NAME]: { command: 'node', args: [server] } })
+function localAlternative(client, { dest, npx }) {
+  const server = npx
+    ? { command: 'npx', args: NPX_SPEC, env: { DEVOPS_MCP_ROOTS: dest } }
+    : { command: 'node', args: [path.join(dest, KIT_SERVER)] }
+  if (client === 'claude') {
+    const env = npx ? ['-e', `DEVOPS_MCP_ROOTS=${dest}`] : []
+    const words = ['claude', 'mcp', 'add', SERVER_NAME, '--scope', 'local', ...env, '--']
+    return [...words, server.command, ...server.args].map(quote).join(' ')
+  }
+  const entry = JSON.stringify({ [SERVER_NAME]: server })
   const where = client === 'cursor'
     ? '~/.cursor/mcp.json under "mcpServers"'
     : 'your VS Code user mcp.json under "servers"'
@@ -895,7 +933,7 @@ function connectOne(client, { dest, npx, dryRun, report }) {
   }
   if (trackedPaths(dest, [rel]).length > 0) {
     report.skipped.push(`${rel}: git tracks it, and editing it would commit the server`)
-    return report.commands.push(localAlternative(client, dest))
+    return report.commands.push(localAlternative(client, { dest, npx }))
   }
   const config = readConfig(target, rel)
   const server = serverFor(client, { npx, dest })
@@ -940,11 +978,37 @@ export function connectClients({ dest: destInput, clients = 'auto', npx = false,
 export function initProject(options) {
   if (options.plugin) {
     const installed = install({ ...options, target: 'none', kit: false })
-    return { installed, connected: { skipped: ['the Claude Code plugin provides the MCP server'] } }
+    const skipped = ['the Claude Code plugin provides the MCP server']
+    return { installed, connected: { written: [], kept: [], skipped, commands: [], warnings: [] } }
   }
   const installed = install({ ...options, target: options.target ?? 'auto' })
   const { dest, clients = 'auto', npx, dryRun } = options
   return { installed, connected: connectClients({ dest, clients, npx, dryRun }) }
+}
+
+const ID_COLUMN = 14
+const KIND_COLUMN = 22
+const NEXT_STEP = [
+  'Next: restart or reload the client, then say "set up the DevOps team in this project".',
+  'Fill in .devops/project.md. Nothing needs committing',
+  '(with --share-config, commit .devops/ only).',
+].join(' ')
+
+function printConnection({ installed, connected }) {
+  if (installed) {
+    const { created, replaced, skipped } = installed
+    const languages = installed.languages.join(', ') || '(none)'
+    const counts = `${created.length} created, ${replaced.length} replaced, ${skipped.length} kept`
+    console.log(`Installed: ${counts}. Languages: ${languages}`)
+  }
+  const lines = [
+    ...connected.written.map(f => `MCP server written: ${f}`),
+    ...connected.kept.map(f => `MCP server already set: ${f}`),
+    ...connected.skipped.map(s => `Skipped: ${s}`),
+    ...connected.commands.map(c => `Run instead: ${c}`),
+    ...connected.warnings.map(w => `warning: ${w}`),
+  ]
+  for (const line of [...lines, NEXT_STEP]) console.log(line)
 }
 
 export function status(destInput, roots) {
@@ -1018,65 +1082,83 @@ options: --dest DIR (default: cwd)  --target auto|cursor|claude|both (default au
          --no-sandbox  --force  --dry-run  --json
 `
 
+const row = (id, kind, detail) => `${id.padEnd(ID_COLUMN)} ${kind.padEnd(KIND_COLUMN)} ${detail}`
+
+function listCommand(args, config) {
+  for (const l of config.languages) console.log(row(l.id, l.layers.join(','), l.name))
+  if (!args.withServices) return
+  for (const s of loadServices(args.dest).services) console.log(row(s.id, s.category, s.name))
+}
+
+function detectCommand(args, config) {
+  const languages = detectLanguages(args.dest, config)
+  const found = { languages, services: detectServices(args.dest) }
+  if (args.json) return console.log(JSON.stringify(args.withServices ? found : found.languages))
+  if (found.languages.length === 0) console.log('No known language found.')
+  for (const f of found.languages) console.log(row(f.id, f.layers.join(','), f.evidence.join('; ')))
+  for (const f of found.services) console.log(row(f.id, 'service', f.evidence.join('; ')))
+}
+
+function profileCommand(args, config) {
+  const servicesConfig = loadServices(args.dest)
+  const selected = resolveSelected(config, args.lang, detectLanguages(args.dest, config))
+  const detected = detectServices(args.dest, servicesConfig)
+  const services = resolveServices(servicesConfig, args.services, detected)
+  const options = { servicesConfig, services, sandbox: args.sandbox }
+  console.log(renderProfile(config, selected, args.dest, options))
+}
+
+function installCommand(args) {
+  const report = install(args)
+  if (args.json) return console.log(JSON.stringify(report))
+  const verb = args.dryRun ? 'would be' : 'were'
+  const languages = report.languages.join(', ') || '(none)'
+  console.log(`Languages: ${languages}   Services: ${report.services.join(', ') || '(none)'}`)
+  for (const key of ['created', 'replaced', 'skipped']) {
+    const why = key === 'skipped' ? ' (exist and differ; use --force)' : ''
+    if (report[key].length > 0) console.log(`${report[key].length} file(s) ${verb} ${key}${why}`)
+  }
+  for (const w of report.warnings) console.log(`warning: ${w}`)
+  console.log('Next: open .devops/project.md and fill the "Fill in by hand" section.')
+}
+
+function connectCommand(args) {
+  const out = args._[0] === 'init' ? initProject(args) : { connected: connectClients(args) }
+  return args.json ? console.log(JSON.stringify(out)) : printConnection(out)
+}
+
+function sandboxCommand(args, config) {
+  const [id] = args.lang.split(',')
+  const lang = config.languages.find(l => l.id === id)
+  if (!lang) throw new Error(`unknown language id: ${id}`)
+  if (!lang.sandboxImage) {
+    throw new Error(`${id} has no sandbox image; run on the host only with the human's OK`)
+  }
+  const policy = loadServices(args.dest).sandboxPolicy
+  const run = { phase: args.phase, image: lang.sandboxImage, cmd: args.cmd }
+  const out = sandboxArgv(policy, { ...run, worktree: resolveDest(args.dest) })
+  console.log(args.json ? JSON.stringify(out) : out.shell)
+}
+
+const toJson = value => console.log(JSON.stringify(value, null, 2))
+const COMMANDS = {
+  list: listCommand,
+  detect: detectCommand,
+  profile: profileCommand,
+  install: installCommand,
+  init: connectCommand,
+  connect: connectCommand,
+  status: args => toJson(status(args.dest)),
+  check: args => toJson(checkToolchain(args.dest, (args._[1] ?? '').split(',').filter(Boolean))),
+  sandbox: sandboxCommand,
+}
+
 function main(argv) {
   const args = parseArgs(argv)
   const command = args._[0] ?? 'help'
   if (command === 'help') return console.log(HELP)
-  const config = loadLanguages(args.dest)
-  if (command === 'list') {
-    for (const l of config.languages) console.log(`${l.id.padEnd(14)} ${l.layers.join(',').padEnd(22)} ${l.name}`)
-    if (args.withServices) for (const s of loadServices(args.dest).services) console.log(`${s.id.padEnd(14)} ${s.category.padEnd(22)} ${s.name}`)
-    return
-  }
-  if (command === 'detect') {
-    const found = { languages: detectLanguages(args.dest, config), services: detectServices(args.dest) }
-    if (args.json) return console.log(JSON.stringify(args.withServices ? found : found.languages))
-    if (found.languages.length === 0) console.log('No known language found.')
-    for (const f of found.languages) console.log(`${f.id.padEnd(14)} ${f.layers.join(',').padEnd(22)} ${f.evidence.join('; ')}`)
-    for (const f of found.services) console.log(`${f.id.padEnd(14)} ${'service'.padEnd(22)} ${f.evidence.join('; ')}`)
-    return
-  }
-  if (command === 'profile') {
-    const servicesConfig = loadServices(args.dest)
-    const selected = resolveSelected(config, args.lang, detectLanguages(args.dest, config))
-    const chosen = resolveServices(servicesConfig, args.services, detectServices(args.dest, servicesConfig))
-    return console.log(renderProfile(config, selected, args.dest, { servicesConfig, services: chosen, sandbox: args.sandbox }))
-  }
-  if (command === 'install') {
-    const report = install(args)
-    if (args.json) return console.log(JSON.stringify(report))
-    const verb = args.dryRun ? 'would be' : 'were'
-    console.log(`Languages: ${report.languages.join(', ') || '(none)'}   Services: ${report.services.join(', ') || '(none)'}`)
-    for (const key of ['created', 'replaced', 'skipped']) {
-      if (report[key].length > 0) console.log(`${report[key].length} file(s) ${verb} ${key}${key === 'skipped' ? ' (exist and differ; use --force)' : ''}`)
-    }
-    for (const w of report.warnings) console.log(`warning: ${w}`)
-    console.log('Next: open .devops/project.md and fill the "Fill in by hand" section; commit it.')
-    return
-  }
-  if (command === 'init' || command === 'connect') {
-    const out = command === 'init' ? initProject(args) : { connected: connectClients(args) }
-    if (args.json) return console.log(JSON.stringify(out))
-    if (out.installed) console.log(`Installed: ${out.installed.created.length} created, ${out.installed.replaced.length} replaced, ${out.installed.skipped.length} kept. Languages: ${out.installed.languages.join(', ') || '(none)'}`)
-    for (const f of out.connected.written) console.log(`MCP server written: ${f}`)
-    for (const f of out.connected.kept) console.log(`MCP server already set: ${f}`)
-    console.log(`Or with the Claude Code CLI: ${out.connected.commands[0]}`)
-    console.log('Next: restart or reload the client, then say "set up the DevOps team in this project". Fill in .devops/project.md and commit .devops/, .cursor/ and .claude/ (not devops-skill/thoughts/).')
-    return
-  }
-  if (command === 'status') return console.log(JSON.stringify(status(args.dest), null, 2))
-  if (command === 'check') {
-    const ids = (args._[1] ?? '').split(',').filter(Boolean)
-    return console.log(JSON.stringify(checkToolchain(args.dest, ids), null, 2))
-  }
-  if (command === 'sandbox') {
-    const [id] = args.lang.split(',')
-    const lang = config.languages.find(l => l.id === id)
-    if (!lang) throw new Error(`unknown language id: ${id}`)
-    if (!lang.sandboxImage) throw new Error(`${id} has no sandbox image; run on the host only with the human's OK`)
-    const out = sandboxArgv(loadServices(args.dest).sandboxPolicy, { phase: args.phase, image: lang.sandboxImage, cmd: args.cmd, worktree: resolveDest(args.dest) })
-    return console.log(args.json ? JSON.stringify(out) : out.shell)
-  }
+  const run = COMMANDS[command]
+  if (run) return run(args, loadLanguages(args.dest))
   console.error(`unknown command: ${command}\n\n${HELP}`)
   process.exitCode = 2
 }

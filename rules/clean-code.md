@@ -15,7 +15,8 @@
 - DRY with care: define logic once and call it; prefer existing code to a copy;
   do not merge things that only look alike, and do not abstract early.
 - No magic numbers: a number used directly in code, even once, gets a named
-  constant defined once. Only 0, 1 and 2 may appear directly (`magicLiterals.allowed`).
+  constant defined once. Only the numbers in `magicLiterals.allowed` (0, 1, 2 by default)
+  may appear directly.
 - Every declared name (variable, function, constant, import) must be used.
 - Comments only for the reason; the best comment is a better name.
 - Follow the project's conventions and let the formatter and linter enforce one

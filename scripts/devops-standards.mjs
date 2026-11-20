@@ -41,12 +41,15 @@ const isObject = value => value !== null && typeof value === 'object' && !Array.
 const isSimple = v => typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean'
 const isText = v => typeof v === 'string' && v !== ''
 
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
 /** Recursive merge: plain objects merge key by key, everything else is replaced by the override. */
 export function deepMerge(base, override) {
   if (!isObject(base) || !isObject(override)) return override === undefined ? base : override
   const out = { ...base }
   for (const [key, value] of Object.entries(override)) {
-    out[key] = key in base ? deepMerge(base[key], value) : value
+    if (UNSAFE_KEYS.has(key)) continue
+    out[key] = Object.hasOwn(base, key) ? deepMerge(base[key], value) : value
   }
   return out
 }

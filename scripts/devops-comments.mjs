@@ -70,7 +70,11 @@ const CONCEPT = wordList([
   'how to (?:use|run|configure|deploy|install)', 'getting started', 'design overview',
   'data ?flow', 'the flow is', 'this module (?:is|handles|implements|provides)',
 ])
-const DOC_FILE = /(\.(md|mdx|markdown|rst|adoc|asciidoc|tex|txt)$|(^|\/)docs?\/)/i
+const DOC_EXTENSION = /\.(md|mdx|markdown|rst|adoc|asciidoc|tex|txt)$/i
+const DOC_FOLDER = /(^|\/)docs?\//i
+/** Prose files, and files in a docs folder that are not code (an example script stays code). */
+const isDocFile = (file, syntaxFor) => DOC_EXTENSION.test(file)
+  || (DOC_FOLDER.test(file) && !syntaxFor?.(file))
 const NARRATIVE = wordList([
   'originally', 'at first', 'in the beginning',
   'we (tried|decided|realized|realised|found|discovered|noticed|wanted|ended up)',
@@ -181,21 +185,40 @@ export function syntaxTable(dest) {
   return file => table.filter(matches(file.split('/').pop())).sort(order)[0]
 }
 
+const HUNK = /^@@ -\d+(?:,(?<oldCount>\d+))? \+(?<start>\d+)(?:,(?<newCount>\d+))? @@/
+
+/**
+ * Each diff line as a header or a hunk body line. The hunk header's line counts mark where the body
+ * ends, so an added `++ i` (shown as `+++ i`) is not taken for a file header.
+ */
+function* diffLines(diffText) {
+  let oldLeft = 0
+  let newLeft = 0
+  for (const raw of diffText.split('\n')) {
+    const hunk = HUNK.exec(raw)?.groups
+    if (hunk) {
+      oldLeft = Number(hunk.oldCount ?? 1)
+      newLeft = Number(hunk.newCount ?? 1)
+      yield { kind: 'hunk', raw, start: Number(hunk.start) }
+    } else if (oldLeft + newLeft > 0 && /^[+\- ]/.test(raw)) {
+      if (raw[0] !== '+') oldLeft -= 1
+      if (raw[0] !== '-') newLeft -= 1
+      yield { kind: raw[0] === '+' ? 'added' : 'other', raw }
+    } else yield { kind: 'header', raw }
+  }
+}
+
 /** The lines a unified diff adds, with their file and new line number. */
 export function parseAdded(diffText) {
   const added = []
   let file = null
   let line = 0
-  for (const raw of diffText.split('\n')) {
-    if (raw.startsWith('+++ ')) {
+  for (const { kind, raw, start } of diffLines(diffText)) {
+    if (kind === 'header' && raw.startsWith('+++ ')) {
       file = raw.startsWith(DIFF_FILE_PREFIX) ? raw.slice(DIFF_FILE_PREFIX.length) : null
-      continue
-    }
-    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw)
-    if (hunk) line = Number(hunk[1])
-    else if (file && raw.startsWith('+') && !raw.startsWith('+++')) {
-      added.push({ file, line: line++, text: raw.slice(1) })
-    }
+    } else if (kind === 'hunk') line = start
+    else if (kind === 'added' && file) added.push({ file, line: line++, text: raw.slice(1) })
+    else if (kind === 'other') line += raw[0] === ' ' ? 1 : 0
   }
   return added
 }
@@ -204,7 +227,8 @@ export function parseAdded(diffText) {
 export function newFiles(diffText) {
   const created = new Set()
   let fromNull = false
-  for (const raw of diffText.split('\n')) {
+  for (const { kind, raw } of diffLines(diffText)) {
+    if (kind !== 'header') continue
     if (raw.startsWith('--- ')) fromNull = raw === '--- /dev/null'
     else if (raw.startsWith(DIFF_FILE_PREFIX) && fromNull) {
       created.add(raw.slice(DIFF_FILE_PREFIX.length))
@@ -481,7 +505,7 @@ function languageChecks({ items, codeRows: rows, syntax, file }, readFile) {
 export function codeRows(rows, syntax) {
   const comments = extract(rows, syntax).items.filter(i => i.kind !== 'trailing')
   const commentLines = new Set(comments.map(i => i.line))
-  const isCommentMarker = trimmed => /^(\*|\/\*|\/\/)/.test(trimmed)
+  const isCommentMarker = trimmed => /^(\*(\s|\/|$)|\/\*|\/\/)/.test(trimmed)
     || syntax.line.some(m => trimmed.startsWith(m))
     || syntax.block.some(([open]) => trimmed.startsWith(open))
   return rows.filter(row => {
@@ -579,8 +603,8 @@ function collectGroup(group, { file, syntax }, ctx) {
   const first = group.items[0]
   if (syntax.interface) {
     const key = pairKey(file, syntax)
-    const known = ctx.interfaceGroups.get(key) ?? []
-    ctx.interfaceGroups.set(key, [...known, { file, line: first.line, words }])
+    if (!ctx.interfaceGroups.has(key)) ctx.interfaceGroups.set(key, [])
+    ctx.interfaceGroups.get(key).push({ file, line: first.line, words })
   } else if (group.kind !== 'trailing' && words.length >= TWIN_MIN_WORDS) {
     ctx.sourceGroups.push({ file, syntax, first, words })
   }
@@ -604,12 +628,13 @@ function siblingGroups(source, ctx) {
 function repeatFindings(ctx) {
   return ctx.sourceGroups.flatMap(source => {
     const key = pairKey(source.file, source.syntax)
-    if (!ctx.interfaceGroups.has(key) && ctx.readFile) {
-      ctx.interfaceGroups.set(key, siblingGroups(source, ctx))
+    if (!ctx.siblingGroups.has(key) && ctx.readFile) {
+      ctx.siblingGroups.set(key, siblingGroups(source, ctx))
     }
     const similar = g => g.words.length >= TWIN_MIN_WORDS
       && overlap(source.words, g.words) >= TWIN_OVERLAP
-    const twin = (ctx.interfaceGroups.get(key) ?? []).find(similar)
+    const added = ctx.interfaceGroups.get(key) ?? []
+    const twin = [...added, ...(ctx.siblingGroups.get(key) ?? [])].find(similar)
     if (!twin) return []
     const remark = `this repeats the comment in ${twin.file}:${twin.line}. The interface describes `
       + 'the implementation; delete the copy here.'
@@ -620,7 +645,8 @@ function repeatFindings(ctx) {
 function byFileOf(diffText) {
   const byFile = new Map()
   for (const row of parseAdded(diffText)) {
-    byFile.set(row.file, [...(byFile.get(row.file) ?? []), row])
+    if (!byFile.has(row.file)) byFile.set(row.file, [])
+    byFile.get(row.file).push(row)
   }
   return byFile
 }
@@ -630,17 +656,20 @@ function byFileOf(diffText) {
  * files (.h, .d.ts, .pyi, ...) get the relaxed limits in `interface.comments` of `standards.json`.
  * `listed` is the Push JSON `comments` array and `docs` its `docs` array; omit either to skip that
  * budget check. `readFile(rel)` lets the audit read a source file's interface sibling.
+ * `scan` (the cleanup scan's whole-file diff) skips the new-document check.
  */
-export function auditDiff(diffText, standards, { listed, docs, syntaxFor, readFile } = {}) {
+export function auditDiff(diffText, standards, options = {}) {
+  const { listed, docs, syntaxFor, readFile, scan = false } = options
   const byFile = byFileOf(diffText)
   const ctx = {
-    standards, syntaxFor, readFile, listed, interfaceGroups: new Map(), sourceGroups: [],
+    standards, syntaxFor, readFile, listed,
+    interfaceGroups: new Map(), siblingGroups: new Map(), sourceGroups: [],
   }
-  const created = newFiles(diffText)
+  const created = scan ? new Set() : newFiles(diffText)
   const findings = []
   const totals = { comments: 0, code: 0, docs: 0 }
   for (const [file, rows] of byFile) {
-    if (DOC_FILE.test(file)) {
+    if (isDocFile(file, syntaxFor)) {
       totals.docs += rows.filter(r => r.text.trim() !== '').length
       findings.push(...docFindings(file, rows, { created, docs }))
     }
@@ -675,19 +704,30 @@ export function readDiff(dest, { base, head = 'HEAD', staged = false } = {}) {
   return { text: ran.out, source }
 }
 
+/**
+ * Reads a file as the audited change has it: the index for a staged change, `head` for a range,
+ * else the working tree.
+ */
+export function snapshotReader(dest, { base, head = 'HEAD', staged = false } = {}) {
+  const prefix = base ? `${head}:` : staged ? ':' : null
+  return rel => {
+    try {
+      const abs = path.join(dest, rel)
+      assertInside(dest, abs)
+      if (prefix === null) return fs.readFileSync(abs, 'utf8')
+      const shown = git(dest, ['show', `${prefix}./${rel}`])
+      return shown.ok ? shown.out : null
+    } catch { return null }
+  }
+}
+
 /** Audit the comments a staged change, a working tree or a commit range adds. */
 export function commentAudit(destInput, options = {}) {
   const { base, head = 'HEAD', staged = false, listed, docs, roots } = options
   const dest = resolveDest(destInput, roots)
   const diff = readDiff(dest, { base, head, staged })
   const standards = loadStandards(dest)
-  const readFile = rel => {
-    try {
-      const abs = path.join(dest, rel)
-      assertInside(dest, abs)
-      return fs.readFileSync(abs, 'utf8')
-    } catch { return null }
-  }
+  const readFile = snapshotReader(dest, { base, head, staged })
   const settings = { listed, docs, syntaxFor: syntaxTable(dest), readFile }
   const result = auditDiff(diff.text, standards, settings)
   return { dest, source: diff.source, ...result }

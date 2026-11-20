@@ -57,6 +57,14 @@ export function splitArgs(args: string): { word: string; rest: string } {
   return space === -1 ? { word: trimmed, rest: '' } : { word: trimmed.slice(0, space), rest: trimmed.slice(space).trim() }
 }
 
+/** Words as a shell splits them: "a b" and 'a b' stay one word, quotes removed. */
+export function shellWords(text: string): string[] {
+  const words = [...text.matchAll(/"(?<double>(?:[^"\\]|\\.)*)"|'(?<single>[^']*)'|(?<bare>\S+)/g)]
+  return words.map(({ groups = {} }) => (groups.double !== undefined
+    ? groups.double.replace(/\\(.)/g, '$1')
+    : groups.single ?? groups.bare ?? ''))
+}
+
 export function branchNameOf(text: string): string | undefined {
   return /^[A-Za-z0-9][A-Za-z0-9._\/-]{0,99}$/.test(text) && !text.includes('..') ? text : undefined
 }

@@ -116,8 +116,8 @@ export function card(state: CardState): string {
     ? 'Project profile: .devops/project.md; read only the section your step needs.'
     : 'This project is not set up yet; the person can run /devops setup claude.'
   const gate = state.gates
-    ? 'Push gate on: no git push, PR or new branch until QA records "Publish gate: PASS" and the'
-      + ' person runs /devops push-ok.'
+    ? 'Push gate on: no git push or PR until QA records "Publish gate: PASS" and the person runs'
+      + ' /devops push-ok; a new branch needs /devops allow-branch NAME.'
     : 'Push gate is off (the person turned it off).'
   return [
     `The devops-multi-agent-team skill is active.${languages}`,
@@ -141,12 +141,15 @@ type SetupReport = {
   }
 }
 
-function describeSetup(report: SetupReport): string {
+function describeSetup(report: SetupReport, sharing: 'shared' | 'local'): string {
   const { created, languages, warnings, commands, dryRun } = report.installed
+  const kept = sharing === 'shared'
+    ? 'devops-skill/ is in .git/info/exclude; .devops/ is shared, so commit it.'
+    : 'Nothing is committed: both are in .git/info/exclude.'
   return [
     `${dryRun ? 'Would create' : 'Created'} ${created.length} files (.devops/ and devops-skill/)`
       + ` for ${languages.join(', ') || 'no detected language'}.`,
-    'Nothing is committed: both are in .git/info/exclude. The plugin supplies the skill, agents,',
+    `${kept} The plugin supplies the skill, agents,`,
     'commands and MCP server, so nothing is copied into .claude/ or .cursor/.',
     ...warnings.map(w => `Warning: ${w}`),
     ...commands.map(c => `Run yourself if you agree: ${c}`),
@@ -165,7 +168,8 @@ export async function setupClaude($: EngineInterface, flags: string[]): Promise<
   const ran = await $.process.run(command, { timeoutMs: TIMEOUT }).catch(() => undefined)
   if (ran === undefined) return 'The setup script could not run.'
   try {
-    return describeSetup(JSON.parse(ran.stdout) as SetupReport)
+    const sharing = wanted.includes('--share-config') ? 'shared' : 'local'
+    return describeSetup(JSON.parse(ran.stdout) as SetupReport, sharing)
   } catch {
     return `${ran.stdout}${ran.stderr}`.trim() || 'The setup script printed nothing.'
   }

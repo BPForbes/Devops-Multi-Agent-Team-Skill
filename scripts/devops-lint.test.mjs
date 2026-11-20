@@ -244,3 +244,24 @@ test('a code line with a trailing comment is still checked as code', () => {
   const dir = repo({ 'e.js': 'export const run = text => ev' + 'al(text) // parse the input\n' })
   assert.ok(rulesAt(lintCheck(dir, { staged: true }), 'e.js').includes('sec-eval'))
 })
+
+test('a use on the declaring line counts; an unstaged use does not count', () => {
+  const same = repo({ 'a.js': 'const value = compute(); consume(value)\n' })
+  assert.ok(!rulesAt(lintCheck(same, { staged: true }), 'a.js').includes('unused-symbol'))
+  const dir = repo({ 'b.js': 'export const spare = compute()\n' })
+  fs.appendFileSync(path.join(dir, 'b.js'), 'consume(spare)\n')
+  assert.ok(rulesAt(lintCheck(dir, { staged: true }), 'b.js').includes('unused-symbol'))
+})
+
+test('with exemptPublic, an exported Go function is exempt and an unexported one is not', () => {
+  const standards = JSON.stringify({ schemaVersion: 1, lint: { exemptPublic: true } })
+  const go = 'package lib\n\nfunc Exported() {}\n\nfunc hidden() {}\n'
+  const dir = repo({ 'lib.go': go }, { commit: { '.devops/standards.json': standards } })
+  const unused = lintCheck(dir, { staged: true }).findings.filter(f => f.rule === 'unused-symbol')
+  assert.deepEqual(unused.map(f => f.message.split('`')[1]), ['hidden'])
+})
+
+test('an added `++ i` is a code line, not a file header', () => {
+  const dir = repo({ 'a.js': 'let i = 0\n++ i\ndebugger\n' })
+  assert.ok(rulesAt(lintCheck(dir, { staged: true }), 'a.js').includes('debug-leftover'))
+})

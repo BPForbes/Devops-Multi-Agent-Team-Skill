@@ -269,3 +269,19 @@ test('file types a human edits are audited with their language syntax', () => {
   assert.equal(found.findings.filter(f => f.blocking).length, 0, JSON.stringify(found.findings))
   assert.equal(found.commentLinesAdded, 7)
 })
+
+test('a Go pointer assignment is a code row, and `++ x` inside a hunk is an added line', () => {
+  const long = `*out = ${'value + '.repeat(15)}1`
+  const dir = repo({ 'a.go': `package a\n\nfunc f(out *int, value int) {\n\t${long}\n}\n` })
+  assert.ok(rules(commentAudit(dir, { staged: true })).includes('long-code-line'))
+  const rows = parseAdded('--- a/a.js\n+++ b/a.js\n@@ -1,0 +1,2 @@\n+++ x\n+y\n')
+  assert.deepEqual(rows.map(r => `${r.file}:${r.line}:${r.text}`), ['a.js:1:++ x', 'a.js:2:y'])
+})
+
+test('a staged audit reads the staged file, not an unstaged edit', () => {
+  const dir = repo({ 'c.rs': 'fn f(p: *const u8) -> u8 {\n\n    unsafe { *p }\n}\n' })
+  const unstaged = 'fn f(p: *const u8) -> u8 {\n    // SAFETY: callers pass a live pointer.\n'
+    + '    unsafe { *p }\n}\n'
+  fs.writeFileSync(path.join(dir, 'c.rs'), unstaged)
+  assert.ok(rules(commentAudit(dir, { staged: true })).some(r => /safety/i.test(r)))
+})

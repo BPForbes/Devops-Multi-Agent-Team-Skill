@@ -104,3 +104,23 @@ test('the command line reads, writes, dry-runs and turns rules off', () => {
   const isRefusal = error => error.status === 1 && /refused, nothing written/.test(error.stdout)
   assert.throws(refused, isRefusal)
 })
+
+test('prototype keys and a set with no value are refused before anything changes', () => {
+  const dir = project()
+  assert.throws(() => changeSetting(dir, { op: 'set', path: '__proto__.apply', value: true }),
+    /not a setting name/)
+  assert.equal({}.apply, undefined)
+  apply(dir, { op: 'add', path: 'lint.exclude', value: 'vendor/**' })
+  assert.throws(() => apply(dir, { op: 'set', path: 'lint.exclude' }), /needs a value/)
+  assert.deepEqual(readFile(dir).lint.exclude, ['vendor/**'])
+})
+
+test('a language override is named as the source over a general project value', () => {
+  const dir = project()
+  apply(dir, { op: 'set', path: 'defaults.lineLength.code', value: 120 })
+  const python = getSetting(dir, { path: 'defaults.lineLength.code', language: 'python' })
+  assert.equal(python.value, 88)
+  assert.equal(python.source, 'standards.json (default) (languages.python)')
+  const go = getSetting(dir, { path: 'defaults.lineLength.code', language: 'go' })
+  assert.deepEqual([go.value, go.source], [120, '.devops/standards.json'])
+})

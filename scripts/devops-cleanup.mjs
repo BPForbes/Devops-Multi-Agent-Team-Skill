@@ -115,7 +115,8 @@ export function parseStatement(text, destInput, roots) {
     dest, statement,
     goals: chosen, defaultedGoals: goals.length === 0, generic,
     scope: scopeIn(statement, lower, dest),
-    thresholds: { ...cleanupLimits(loadStandards(dest), null), ...thresholdsIn(lower) },
+    thresholds: thresholdsIn(lower),
+    defaults: cleanupLimits(loadStandards(dest), null),
     constraints: [...STANDING, ...constraints],
     notScanned: chosen.includes('naming') ? [NAMING_NOTE] : [],
     unrecognized,
@@ -227,8 +228,8 @@ const CLASS_DECLARATION = /\b(?:class|struct|interface|trait|impl)\s+\w+/
 const REFUSES = /\b(?:throw|raise)\b.*\b(?:Unsupported\w*|NotImplemented\w*|NotSupported\w*)\b|\b(?:throw|raise)\b.*['"`][^'"`]*(?:not supported|unsupported|not implemented|can't|cannot|can not)[^'"`]*['"`]|\b(?:unimplemented|todo)!\s*\(/i
 const FLAG_PARAM = /\b(?:bool|boolean|Boolean)\b|=\s*(?:true|false|True|False)\b|\b(?:flag|force|verbose|strict|(?:is|has|can|should|apply|enable|disable|use|with|include|skip)[A-Z_]\w*)\b/
 
-/** Where a `/` opens a regex rather than divides: line start, or after punctuation or `+`. */
-const REGEX_START = /(^\s*|[(=,:[!&|?{};+]\s*)/
+/** Where a `/` opens a regex rather than divides: line start, after punctuation, `+` or `return`. */
+const REGEX_START = /(^\s*|[(=,:[!&|?{};+]\s*|\breturn\s+)/
 const REGEX_BODY = /\/(?![/*])(?:[^/\\\n[]|\\.|\[(?:[^\]\\]|\\.)*\])+\/[a-z]*/
 const REGEX_LITERAL = new RegExp(REGEX_START.source + REGEX_BODY.source, 'g')
 const stripRegexLiterals = code => code.replace(REGEX_LITERAL, '$1//')
@@ -347,7 +348,12 @@ function findDuplicates(entries, settings) {
 const F_line = (F, at) => F.norm[at].line
 
 /** Candidates for cleanup in the scope: duplicate blocks, long or deeply nested functions, noisy comments. */
-export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude = [], thresholds = {}, limit = 40, roots } = {}) {
+const SCAN_LIMIT = 40
+
+/** `readFile(rel)` reads a file from a snapshot (the index, a commit) instead of the working tree. */
+export function scanProject(destInput, options = {}) {
+  const { goals = ALL_GOALS, paths = [], exclude = [], thresholds = {} } = options
+  const { limit = SCAN_LIMIT, roots, readFile } = options
   const dest = resolveDest(destInput, roots)
   const standards = loadStandards(dest)
   const settings = cleanupLimits(standards, null, thresholds)
@@ -365,12 +371,14 @@ export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude 
     const syntax = syntaxFor(rel)
     const language = languageOf(rel, table)
     if (!syntax || !language) continue
-    const fileSettings = cleanupLimits(standards, language.id, thresholds)
+    const fileSettings = cleanupLimits(standards, language, thresholds)
     let text
     try {
-      if (fs.statSync(path.join(dest, rel)).size > settings.maxFileBytes) continue
-      text = fs.readFileSync(path.join(dest, rel), 'utf8')
+      const full = path.join(dest, rel)
+      const tooBig = !readFile && fs.statSync(full).size > fileSettings.maxFileBytes
+      text = tooBig ? null : readFile ? readFile(rel) : fs.readFileSync(full, 'utf8')
     } catch { continue }
+    if (text == null || Buffer.byteLength(text) > fileSettings.maxFileBytes) continue
     if (text.includes('\0')) continue
     const lines = text.split('\n')
     summary.files += 1
@@ -475,12 +483,15 @@ export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude 
   }
 
   if (syntheticDiff.length > 0) {
-    const audit = auditDiff(syntheticDiff.join('\n'), standards, { syntaxFor })
+    const audit = auditDiff(syntheticDiff.join('\n'), standards, { syntaxFor, scan: true })
     const wanted = audit.findings.filter(f => goals.includes('comments') ? true : f.rule === 'commented-out-code')
     summary.commentBlocking = wanted.filter(f => f.blocking).length
     summary.commentNonBlocking = wanted.length - summary.commentBlocking
     const byFile = new Map()
-    for (const f of wanted) byFile.set(f.file, [...(byFile.get(f.file) ?? []), f])
+    for (const f of wanted) {
+      if (!byFile.has(f.file)) byFile.set(f.file, [])
+      byFile.get(f.file).push(f)
+    }
     for (const [file, list] of byFile) {
       candidates.push({
         kind: 'comment-noise', file, test: TEST_FILE.test(file), size: list.length, blocking: list.filter(f => f.blocking).length,

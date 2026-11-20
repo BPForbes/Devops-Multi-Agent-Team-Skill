@@ -12,6 +12,8 @@ const PROJECT_SOURCE = '.devops/standards.json'
 const DEFAULT_SOURCE = 'standards.json (default)'
 const WRITE_OPS = ['set', 'unset', 'add', 'remove']
 const FIXED_KEYS = ['schemaVersion', 'about']
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+const NEEDS_VALUE = ['set', 'add', 'remove']
 const USAGE = [
   'usage: devops-config <command> [--dest DIR] [--json]',
   '  show [--language ID]          every setting in effect',
@@ -30,7 +32,10 @@ export function parsePath(text) {
   if (typeof text !== 'string' || text.trim() === '') {
     throw new Error('a setting path is required, for example defaults.lineLength.code')
   }
-  return text.split(/(?<!\\)\./).map(part => part.replace(/\\\./g, '.'))
+  const keys = text.split(/(?<!\\)\./).map(part => part.replace(/\\\./g, '.'))
+  const unsafe = keys.find(key => UNSAFE_KEYS.has(key))
+  if (unsafe) throw new Error(`${unsafe} is not a setting name`)
+  return keys
 }
 
 /** A command-line value: JSON when it parses (numbers, booleans, lists, objects), else the text. */
@@ -43,8 +48,9 @@ export function parseValue(value) {
   }
 }
 
+const own = (node, key) => node != null && Object.hasOwn(node, key)
 const valueAt = (object, keys) => keys
-  .reduce((node, key) => (node == null ? undefined : node[key]), object)
+  .reduce((node, key) => (own(node, key) ? node[key] : undefined), object)
 const isGroup = node => node !== null && typeof node === 'object'
 
 function readProject(dest) {
@@ -57,13 +63,18 @@ function readProject(dest) {
   }
 }
 
-/** Where a value comes from: the project file (also per language), or the package default. */
+/**
+ * Where a value comes from, in the order `standardsFor` applies them: a language's own setting
+ * (project, then package) wins over the general one (project, then package).
+ */
 function sourceOf(project, keys, language) {
-  if (valueAt(project, keys) !== undefined) return PROJECT_SOURCE
-  if (!language || keys[0] !== 'defaults') return DEFAULT_SOURCE
-  const perLanguage = ['languages', language, ...keys.slice(1)]
-  const setPerLanguage = valueAt(project, perLanguage) !== undefined
-  return setPerLanguage ? `${PROJECT_SOURCE} (languages.${language})` : DEFAULT_SOURCE
+  if (language && keys[0] === 'defaults') {
+    const perLanguage = ['languages', language, ...keys.slice(1)]
+    const where = `(languages.${language})`
+    if (valueAt(project, perLanguage) !== undefined) return `${PROJECT_SOURCE} ${where}`
+    if (valueAt(packageStandards(), perLanguage) !== undefined) return `${DEFAULT_SOURCE} ${where}`
+  }
+  return valueAt(project, keys) !== undefined ? PROJECT_SOURCE : DEFAULT_SOURCE
 }
 
 /** The settings in effect, or one of them; with `language`, `defaults` shows that language's values. */
@@ -85,7 +96,7 @@ export function getSetting(destInput, { path: dotted, language, roots } = {}) {
 function holderFor(project, effective, keys) {
   let node = project
   keys.slice(0, -1).forEach((key, i) => {
-    if (node[key] === undefined) {
+    if (!own(node, key)) {
       const current = valueAt(effective, keys.slice(0, i + 1))
       node[key] = Array.isArray(current) ? structuredClone(current) : {}
     }
@@ -150,6 +161,9 @@ export function changeSetting(destInput, { op, path: dotted, value, apply = fals
   const dest = resolveDest(destInput, roots)
   const keys = parsePath(dotted)
   if (FIXED_KEYS.includes(keys[0])) throw new Error(`${keys[0]} cannot be changed`)
+  if (NEEDS_VALUE.includes(op) && value === undefined) {
+    throw new Error(`${op} ${dotted} needs a value`)
+  }
   const effective = loadStandards(dest)
   const before = readProject(dest)
   const after = structuredClone(before)

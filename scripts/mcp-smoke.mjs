@@ -103,6 +103,7 @@ async function mcpClient(command, args, env) {
   }
   const clientInfo = { name: 'mcp-smoke', version: '1' }
   const init = await rpc('initialize', { protocolVersion: PROTOCOL, capabilities: {}, clientInfo })
+    .catch(error => { child.kill(); throw error })
   send({ method: 'notifications/initialized' })
   return { init, rpc, call, close: () => child.kill() }
 }
