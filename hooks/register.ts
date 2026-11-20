@@ -408,7 +408,9 @@ export const register: Register = on => {
         }]
       : []
     const briefed = (await $.state.get(BRIEFED_REF)).value === true
-    if (languages.length === 0 && !hasProfile && !briefed) return { sections: [...composed.sections, ...mindmapSection] }
+    if (languages.length === 0 && !hasProfile && !briefed) {
+      return { sections: [...composed.sections, ...mindmapSection] }
+    }
     const gates = await $.state.get(GATES_REF)
     const lint = await $.state.get(LINT_MODE_REF)
     const standards = await currentStandards($, root)

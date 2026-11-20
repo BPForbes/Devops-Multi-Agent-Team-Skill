@@ -17,6 +17,8 @@ declare module 'claude-code' {
       standards: string
       /** The .devops/standards.json text the summary was read from, to see when it changes. */
       standardsFile: string
+      /** A devops_brief call has run this session; the DevOps card is then shown. */
+      briefed: boolean
     }
   }
 }
