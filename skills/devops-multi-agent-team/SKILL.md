@@ -348,11 +348,15 @@ Author.
 | **qa** | QA, CI Engineer, Verifier | Security clear (overlap allowed) |
 | **docs** | Documentation, Communicator | Implementation is documentable |
 
-Trigger one pod (or the full loop) with `/devops stage|ci|pipeline
---mode research|implement|review|security|qa|docs|full [goal]`.
-Allocate first: `/devops allocate --mode pod` then `agent` (or
-`/devops goal --mode allocate`). Seats use the same `/devops` skill
-modes as the human ([agent-commands.md](references/agent-commands.md)).
+Trigger one pod with `/devops stage --mode research|…|qa [goal]`, or
+the **full loop** with `/devops stage --mode full|loop [goal]` /
+`/devops goal --mode loop` / `/goal`: research → implement → review →
+security → qa → docs until Security Clear and `Publish gate: PASS`,
+then the Orchestrator **notifies the human and waits** for `push` /
+`/devops push-ok` (does not push on its own). Allocate first:
+`/devops allocate --mode pod` then `agent`. Seats use the same
+`/devops` skill modes as the human
+([agent-commands.md](references/agent-commands.md)).
 
 ```text
 research  ∥  implement  ∥  review   (department rules apply)

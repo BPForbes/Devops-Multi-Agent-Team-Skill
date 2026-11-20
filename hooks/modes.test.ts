@@ -36,6 +36,12 @@ test('free-form phrases route to skill modes', () => {
   expect(interpretSkillIntent('run research on auth')).toEqual({
     word: 'stage', mode: 'research', rest: 'run research on auth',
   })
+  expect(interpretSkillIntent('run the full loop ship auth')).toEqual({
+    word: 'stage', mode: 'loop', rest: 'run the full loop ship auth',
+  })
+  expect(interpretSkillIntent('keep going until qa passes')).toEqual({
+    word: 'goal', mode: 'loop', rest: 'keep going until qa passes',
+  })
   expect(interpretSkillIntent('allocate agents for billing')).toEqual({
     word: 'allocate', mode: 'agent', rest: 'allocate agents for billing',
   })
@@ -43,6 +49,15 @@ test('free-form phrases route to skill modes', () => {
     word: 'mind-map', mode: 'tree', rest: 'total',
   })
   expect(interpretSkillIntent('something novel')).toBeUndefined()
+})
+
+test('full and loop stage cards tell the orchestrator to notify for push', () => {
+  const full = orchestrationCard({ word: 'stage', mode: 'full', rest: 'ship X' })
+  expect(full).toContain('notify human for push')
+  expect(full).toContain('Security Clear + QA PASS')
+  const goal = orchestrationCard({ word: 'goal', mode: 'loop', rest: 'ship X' })
+  expect(goal).toContain('notifies the human')
+  expect(goal).toContain('Publish gate: PASS')
 })
 
 test('orchestrationCard names tools and keeps free-form dumps out', () => {

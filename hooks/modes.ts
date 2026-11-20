@@ -25,7 +25,8 @@ const STAGE_ROLES: Record<string, string> = {
   security: 'Security Engineer',
   qa: 'QA, CI Engineer, Verifier',
   docs: 'Documentation, Communicator',
-  full: 'all pods in the DevOps loop',
+  full: 'all pods until Security Clear + QA PASS, then notify human for push',
+  loop: 'all pods until Security Clear + QA PASS, then notify human for push',
 }
 
 const SPECS: ModeSpec[] = [
@@ -93,9 +94,11 @@ const SPECS: ModeSpec[] = [
     skill: 'devops-multi-agent-team (+ /goal)',
     tools: ['detect_project', 'status', 'mindmap_overview', 'reuse_search'],
     behavior: [
-      'Write goal-agent-<hex>.md; loop the DevOps cycle until X is met.',
+      'loop: run every stage (research→implement→review→security→qa→docs) until X.',
+      'Stop the loop only when Security is Clear and QA records Publish gate: PASS.',
+      'Then the Orchestrator notifies the human and waits; do not push until they say push.',
       'allocate: mint team/agent hashes, write per-pod and per-agent goals, set current_job.',
-      'Spawn seats asynchronously; default publish: QA PASS then human push.',
+      'On send-back or BLOCKED, re-enter the needed stage and continue the loop.',
     ],
     command: 'commands/goal.md',
   },
@@ -103,7 +106,7 @@ const SPECS: ModeSpec[] = [
     word: 'stage',
     aliases: ['ci', 'pipeline', 'cicd'],
     modes: [
-      'research', 'implement', 'review', 'security', 'qa', 'docs', 'full',
+      'research', 'implement', 'review', 'security', 'qa', 'docs', 'full', 'loop',
     ],
     defaultMode: 'full',
     skill: 'devops-multi-agent-team loop stage',
@@ -112,11 +115,12 @@ const SPECS: ModeSpec[] = [
       'comment_audit', 'sandbox_plan',
     ],
     behavior: [
-      'Trigger only the named CI/CD pod (or full). Allocate goals first.',
-      'Mint team hash for the item pod; mint agent hashes; set initial_job/current_job.',
-      'Spawn /create-subagent for seats of that stage only; keep other pods idle.',
+      'One mode: spawn only that CI/CD pod. full|loop: run all pods in order.',
+      'Allocate goals first; mint team/agent hashes; set initial_job/current_job.',
+      'full|loop: research→implement→review→security→qa→docs until Clear + PASS.',
+      'When QA PASS and Security Clear: Orchestrator notifies the human for push;',
+      'do not push until they say push or /devops push-ok.',
       'Seats use /devops question|mind-map|reuse|review|repro the same way humans do.',
-      'full + input text: treat input as the parent goal and allocate pod/agent goals.',
     ],
     command: 'commands/stage.md',
   },
@@ -286,6 +290,11 @@ export function interpretSkillIntent(args: string): SkillMode | undefined {
   if (/^(run|trigger|start)\s+(research|implement|review|security|qa|docs)\b/.test(lower)) {
     const stage = /research|implement|review|security|qa|docs/.exec(lower)?.[0] ?? 'full'
     return parseSkillMode('stage', `--mode ${stage} ${trimmed}`)
+  }
+  if (/^(run|start|do)\s+(the\s+)?(full\s+)?(loop|pipeline|ci\/?cd)\b/.test(lower)
+    || /^(keep going|loop)\s+until\b/.test(lower)
+    || /^full\s+(loop|pipeline)\b/.test(lower)) {
+    return parseSkillMode('stage', `--mode loop ${trimmed}`)
   }
   if (/^(allocate|assign)\s+(pods?|agents?|jobs?)\b/.test(lower)) {
     const which = /pods?|agents?|jobs?/.exec(lower)?.[0] ?? 'pod'

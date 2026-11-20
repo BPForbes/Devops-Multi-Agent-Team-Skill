@@ -18,17 +18,17 @@ Do until you achieve **X**. Do not stop at a plan or a partial implement.
    `devops-skill/thoughts/final/` (local).
 2. Orchestrator allocates: `/devops allocate --mode pod` then
    `--mode agent` (or `/devops goal --mode allocate`) so each pod and
-   each agent has a goal file. Trigger one CI/CD slice with
-   `/devops stage --mode research|…|full` when only part of the loop
-   should run.
-3. If the host has a goal tool (Cursor `CreateGoal` / `UpdateGoal`), also use it for a long-running human-invoked goal.
-4. The Orchestrator (`/devops-multi-agent-team`) loops the DevOps cycle until X is actually achieved.
+   each agent has a goal file.
+3. **Full loop (default `--mode loop`):** run every stage
+   (research → implement → review → security → qa → docs) until
+   Security is Clear and QA records `Publish gate: PASS`. Equivalent:
+   `/devops stage --mode full|loop [goal]`. For one slice only, use
+   `/devops stage --mode research|…`.
+4. If the host has a goal tool (Cursor `CreateGoal` / `UpdateGoal`), also use it for a long-running human-invoked goal.
 5. Spawn roles with `/create-subagent` **asynchronously**. Subagents accept the same `/` command, `/devops` skill modes, or plain wording.
 6. Mark the local goal file (and `UpdateGoal`) complete only when the criteria are met, or the human stops the goal.
-7. **Default publish path:** QA PASS, then the human's go. Human "push" /
-   `/devops push-ok` is final and must be done (same meaning in chat or
-   slash form). Every change except review-bot feedback fixes (see
-   qa-publish-policy.md) still gets Security's SOC 2 review. Do not push
-   on a seat's say-so alone.
+7. **When the gate is ready:** Orchestrator **notifies the human** and
+   waits. Do not push until they say `push` / `/devops push-ok`.
+   Security Clear alone never authorizes a push.
 
 Catalog: `../skills/devops-multi-agent-team/references/agent-commands.md`.

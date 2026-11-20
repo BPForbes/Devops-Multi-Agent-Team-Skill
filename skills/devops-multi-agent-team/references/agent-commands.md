@@ -33,9 +33,9 @@ not retyped into chat. Trailing text after the command is the input.
 | `/devops question` (`ask`, `q`) | `overview`, `tree`, `symbol`, `search`, `file`, `module`, `library` | `mindmap_*`, `project-mindmap` |
 | `/devops mind-map` (`map`) | `overview`, `build`, `status`, `tree`, `query`, `note` | `mindmap_*` |
 | `/devops clean` (`cleanup`, `tidy`) | `brief`, `scan`, `plan`, `run` | `cleanup_*`, `devops-cleanup` |
-| `/devops stage` (`ci`, `pipeline`) | `research`, `implement`, `review`, `security`, `qa`, `docs`, `full` | one CI/CD pod or full loop |
+| `/devops stage` (`ci`, `pipeline`) | `research`…`docs`, `full`, `loop` | one pod, or all stages until Clear+PASS then notify human |
 | `/devops allocate` (`assign`) | `pod`, `agent`, `job`, `board` | per-pod / per-agent goals |
-| `/devops goal` | `loop`, `status`, `allocate` | team loop + `/goal` |
+| `/devops goal` | `loop`, `status`, `allocate` | full loop until Clear+PASS; notify human for push |
 | `/devops story` | `research`, `create`, `check`, `graph` | `story_*` |
 | `/devops repro` | `run` | `/repro` |
 | `/devops triage` | `open` | `/triage` |
