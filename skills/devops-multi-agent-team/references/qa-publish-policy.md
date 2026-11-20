@@ -8,17 +8,24 @@ the profile or the repository defines; do not invent targets.
 
 ## Core rule
 
-**Only QA may give the OK to push.** Review Satisfied, Security
-Clear, compilation, tests and linters do not authorize one. QA gates
-normal changes. A review-bot feedback fix outside the exceptions in
-"Review-bot feedback" below is gated instead by an independent
-Reviewer's Satisfied, the repository's CI and the human's go; the
-Orchestrator pushes it only on that go. Nobody else gives a push OK.
+**Default:** only QA's `Publish gate: PASS` plus the human's go
+authorize a push. Review Satisfied, Security Clear, compilation,
+tests and linters do not. QA gates normal changes. A review-bot
+feedback fix outside the exceptions in "Review-bot feedback" below is
+gated instead by an independent Reviewer's Satisfied, the
+repository's CI and the human's go.
 
-The Claude mod enforces this at the tool layer: `git push`,
-`gh pr create|merge` and branch creation are refused until a QA seat
-has recorded `Publish gate: PASS` and the human has run
-`/devops push-ok` (see the README, "The mod").
+**Human is final.** Saying `push` in chat is the same as
+`/devops push-ok`. That authorization must be done: the Orchestrator
+pushes when the human says so, and must not refuse or pause
+development to wait for another seat. `/devops` itself is free-form —
+parse the human's intent with no restrictions.
+
+The Claude mod enforces the mechanical part at the tool layer:
+`git push`, `gh pr create|merge` and branch creation are refused until
+the human has authorized (`/devops push-ok` or chat equivalent). A
+human authorization alone is enough for that one push (see the
+README, "The mod").
 
 ## Fast validation
 

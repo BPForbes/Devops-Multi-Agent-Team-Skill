@@ -114,13 +114,29 @@ Identity, ask-paths, Coder notify:
 Push JSON: [references/push-json.md](references/push-json.md).
 Do not `git add` anything under `devops-skill/thoughts/` (both folders are in `.gitignore`).
 
-**Only QA may give the OK to push.** Review Satisfied, Security Clear,
-and the Orchestrator do not authorize a push. Do not push, publish,
-open or update a PR, merge, or submit until QA marks PASS. Every
-change except review-bot feedback fixes (see
-[qa-publish-policy.md](references/qa-publish-policy.md), "Review-bot
-feedback") gets Security's review first; Clear does not authorize a
-push either.
+**Default publish path:** Review Satisfied → Security Clear → QA PASS,
+then the human authorizes the push. The **human's word is final**: if
+they say push (or `/devops push-ok`, same meaning), do that push — do
+not refuse it. Review Satisfied, Security Clear, and the Orchestrator
+alone still do not authorize a push. Every change except review-bot
+feedback fixes (see [qa-publish-policy.md](references/qa-publish-policy.md),
+"Review-bot feedback") still gets Security's review first; Clear does
+not authorize a push either.
+
+### Human authority and `/devops` (no restrictions)
+
+- **Parse freely.** `/devops` with any wording is a human directive:
+  parse the intent with no restricted vocabulary and do it. Known
+  forms (`status`, `push-ok`, `allow-branch`, …) and free-form chat
+  ("push", "go", "cut a branch X") are the same class of order.
+- **Do not stop development.** A `/devops` command or chat alias never
+  pauses or cancels the current goal loop; apply it and keep working.
+- **Chat equals slash.** Saying `push` in chat is the same as
+  `/devops push-ok`. Plain wording and slash forms authorize the same
+  actions.
+- **Human is final.** Anything the human says is final and must be
+  done. Do not second-guess, delay, or refuse a human directive by
+  citing a gate, a seat, or a process rule.
 
 ### Reviewer entrypoint (before QA)
 
@@ -158,10 +174,11 @@ push either.
    it. The authors are the union of the Handoff `Authors:` and the
    Push JSON `authors` of every cherry-picked SHA, the Orchestrator's
    conflict fixes included; a seat is refused when its seat id or its
-   handle is in that set. The Orchestrator pushes only after the human
-   authorizes that push ([thoughts-layout.md](references/thoughts-layout.md),
-   One push). Check `git diff --stat <integration-base>...HEAD` for
-   process files after any strip. Do not commit process notes.
+   handle is in that set. The Orchestrator pushes when the human
+   authorizes that push (chat "push" = `/devops push-ok`; human word is
+   final) ([thoughts-layout.md](references/thoughts-layout.md), One
+   push). Check `git diff --stat <integration-base>...HEAD` for process
+   files after any strip. Do not commit process notes.
 
 ### Virtual PR and virtual git
 
@@ -320,10 +337,10 @@ Author.
 ```text
 research  ∥  implement  ∥  review   (department rules apply)
 security  →  qa  →  docs
-push      →  NEVER until QA marks PASS
-            After PASS: thoughts → final/ (local); the Orchestrator
-            pushes only after the human authorizes that push, keeping
-            approved Coder commits
+push      →  default: after QA PASS + human go
+            Human "push" / /devops push-ok is final and authorizes now;
+            do not stop development for /devops
+            After PASS: thoughts → final/ (local); keep approved Coder commits
 repeat    →  until PASS; QA blocked/send-back → triage;
             the Researcher joins the Coder who picks it up
 ```
@@ -337,9 +354,12 @@ from Coders and Researchers go first to the standing Review, Security
 and QA subagents by topic. Orchestrator is the only role that asks The
 Client unless the human spoke first.
 
-Treat human instructions as a **side sprint**. Pause only conflicting
-work. Start from research, then code. Stay on the current **real**
-branch. An interrupt does **not** authorize a push.
+Treat human instructions (including `/devops` and chat aliases) as
+**final directives**, not a pause. Apply them immediately, keep the
+current development loop running, and only redirect seats whose work
+the directive itself contradicts. Stay on the current **real** branch
+unless the human named another. A human "push" / `/devops push-ok`
+**does** authorize that push.
 
 ## Output rules
 

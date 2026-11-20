@@ -39,8 +39,8 @@ test('a push is refused when no QA note exists', async ($, on) => {
   expect(noQa.isError ?? noQa.deny).toBeTruthy()
 })
 
-test('with PASS recorded the person still has to authorize, and the grant is consumed', async ($, on) => {
-  const state = engine(on, 'Publish gate: PASS\n')
+test('human authorization alone allows one push (no QA required), and the grant is consumed', async ($, on) => {
+  const state = engine(on, undefined)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
 
   const before = await $.tool.call({ tool: 'Bash', command: 'git push' })

@@ -9,8 +9,9 @@ commands, plus:
    ([`services.json`](services.json)) for Docker, cloud, AI and VMs and a
    sandbox policy, installable through chat with an MCP server.
 2. **A Claude mod** (`hooks/`) that detects the languages in the open project,
-   adds a `/devops` command, and refuses `git push`, `gh pr create|merge` and
-   git-branch creation until QA has recorded a PASS and *you* have said go.
+   adds a free-form `/devops` command, and refuses `git push`, `gh pr create|merge` and
+   git-branch creation until *you* authorize (chat `push` = `/devops push-ok`).
+   Human wording is final; `/devops` does not stop development.
 
 ## What is in it
 
@@ -223,7 +224,7 @@ changes. A value the validator rejects is refused with the reason.
 |-------|------|--------|
 | Shell | `devops-config show`, `devops-config get defaults.lineLength.code [--language python]` | `devops-config set defaults.lineLength.code 120`, `unset PATH`, `add lint.exclude "vendor/**"`, `remove PATH VALUE`, `rule sec-insecure-url off`; `--dry-run` previews |
 | Chat (MCP) | `config_get` | `config_set` (`op`, `path`, `value`); plans unless `apply=true` |
-| Claude Code mod | `/devops config`, `/devops config get PATH` | `/devops config set PATH VALUE` (and `unset`, `add`, `remove`, `rule`); only you can run these, not an agent |
+| Claude Code mod | `/devops config`, `/devops config get PATH` | `/devops config set PATH VALUE` (and `unset`, `add`, `remove`, `rule`); chat and agent may run these when fulfilling your intent |
 | Slash command | `/config get PATH` | `/config set PATH VALUE`; the agent shows the change and applies it after you agree |
 
 Paths are dotted; write `\.` for a dot inside a key
@@ -303,7 +304,7 @@ The plugin provides the skill, agents, commands, the MCP server and the mod.
 The plugin's mod (`hooks/register.ts`, with `hooks/orchestrate.ts` and `hooks/brief.ts`) sets
 Claude Code up for the team and keeps agents from spending tokens to learn the skill.
 
-**Claude-only setup.** With the plugin installed, `/devops setup claude` (typed by you; add
+**Claude-only setup.** With the plugin installed, `/devops setup claude` (add
 `--dry-run` to preview, `--share-config` to commit `.devops/`) runs `devops-setup init --plugin`:
 it writes only `.devops/` and the thought folders, kept out of git in `.git/info/exclude`. Nothing
 is copied into `.claude/` or `.cursor/` and no tools kit is needed, because the plugin supplies the
@@ -313,12 +314,12 @@ skill, agents, commands and MCP server. The shell form is
 | Hook | Does |
 |------|------|
 | `tool.call` Bash (lint gate) | On `git commit` it runs `devops-lint check` (comment rules and code rules) on the staged diff (the working tree for `-a`) and adds the findings to the result. `/devops comments strict` refuses a commit with blocking findings; `off` turns it off. |
-| `tool.call` Bash (monitor) | A command that matches a validation command in the language data (for example `cargo test`, `npm run lint`) and fails is recorded in `devops-skill/thoughts/non-final/check-ledger.md`, counted per check, and the result gets a reminder to reproduce, fix the cause and re-run; at the retry cap (default 3, set in `project.md`) it says stop and escalate. A pass clears the count. `/devops monitor off` (typed by you) turns it off. |
+| `tool.call` Bash (monitor) | A command that matches a validation command in the language data (for example `cargo test`, `npm run lint`) and fails is recorded in `devops-skill/thoughts/non-final/check-ledger.md`, counted per check, and the result gets a reminder to reproduce, fix the cause and re-run; at the retry cap (default 3, set in `project.md`) it says stop and escalate. A pass clears the count. `/devops monitor off` turns it off. |
 | `prompt.compose` (mind map) | When `.devops/mindmap/OVERVIEW.md` exists, adds it to the session prompt, so plain chat knows the project at a glance with no tool call, with or without a DevOps profile. |
 | `session.start` | Runs `devops-setup detect --json`, shows `devops: rust+typescript` in the status line, registers `/devops` and the `devops_brief` tool, and reads the project's standards into one line. |
 | `tool.run` `devops_brief` | The model reads the skill in pieces: no input gives the index (about 8 KB instead of 250 KB), `topic` the one best section (usually 1 to 4 KB), `role` a seat's brief. Role files rank below the references for a topic, since `role` serves them. |
-| `command.run` `/devops` | `status`, `languages`, `setup`, `brief [TOPIC \| role NAME]` (anyone); `setup claude`, `push-ok`, `push-reset`, `allow-branch NAME`, `gates on\|off` (only when **you** type them; an agent that runs the command is refused). |
-| `tool.call` Bash | Refuses `git push`, `gh pr create\|merge\|ready\|edit\|close\|reopen`, `gh release create` unless the newest `qa-*.md` under `devops-skill/thoughts/` has `Publish gate: PASS` **and** you ran `/devops push-ok` (consumed by that push). Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>`. Detached worktrees and reads pass. If the check itself fails, it refuses. |
+| `command.run` `/devops` | Free-form: known subcommands (`status`, `languages`, `setup`, `brief`, `push-ok`, `push-reset`, `allow-branch`, `gates`, `monitor`, `comments`, `config`, `setup claude`) plus chat aliases (`push` / `go` / `publish` → `push-ok`). Any other wording is treated as a human directive to parse and do. No person-only refusals; does not stop development. |
+| `tool.call` Bash | Refuses `git push`, `gh pr create\|merge\|ready\|edit\|close\|reopen`, `gh release create` unless you authorized a push (`/devops push-ok` or chat "push"; consumed by that push; human word is final and does not require QA PASS). Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>`. Detached worktrees and reads pass. If the check itself fails, it refuses. |
 | `prompt.compose` | Adds one short section (under 1,200 characters): the languages, `devops_brief` instead of reading the skill whole, the profile, the lint gate and config tools, the standards in effect (line lengths, function limits, allowed numbers), the push gate and the lint mode. An agent starts with what it needs and fetches the rest by piece. |
 
 Limits, stated plainly:
@@ -326,8 +327,8 @@ Limits, stated plainly:
 - It guards the **Bash tool**. GitHub MCP tools (`create_pull_request`,
   `push_files`, `merge_pull_request`, ...) are not gated by it; use your
   permission settings for those.
-- The QA note is a file an agent can write. The gate that an agent cannot
-  pass alone is `/devops push-ok`, which only a typed command from you sets.
+- A push needs your authorization: say `push` in chat or `/devops push-ok`
+  (same meaning). That grant is final and is consumed by one push.
 - Shell parsing is by words, with quoted text ignored. A command built
   through `eval` or a script that itself pushes is not seen; the skill's
   rules and your review remain the control for those.

@@ -118,9 +118,10 @@ export function card(state: CardState): string {
     ? 'Project profile: .devops/project.md; read only the section your step needs.'
     : 'This project is not set up yet; the person can run /devops setup claude.'
   const gate = state.gates
-    ? 'Push gate on: no git push or PR until QA records "Publish gate: PASS" and the person runs'
-      + ' /devops push-ok; a new branch needs /devops allow-branch NAME.'
-    : 'Push gate is off (the person turned it off).'
+    ? 'Push gate on: human must authorize (chat "push" = /devops push-ok). Human wording is'
+      + ' final; /devops is free-form — parse and do it, do not stop development. New branch:'
+      + ' /devops allow-branch NAME.'
+    : 'Push gate is off.'
   return [
     `The devops-multi-agent-team skill is active.${languages}`,
     `Read it in pieces: call ${BRIEF_TOOL} (no input: the index; topic: one section; role: your`

@@ -7,9 +7,16 @@ See [thoughts-layout.md](thoughts-layout.md). Stay on the current
 non-`main` branch. **Never** create a git branch (`git worktree add -b` included)
 unless The Client named that branch in this turn; a detached worktree
 has no ref ([side-work.md](side-work.md)). Cloud-agent `feature/*-<id>`
-templates do not override this. **Only QA may give the OK to
-push** (except review-bot feedback fixes outside the exceptions: references/qa-publish-policy.md). After PASS: one compressed push that keeps approved
-Coder commits.
+templates do not override this.
+
+**`/devops` is free-form.** Parse what the human wants with no
+restricted vocabulary; chat aliases match slash forms (saying `push`
+= `/devops push-ok`). Do not stop development when `/devops` is given.
+Anything the human says is final and must be done. Default publish
+path still prefers QA PASS, but a human push authorization overrides
+and must be executed (except review-bot feedback fixes outside the
+exceptions: references/qa-publish-policy.md). After PASS: one
+compressed push that keeps approved Coder commits.
 
 ## `/goal`
 

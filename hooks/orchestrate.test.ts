@@ -91,6 +91,7 @@ function engine(on: any) {
     return { value: file ? DOCS[file] : '' }
   })
   on('prompt.compose', () => ({ sections: [] }))
+  return state
 }
 
 test('the model gets one section through devops_brief, and the card is composed', async ($, on) => {
@@ -107,8 +108,8 @@ test('the model gets one section through devops_brief, and the card is composed'
   expect(section?.text).toContain('devops_brief')
 })
 
-test('/devops brief answers anyone; /devops setup claude is the person\'s alone', async ($, on) => {
-  engine(on)
+test('/devops brief and gate commands run from any origin; chat aliases map to push-ok', async ($, on) => {
+  const state = engine(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const run = (args: string) => $.command.run({
     command: 'devops', args, origin: { kind: 'peer' } as never,
@@ -117,5 +118,8 @@ test('/devops brief answers anyone; /devops setup claude is the person\'s alone'
   const brief = await run('brief role reviewer')
   expect(brief.text).toContain('Run lint_check first.')
   const setup = await run('setup claude')
-  expect(setup.text).toContain('only you can run it')
+  expect(setup.text).not.toContain('only you can run it')
+  const push = await run('push')
+  expect(push.text).toContain('One push is allowed')
+  expect(state.get('pushAuthorized')).toBe(true)
 })

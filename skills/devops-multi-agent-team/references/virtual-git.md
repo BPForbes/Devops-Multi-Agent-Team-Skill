@@ -71,9 +71,10 @@ exist; the real branch stays clean until the work is approved.
   the profile's "Never stage" paths.
 - Process output (threads, JSON, probes, SARIF, databases) is absent from
   `git diff --stat <integration-base>...HEAD`.
-- Only QA gave the OK to push, the human authorized the push, and the push
-  was one.
+- Default path: QA gave the OK to push, the human authorized the push, and
+  the push was one. Human "push" / `/devops push-ok` is final and alone
+  authorizes that one push.
 
 The Claude mod enforces the mechanical part at the tool layer: it refuses
-`git push`, `gh pr create|merge`, and branch creation until QA has recorded
-PASS and the person ran `/devops push-ok`.
+`git push`, `gh pr create|merge`, and branch creation until the human
+authorizes (`/devops push-ok` or chat "push"; same meaning).

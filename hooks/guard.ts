@@ -57,6 +57,36 @@ export function splitArgs(args: string): { word: string; rest: string } {
   return space === -1 ? { word: trimmed, rest: '' } : { word: trimmed.slice(0, space), rest: trimmed.slice(space).trim() }
 }
 
+const BRANCH_INTENT = /^(allow-branch|branch|cut(?:\s+a)?\s+branch)\s+/i
+
+/** Map free-form /devops wording (and chat aliases like "push") onto a known subcommand. */
+export function interpretDevopsIntent(args: string): { word: string; rest: string } | undefined {
+  const trimmed = args.trim()
+  if (trimmed === '') return { word: 'status', rest: '' }
+  const lower = trimmed.toLowerCase()
+  if (/^(push-ok|push|go|publish|ship)(?:\s|$)/.test(lower)) {
+    return { word: 'push-ok', rest: '' }
+  }
+  if (/^(push-reset|withdraw|revoke(?:\s+push)?)(?:\s|$)/.test(lower)) {
+    return { word: 'push-reset', rest: '' }
+  }
+  if (/^(allow-branch|branch|cut(?:\s+a)?\s+branch)\b/.test(lower)) {
+    const name = branchNameOf(trimmed.replace(BRANCH_INTENT, '').trim())
+    return { word: 'allow-branch', rest: name ?? '' }
+  }
+  if (/^gates?\s+(on|off)\b/.test(lower)) {
+    return { word: 'gates', rest: lower.includes('off') ? 'off' : 'on' }
+  }
+  if (/^monitor\s+(on|off)\b/.test(lower)) {
+    return { word: 'monitor', rest: lower.includes('off') ? 'off' : 'on' }
+  }
+  if (/^comments?\s+(warn|strict|off)\b/.test(lower)) {
+    const mode = /warn|strict|off/.exec(lower)?.[0] ?? ''
+    return { word: 'comments', rest: mode }
+  }
+  return undefined
+}
+
 /** Words as a shell splits them: "a b" and 'a b' stay one word, quotes removed. */
 export function shellWords(text: string): string[] {
   const words = [...text.matchAll(/"(?<double>(?:[^"\\]|\\.)*)"|'(?<single>[^']*)'|(?<bare>\S+)/g)]

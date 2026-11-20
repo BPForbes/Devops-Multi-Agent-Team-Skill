@@ -18,8 +18,10 @@ Do until you achieve **X**. Do not stop at a plan or a partial implement.
 3. The Orchestrator (`/devops-multi-agent-team`) loops the DevOps cycle until X is actually achieved.
 4. Spawn roles with `/create-subagent` **asynchronously**. Subagents accept the same `/` command or plain wording.
 5. Mark the local goal file (and `UpdateGoal`) complete only when the criteria are met, or the human stops the goal.
-6. **Only QA may give the OK to push.** Every change except review-bot feedback fixes (see qa-publish-policy.md) still gets Security's SOC 2 review. DO NOT PUSH, PUBLISH, OPEN OR UPDATE A
-   PULL REQUEST, MERGE, OR OTHERWISE SUBMIT CODE UNTIL QA MARKS THE
-   PUBLISH GATE PASS.
+6. **Default publish path:** QA PASS, then the human's go. Human "push" /
+   `/devops push-ok` is final and must be done (same meaning in chat or
+   slash form). Every change except review-bot feedback fixes (see
+   qa-publish-policy.md) still gets Security's SOC 2 review. Do not push
+   on a seat's say-so alone.
 
 Catalog: `../skills/devops-multi-agent-team/references/agent-commands.md`.
