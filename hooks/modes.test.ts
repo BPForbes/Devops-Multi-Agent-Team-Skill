@@ -33,10 +33,16 @@ test('free-form phrases route to skill modes', () => {
   expect(interpretSkillIntent('clean up comments in src')).toEqual({
     word: 'clean', mode: 'brief', rest: 'clean up comments in src',
   })
+  expect(interpretSkillIntent('run research on auth')).toMatchObject({
+    word: 'stage', mode: 'research',
+  })
+  expect(interpretSkillIntent('allocate agents for billing')).toMatchObject({
+    word: 'allocate', mode: 'agent',
+  })
   expect(interpretSkillIntent('something novel')).toBeUndefined()
 })
 
-test('orchestrationCard names tools instead of dumping prose', () => {
+test('orchestrationCard names tools and keeps free-form dumps out', () => {
   const text = orchestrationCard({
     word: 'question', mode: 'symbol', rest: 'total',
   })
@@ -44,6 +50,18 @@ test('orchestrationCard names tools instead of dumping prose', () => {
   expect(text).toContain('mindmap_query')
   expect(text).toContain('input: total')
   expect(text).not.toContain('Free-form /devops directive')
+})
+
+test('help and stage cards list catalog and seats', () => {
+  const help = orchestrationCard({ word: 'help', mode: 'skills', rest: '' })
+  expect(help).toContain('/devops question')
+  expect(help).toContain('/devops stage')
+  const stage = orchestrationCard({
+    word: 'ci', mode: 'security', rest: 'lock down secrets',
+  })
+  expect(stage).toContain('## /devops stage')
+  expect(stage).toContain('Security Engineer')
+  expect(stage).toContain('input: lock down secrets')
 })
 
 test('scriptArgsFor shells out for mind-map and clean', () => {

@@ -18,7 +18,9 @@ Spawn specialized roles. They run **asynchronously in pods**, not a linear queue
    **Only QA may give the OK to push.** Every change except review-bot feedback fixes (see qa-publish-policy.md) gets Security's SOC 2 review;
    that review does not authorize a push. DO NOT PUSH, PUBLISH, OPEN OR UPDATE A PULL REQUEST,
    MERGE, OR OTHERWISE SUBMIT CODE UNTIL QA MARKS THE PUBLISH GATE PASS.
-5. Subagents accept any `/` command or the same words (`/goal`, `/code-review`, `/repro`, `/buildkite-*`, `/sonar-*`, and so on).
+5. Subagents accept any `/` command, `/devops` skill modes (`question`,
+   `mind-map`, `stage`, `review`, `repro`, …), or the same words
+   (`/goal`, `/code-review`, `/repro`, `/buildkite-*`, `/sonar-*`, …).
 6. Give every spawned seat a **team hash**, **agent hash**, **initial
    job** and **current job** (minted by the Orchestrator, see
    `role-identity.md` Identity hashes; run

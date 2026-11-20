@@ -27,6 +27,10 @@ absolute paths for scan `path`; call `snyk_trust` only when
 instructed). `/goal` · `/code-review` (inspect) · `/repro` ·
 `/create-subagent` · `/review-security`.
 
+**Seat `/devops` methods** (same cards as the human; call the tools):
+`/devops stage --mode security` · `/devops review` ·
+`/devops question` (scope of the change).
+
 ## Workflow
 
 1. Authenticate if a tool reports unauthenticated.

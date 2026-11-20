@@ -84,7 +84,6 @@ export function interpretDevopsIntent(args: string): { word: string; rest: strin
     const mode = /warn|strict|off/.exec(lower)?.[0] ?? ''
     return { word: 'comments', rest: mode }
   }
-  if (/^help(?:\s|$)/.test(lower)) return { word: 'help', rest: '' }
   return undefined
 }
 

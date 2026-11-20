@@ -1,6 +1,6 @@
 import { shellWords } from './guard'
 
-/** A /devops skill mode: structured orchestration, not a plain-text dump. */
+/** A /devops skill mode with an optional --mode and trailing input. */
 export type SkillMode = {
   word: string
   mode: string
@@ -18,7 +18,29 @@ type ModeSpec = {
   command?: string
 }
 
+const STAGE_ROLES: Record<string, string> = {
+  research: 'Planner, Researcher, Ticket Lead',
+  implement: 'Coder (department Researcher joins)',
+  review: '2–3 Reviewers (independent team hashes)',
+  security: 'Security Engineer',
+  qa: 'QA, CI Engineer, Verifier',
+  docs: 'Documentation, Communicator',
+  full: 'all pods in the DevOps loop',
+}
+
 const SPECS: ModeSpec[] = [
+  {
+    word: 'help',
+    aliases: ['?', 'modes'],
+    modes: ['all', 'gates', 'skills', 'stage'],
+    defaultMode: 'all',
+    skill: 'devops command catalog',
+    tools: [],
+    behavior: [
+      'Print the catalog for the chosen slice (all, gates, skills, or stage).',
+      'Point the next action at a named mode; keep the development loop running.',
+    ],
+  },
   {
     word: 'question',
     aliases: ['ask', 'q'],
@@ -28,7 +50,7 @@ const SPECS: ModeSpec[] = [
     tools: ['mindmap_overview', 'mindmap_query', 'mindmap_tree'],
     behavior: [
       'Answer from the mind map; do not spawn seats.',
-      'Call the MCP tools (or scripts/devops-mindmap.mjs); do not dump the tree as prose.',
+      'Call the MCP tools (or scripts/devops-mindmap.mjs); keep the tree out of chat.',
       'Open files only at the line ranges the map returns.',
     ],
   },
@@ -66,16 +88,52 @@ const SPECS: ModeSpec[] = [
   {
     word: 'goal',
     aliases: [],
-    modes: ['loop', 'status'],
+    modes: ['loop', 'status', 'allocate'],
     defaultMode: 'loop',
     skill: 'devops-multi-agent-team (+ /goal)',
     tools: ['detect_project', 'status', 'mindmap_overview', 'reuse_search'],
     behavior: [
       'Write goal-agent-<hex>.md; loop the DevOps cycle until X is met.',
-      'Spawn seats asynchronously with team/agent/job hashes; do not stop at a plan.',
-      'Default publish: QA PASS then human push; human push-ok is final.',
+      'allocate: mint team/agent hashes, write per-pod and per-agent goals, set current_job.',
+      'Spawn seats asynchronously; default publish: QA PASS then human push.',
     ],
     command: 'commands/goal.md',
+  },
+  {
+    word: 'stage',
+    aliases: ['ci', 'pipeline', 'cicd'],
+    modes: [
+      'research', 'implement', 'review', 'security', 'qa', 'docs', 'full',
+    ],
+    defaultMode: 'full',
+    skill: 'devops-multi-agent-team loop stage',
+    tools: [
+      'mindmap_overview', 'reuse_search', 'module_map', 'detect_project',
+      'comment_audit', 'sandbox_plan',
+    ],
+    behavior: [
+      'Trigger only the named CI/CD pod (or full). Allocate goals first.',
+      'Mint team hash for the item pod; mint agent hashes; set initial_job/current_job.',
+      'Spawn /create-subagent for seats of that stage only; keep other pods idle.',
+      'Seats use /devops question|mind-map|reuse|review|repro the same way humans do.',
+      'full + input text: treat input as the parent goal and allocate pod/agent goals.',
+    ],
+    command: 'commands/stage.md',
+  },
+  {
+    word: 'allocate',
+    aliases: ['assign'],
+    modes: ['pod', 'agent', 'job', 'board'],
+    defaultMode: 'pod',
+    skill: 'orchestrator goal allocation',
+    tools: [],
+    behavior: [
+      'pod: one goal file per team hash (goal-team-<hex>.md) from the parent goal.',
+      'agent: one goal-agent-<hex>.md per seat with acceptance criteria for that job.',
+      'job: use devops-ids free --initial JOB; set current_job; prefer initial_job match.',
+      'board: update seat-registry.md and team-board.md with the allocation rows.',
+      'Scripts: node scripts/devops-ids.mjs mint team|agent and free --registry …',
+    ],
   },
   {
     word: 'story',
@@ -89,7 +147,7 @@ const SPECS: ModeSpec[] = [
     ],
     behavior: [
       'Research organizes first; Coders write OLD then NEW; Reviewers then QA/Security.',
-      'Use story_* MCP tools; do not invent catalog rows in free prose.',
+      'Use story_* MCP tools; keep catalog rows out of free prose.',
     ],
     command: 'commands/story.md',
   },
@@ -102,7 +160,7 @@ const SPECS: ModeSpec[] = [
     tools: ['sandbox_plan', 'check_toolchain'],
     behavior: [
       'Recreate with exact commands and exit codes; write repro-<topic>.md.',
-      'Prefer a throwaway clone; never claim a cause before the repro ran.',
+      'Use a throwaway clone when possible; claim a cause only after the repro ran.',
     ],
     command: 'commands/repro.md',
   },
@@ -128,7 +186,7 @@ const SPECS: ModeSpec[] = [
     tools: ['comment_audit', 'mindmap_query'],
     behavior: [
       'QA inspects only; confirm Push JSON; write review-<seat-id>.md.',
-      'Do not edit product code; use the virtual PR and side-work rules.',
+      'Leave product code unchanged; use the virtual PR and side-work rules.',
     ],
     command: 'commands/code-review.md',
   },
@@ -141,7 +199,7 @@ const SPECS: ModeSpec[] = [
     tools: ['reuse_search', 'module_map', 'mindmap_query'],
     behavior: [
       'Search before writing; if a name exists, extend it and say so.',
-      'Prefer reuse_search / mindmap_query over grepping the whole tree into chat.',
+      'Call reuse_search / mindmap_query; keep whole-tree greps out of chat.',
     ],
   },
   {
@@ -168,7 +226,7 @@ const MODE_FLAG = /(?:^|\s)--mode\s+(\S+)/i
 /** Known gate subcommands (not skill modes). */
 export const GATE_WORDS = [
   '', 'status', 'languages', 'setup', 'brief', 'push-ok', 'push-reset',
-  'allow-branch', 'comments', 'config', 'monitor', 'gates', 'help',
+  'allow-branch', 'comments', 'config', 'monitor', 'gates',
 ] as const
 
 export function skillWords(): string[] {
@@ -228,6 +286,15 @@ export function interpretSkillIntent(args: string): SkillMode | undefined {
   if (/^(do until|keep going until|set a goal)\b/.test(lower)) {
     return parseSkillMode('goal', trimmed)
   }
+  if (/^(run|trigger|start)\s+(research|implement|review|security|qa|docs)\b/.test(lower)) {
+    const stage = /research|implement|review|security|qa|docs/.exec(lower)?.[0] ?? 'full'
+    return parseSkillMode('stage', `--mode ${stage} ${trimmed}`)
+  }
+  if (/^(allocate|assign)\s+(pods?|agents?|jobs?)\b/.test(lower)) {
+    const which = /pods?|agents?|jobs?/.exec(lower)?.[0] ?? 'pod'
+    const mode = which.startsWith('agent') ? 'agent' : which.startsWith('job') ? 'job' : 'pod'
+    return parseSkillMode('allocate', `--mode ${mode} ${trimmed}`)
+  }
   return undefined
 }
 
@@ -239,21 +306,57 @@ function splitFirst(args: string): { word: string; rest: string } {
     : { word: trimmed.slice(0, space), rest: trimmed.slice(space).trim() }
 }
 
-/** Structured card the agent follows instead of re-interpreting plain text. */
+/** Catalog text for /devops help [--mode all|gates|skills|stage]. */
+export function helpCatalog(mode: string): string {
+  const gates = [
+    'status, languages, setup, setup claude, brief, push-ok, push-reset,',
+    'allow-branch NAME, gates on|off, monitor on|off, comments warn|strict|off, config …',
+  ].join(' ')
+  const skills = SPECS.map(s => {
+    const alias = s.aliases.length > 0 ? ` (${s.aliases.join(', ')})` : ''
+    return `/devops ${s.word}${alias} --mode ${s.modes.join('|')}  [text]`
+  })
+  const stages = Object.entries(STAGE_ROLES).map(
+    ([name, roles]) => `- ${name}: ${roles}`,
+  )
+  const parts: string[] = ['## /devops help', `mode: ${mode}`]
+  if (mode === 'gates' || mode === 'all') {
+    parts.push('### Gates', gates)
+  }
+  if (mode === 'skills' || mode === 'all') {
+    parts.push('### Skill modes (text after the command is the input)', ...skills)
+  }
+  if (mode === 'stage' || mode === 'all') {
+    parts.push(
+      '### CI/CD stages (`/devops stage|ci|pipeline --mode … [goal text]`)',
+      ...stages,
+      'Allocate pod and agent goals before spawning (`/devops allocate` or goal --mode allocate).',
+    )
+  }
+  parts.push('Keep development running. Human wording is final.')
+  return parts.join('\n')
+}
+
+/** Build the skill-mode card: mode, tools, behavior, and input. */
 export function orchestrationCard(skill: SkillMode): string {
+  if (skill.word === 'help') return helpCatalog(skill.mode)
   const spec = BY_ALIAS.get(skill.word)
   if (spec === undefined) return `Unknown skill mode: ${skill.word}`
   const input = skill.rest === '' ? '(none — ask if needed)' : skill.rest
+  const stageNote = spec.word === 'stage' && STAGE_ROLES[skill.mode] !== undefined
+    ? [`seats: ${STAGE_ROLES[skill.mode]}`]
+    : []
   return [
     `## /devops ${spec.word}`,
     `mode: ${skill.mode} (allowed: ${spec.modes.join('|')})`,
     `skill: ${spec.skill}`,
     ...(spec.command !== undefined ? [`command: ${spec.command}`] : []),
-    `tools: ${spec.tools.join(', ')}`,
+    ...stageNote,
+    `tools: ${spec.tools.join(', ') || '(none — follow behavior)'}`,
     'behavior:',
     ...spec.behavior.map(line => `- ${line}`),
     `input: ${input}`,
-    'Do not stop development. Prefer the tools above over pasting large file bodies.',
+    'Keep development running. Call the tools above; keep large file bodies out of chat.',
   ].join('\n')
 }
 

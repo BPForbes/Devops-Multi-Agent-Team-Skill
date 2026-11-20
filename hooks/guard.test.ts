@@ -59,7 +59,6 @@ test('chat aliases and free-form /devops wording map to gate commands', () => {
     word: 'allow-branch', rest: 'topic/x',
   })
   expect(interpretDevopsIntent('gates off')).toEqual({ word: 'gates', rest: 'off' })
-  expect(interpretDevopsIntent('help')).toEqual({ word: 'help', rest: '' })
   expect(interpretDevopsIntent('something novel')).toBeUndefined()
 })
 

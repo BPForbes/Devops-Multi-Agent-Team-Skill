@@ -25,14 +25,17 @@ keeps approved Coder commits.
 
 Each mode returns an **orchestration card** (skill, tools, behavior,
 `--mode`) and, when it can, runs the matching script so results are
-not retyped into chat.
+not retyped into chat. Trailing text after the command is the input.
 
 | Command | Modes (`--mode`) | Tools / skill |
 |---------|------------------|---------------|
+| `/devops help` (`?`, `modes`) | `all`, `gates`, `skills`, `stage` | catalog |
 | `/devops question` (`ask`, `q`) | `overview`, `tree`, `symbol`, `search`, `file`, `module`, `library` | `mindmap_*`, `project-mindmap` |
 | `/devops mind-map` (`map`) | `overview`, `build`, `status`, `tree`, `query`, `note` | `mindmap_*` |
 | `/devops clean` (`cleanup`, `tidy`) | `brief`, `scan`, `plan`, `run` | `cleanup_*`, `devops-cleanup` |
-| `/devops goal` | `loop`, `status` | team loop + `/goal` |
+| `/devops stage` (`ci`, `pipeline`) | `research`, `implement`, `review`, `security`, `qa`, `docs`, `full` | one CI/CD pod or full loop |
+| `/devops allocate` (`assign`) | `pod`, `agent`, `job`, `board` | per-pod / per-agent goals |
+| `/devops goal` | `loop`, `status`, `allocate` | team loop + `/goal` |
 | `/devops story` | `research`, `create`, `check`, `graph` | `story_*` |
 | `/devops repro` | `run` | `/repro` |
 | `/devops triage` | `open` | `/triage` |
@@ -42,8 +45,25 @@ not retyped into chat.
 
 Gate commands stay as they were (`status`, `push-ok`, `allow-branch`,
 `gates`, `monitor`, `comments`, `config`, `setup`, `brief`,
-`languages`). Free-form phrases such as "how does X work" or "clean
-up src" map onto the matching skill mode.
+`languages`). Free-form phrases such as "how does X work", "run
+research", or "allocate pods" map onto the matching skill mode.
+
+## Seat methods (research → QA / security)
+
+Research, Review, Security and QA seats use the **same** `/devops`
+skill modes (and chat aliases) as the human. They do not invent a
+parallel plain-text path.
+
+| Seat | Prefer |
+|------|--------|
+| Researcher | `question`, `mind-map`, `reuse`, `stage --mode research`, `story --mode research` |
+| Reviewer | `review`, `question`, `mind-map --mode query`, `comment_audit` via tools |
+| Security | `stage --mode security`, `review`, `question` (scope), profile scanners |
+| QA | `stage --mode qa`, `review`, `repro`, `triage`, `question` |
+
+Orchestrator: `allocate` (pod then agent), then `stage` / `goal` to
+spawn; never codes. Independence checks still refuse own-work and
+own-pod judges ([role-identity.md](role-identity.md)).
 
 ## `/goal`
 

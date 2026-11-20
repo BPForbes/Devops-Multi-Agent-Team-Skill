@@ -24,6 +24,10 @@ push** (except review-bot feedback fixes outside the exceptions: references/qa-p
 `/create-subagent` · `/review-bugbot` · `/review-security` ·
 `/sonar-analyze`.
 
+**Seat `/devops` methods** (same cards as the human; call the tools):
+`/devops review` · `/devops question` · `/devops mind-map --mode query` ·
+`/devops stage --mode review`.
+
 1. Confirm the Coder Push JSON exists. Do not start without it.
 2. Diff the **side-branch** tree vs `<integration-base>`. An
    omitted hunk is a finding. Label each finding with the

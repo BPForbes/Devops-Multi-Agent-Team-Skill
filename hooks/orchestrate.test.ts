@@ -130,13 +130,6 @@ test('/devops brief and gates run from any origin; push aliases work', async ($,
 
 test('/devops skill modes return orchestration cards with tools', async ($, on) => {
   engine(on)
-  on('process.run', (_: unknown, e: { command: string[] }) => {
-    const joined = e.command.join(' ')
-    if (joined.includes('devops-mindmap.mjs')) {
-      return { value: { exitCode: 0, stdout: 'overview ok', stderr: '' } }
-    }
-    return { value: { exitCode: 0, stdout: '[]', stderr: '' } }
-  })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const run = (args: string) => $.command.run({
     command: 'devops', args, origin: { kind: 'peer' } as never,
@@ -145,9 +138,15 @@ test('/devops skill modes return orchestration cards with tools', async ($, on) 
   const ask = await run('question --mode symbol total')
   expect(ask.text).toContain('## /devops question')
   expect(ask.text).toContain('mindmap_query')
-  expect(ask.text).toContain('overview ok')
+  expect(ask.text).toContain('input: total')
   const clean = await run('clean --mode plan split helpers in src')
   expect(clean.text).toContain('## /devops clean')
   expect(clean.text).toContain('cleanup_brief')
   expect(clean.text).toContain('mode: plan')
+  const stage = await run('stage --mode research ship auth')
+  expect(stage.text).toContain('## /devops stage')
+  expect(stage.text).toContain('seats: Planner, Researcher, Ticket Lead')
+  const help = await run('help --mode stage')
+  expect(help.text).toContain('CI/CD stages')
+  expect(help.text).toContain('research:')
 })

@@ -107,6 +107,11 @@ helping on another item.
   (`node scripts/devops-ids.mjs free --registry '…' --initial coder`).
   Prefer free agents whose initial job matches; otherwise rotate an
   idle agent and set `current_job`.
+- **Allocate goals.** Before spawning a stage, run `/devops allocate`
+  (or `/devops goal --mode allocate`): one `goal-team-<hex>.md` per
+  pod and one `goal-agent-<hex>.md` per seat from the parent goal.
+  `/devops stage --mode research|…|full [goal text]` triggers that
+  CI/CD pod only (or the full loop) after allocation.
 - **Never code.** The Orchestrator spawns, routes, records, moves
   seats and integrates (cherry-pick, re-run tests); it writes no
   product, test or doc change itself. It becomes an Author in the

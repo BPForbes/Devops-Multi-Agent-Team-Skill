@@ -57,16 +57,21 @@ const HELP = [
   '/devops config [show|get PATH] read the project standards (line length, limits, lint rules)',
   '/devops config set|unset|add|remove PATH [VALUE] | rule RULE error|off   change ' +
     '.devops/standards.json; checked before it is written',
+  '/devops help [--mode all|gates|skills|stage]   catalog of gates and skill modes',
   '/devops question [--mode overview|tree|symbol|search|…] QUERY',
   '                     answer from mindmap_* (project-mindmap); no team',
   '/devops mind-map [--mode overview|build|status|tree|query|note] …',
   '                     repository mind map via mindmap_* / devops-mindmap.mjs',
   '/devops clean [--mode brief|scan|plan|run] STATEMENT',
   '                     cleanup_brief / cleanup_scan + devops-cleanup skill',
+  '/devops stage|ci|pipeline [--mode research|implement|review|security|qa|docs|full]',
+  '                     [GOAL]  trigger one CI/CD pod (or full) with goal text',
+  '/devops allocate [--mode pod|agent|job|board] [GOAL]',
+  '                     Orchestrator assigns goals to pods and each agent',
   '/devops goal|story|repro|triage|review|reuse|tags [--mode …] …',
   '                     skill modes: structured tools + orchestration card',
-  'Chat aliases and free-form phrases map onto these modes. Do not dump the',
-  'request as plain text — use the named tools. Keep development running.',
+  'Chat aliases and free-form phrases map onto these modes. Call the named',
+  'tools; keep large file bodies out of chat. Keep development running.',
 ].join('\n')
 
 async function mindmapText($: EngineInterface, root: string): Promise<Record<string, string>> {
@@ -262,7 +267,6 @@ export const register: Register = on => {
       : (interpretDevopsIntent(e.args) ?? split)
     const { word, rest } = mapped
 
-    if (word === 'help') return { text: HELP }
     if (word === '' || word === 'status') {
       const gates = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true
       const authorized = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const)).value ?? false
