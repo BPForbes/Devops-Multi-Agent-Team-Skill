@@ -16,7 +16,7 @@ const alive = pid => {
 
 const STUCK_MS = 8000
 
-test('a server that ignores SIGTERM and never answers is killed on initialize timeout', async () => {
+test('a stuck server is killed when initialize times out', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-stdio-'))
   const pidFile = path.join(dir, 'pid')
   const stub = path.join(dir, 'stub.mjs')
