@@ -1,18 +1,16 @@
 #!/usr/bin/env node
-import { execFileSync, spawn, spawnSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { SHOWN_CHARS, mcpClient } from './mcp-stdio-client.mjs'
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const PROTOCOL = '2025-06-18'
 const SERVER = 'devops-multi-agent-team'
-const REPLY_TIMEOUT_MS = 30000
-const KILL_GRACE_MS = 2000
 const CLI_TIMEOUT_MS = 120000
 const DEFAULT_CODE_COLUMNS = 100
-const SHOWN_CHARS = 120
 const EXPECTED_TOOLS = [
   'detect_project', 'install_devops_team', 'status', 'lint_check', 'lint_commands',
   'config_get', 'config_set', 'comment_audit',
@@ -62,68 +60,6 @@ function installPackage() {
   const bin = path.join(prefix, 'bin')
   record('npm pack and install', fs.existsSync(path.join(bin, 'devops-setup')), name)
   return bin
-}
-
-/** Newline-delimited JSON-RPC over a child's stdio: requests by id, replies matched back. */
-function rpcChannel(child) {
-  const waiting = new Map()
-  const timers = new Set()
-  let buffer = ''
-  let next = 0
-  child.stdout.setEncoding('utf8')
-  child.stdout.on('data', chunk => {
-    buffer += chunk
-    for (let at = buffer.indexOf('\n'); at !== -1; at = buffer.indexOf('\n')) {
-      const message = JSON.parse(buffer.slice(0, at))
-      buffer = buffer.slice(at + 1)
-      waiting.get(message.id)?.(message)
-      waiting.delete(message.id)
-    }
-  })
-  const send = message => child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`)
-  const rpc = (method, params) => new Promise((resolve, reject) => {
-    const id = ++next
-    const late = () => reject(new Error(`${method}: no reply in ${REPLY_TIMEOUT_MS} ms`))
-    const timer = setTimeout(late, REPLY_TIMEOUT_MS)
-    timers.add(timer)
-    waiting.set(id, message => { clearTimeout(timer); timers.delete(timer); resolve(message) })
-    send({ id, method, params })
-  })
-  const dispose = () => { for (const timer of timers) clearTimeout(timer); timers.clear() }
-  return { rpc, send, dispose }
-}
-
-/** Stop a server: SIGTERM, then SIGKILL if it has not exited within the grace period. */
-function stopChild(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
-  return new Promise(resolve => {
-    const forced = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS)
-    child.once('exit', () => { clearTimeout(forced); resolve() })
-    child.kill('SIGTERM')
-  })
-}
-
-/** A minimal MCP client for one server process: initialize, then call tools by name. */
-async function mcpClient(command, args, env) {
-  const stdio = ['pipe', 'pipe', 'pipe']
-  const child = spawn(command, args, { env: { PATH: process.env.PATH, ...env }, stdio })
-  const { rpc, send, dispose } = rpcChannel(child)
-  const call = async (name, input = {}) => {
-    const reply = await rpc('tools/call', { name, arguments: input })
-    const text = reply.result?.content?.[0]?.text ?? JSON.stringify(reply.error ?? {})
-    const failed = reply.error || reply.result?.isError
-    if (failed) throw new Error(`${name}: ${text.slice(0, SHOWN_CHARS)}`)
-    return JSON.parse(text)
-  }
-  const clientInfo = { name: 'mcp-smoke', version: '1' }
-  const init = await rpc('initialize', { protocolVersion: PROTOCOL, capabilities: {}, clientInfo })
-    .catch(async error => {
-      await stopChild(child)
-      dispose()
-      throw error
-    })
-  send({ method: 'notifications/initialized' })
-  return { init, rpc, call, close: () => { dispose(); return stopChild(child) } }
 }
 
 async function expectTools(label, client) {

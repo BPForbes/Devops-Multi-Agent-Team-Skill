@@ -522,12 +522,22 @@ export function blockInterior(text, syntax) {
       if (line.includes(close)) close = null
       return
     }
-    const opening = syntax.block.find(([open]) => line.includes(open))
+    const code = codeOnly(line, syntax)
+    const opening = syntax.block.find(([open]) => code.includes(open))
     if (!opening) return
     const [open, end] = opening
-    if (!line.slice(line.indexOf(open) + open.length).includes(end)) close = end
+    if (!code.slice(code.indexOf(open) + open.length).includes(end)) close = end
   })
   return inside
+}
+
+const STRING_LITERAL = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`/g
+
+/** A line without its string literals and without anything after a line-comment marker. */
+function codeOnly(line, syntax) {
+  const bare = line.replace(STRING_LITERAL, '""')
+  const ends = syntax.line.map(marker => bare.indexOf(marker)).filter(at => at !== -1)
+  return ends.length > 0 ? bare.slice(0, Math.min(...ends)) : bare
 }
 
 /**

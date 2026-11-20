@@ -4,7 +4,9 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { auditDiff, commentAudit, parseAdded } from './devops-comments.mjs'
+import {
+  auditDiff, blockInterior, commentAudit, parseAdded, syntaxTable,
+} from './devops-comments.mjs'
 import { loadStandards } from './devops-standards.mjs'
 
 function repo(files) {
@@ -312,4 +314,11 @@ test('a continuation is recognised when its opener is in the file, not the diff'
   fs.writeFileSync(path.join(dir, 'c.go'), `package c\n\n/*\n * short\n${long}\n*/\nfunc h() {}\n`)
   execFileSync('git', ['add', '-A'], { cwd: dir })
   assert.ok(!rules(commentAudit(dir, { staged: true })).includes('long-code-line'))
+})
+
+test('a /* inside a string or after a line comment does not open a block', () => {
+  const root = path.join(path.dirname(new URL(import.meta.url).pathname), '..')
+  const syntax = syntaxTable(root)('x.go')
+  const text = 'func f(out *int) {\n\tprintln("/*")\n\t// see /* here\n\t* out++\n}\n'
+  assert.equal(blockInterior(text, syntax).has(4), false)
 })
