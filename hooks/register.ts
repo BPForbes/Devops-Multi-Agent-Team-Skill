@@ -313,8 +313,10 @@ export const register: Register = on => {
     return {
       text: [
         `Free-form /devops directive: ${e.args.trim() || '(empty)'}`,
-        'Parse the human\'s intent with no restrictions, do what they asked, and do not stop development.',
-        'Chat aliases match slash forms (e.g. saying "push" = /devops push-ok). Human wording is final.',
+        'Parse the human\'s intent with no restrictions, do what they asked,',
+        'and do not stop development.',
+        'Chat aliases match slash forms (e.g. saying "push" = /devops push-ok).',
+        'Human wording is final.',
         HELP,
       ].join('\n'),
     }
@@ -335,12 +337,14 @@ export const register: Register = on => {
       }
     }
     if (actions.some(action => action.kind === 'publish')) {
-      const authorized = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const)).value ?? false
-      // Human word is final: /devops push-ok or chat "push" authorizes one push even without QA PASS.
+      const pushKey = { plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const
+      const authorized = (await $.state.get(pushKey)).value ?? false
+      // Human word is final: push-ok or chat "push" allows one push.
       if (!authorized) {
         const qa = await latestQaVerdict($)
+        const what = actions.find(a => a.kind === 'publish')?.what
         return {
-          deny: `${PLUGIN}: ${actions.find(a => a.kind === 'publish')?.what} is refused until the human `
+          deny: `${PLUGIN}: ${what} is refused until the human `
             + 'authorizes it (say "push" in chat or /devops push-ok). '
             + `Latest QA note: ${qa.verdict ?? 'none'}.`,
         }

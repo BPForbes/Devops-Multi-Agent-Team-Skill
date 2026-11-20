@@ -55,7 +55,9 @@ test('chat aliases and free-form /devops wording map to gate commands', () => {
   expect(interpretDevopsIntent('go')).toEqual({ word: 'push-ok', rest: '' })
   expect(interpretDevopsIntent('publish')).toEqual({ word: 'push-ok', rest: '' })
   expect(interpretDevopsIntent('withdraw')).toEqual({ word: 'push-reset', rest: '' })
-  expect(interpretDevopsIntent('cut a branch topic/x')).toEqual({ word: 'allow-branch', rest: 'topic/x' })
+  expect(interpretDevopsIntent('cut a branch topic/x')).toEqual({
+    word: 'allow-branch', rest: 'topic/x',
+  })
   expect(interpretDevopsIntent('gates off')).toEqual({ word: 'gates', rest: 'off' })
   expect(interpretDevopsIntent('something novel')).toBeUndefined()
 })

@@ -62,6 +62,21 @@ test('the card is short and names the tool, the gate, the profile and the standa
   expect(fresh).toContain('/devops setup claude')
 })
 
+function wireDocs(on: any) {
+  const dirOf = (file: string) => file.slice(0, file.lastIndexOf('/'))
+  on('fs.list', (_: unknown, e: { path: string }) => {
+    const files = Object.keys(DOCS).filter(f => e.path.endsWith(`/${dirOf(f)}`))
+    const entry = (f: string) => ({
+      name: f.slice(dirOf(f).length + 1), kind: 'file', size: 1, mtimeMs: 1, isLink: false,
+    })
+    return { value: files.map(entry) }
+  })
+  on('fs.read', (_: unknown, e: { path: string }) => {
+    const file = Object.keys(DOCS).find(f => e.path.endsWith(`/${f}`))
+    return { value: file ? DOCS[file] : '' }
+  })
+}
+
 function engine(on: any) {
   const state = new Map<string, unknown>()
   on('state.get', (_: unknown, e: { key: string }) => ({
@@ -78,18 +93,7 @@ function engine(on: any) {
   on('ui.status', () => ({ value: undefined }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: '[]', stderr: '' } }))
   on('fs.exists', () => ({ value: false }))
-  const dirOf = (file: string) => file.slice(0, file.lastIndexOf('/'))
-  on('fs.list', (_: unknown, e: { path: string }) => {
-    const files = Object.keys(DOCS).filter(f => e.path.endsWith(`/${dirOf(f)}`))
-    const entry = (f: string) => ({
-      name: f.slice(dirOf(f).length + 1), kind: 'file', size: 1, mtimeMs: 1, isLink: false,
-    })
-    return { value: files.map(entry) }
-  })
-  on('fs.read', (_: unknown, e: { path: string }) => {
-    const file = Object.keys(DOCS).find(f => e.path.endsWith(`/${f}`))
-    return { value: file ? DOCS[file] : '' }
-  })
+  wireDocs(on)
   on('prompt.compose', () => ({ sections: [] }))
   return state
 }
@@ -108,7 +112,7 @@ test('the model gets one section through devops_brief, and the card is composed'
   expect(section?.text).toContain('devops_brief')
 })
 
-test('/devops brief and gate commands run from any origin; chat aliases map to push-ok', async ($, on) => {
+test('/devops brief and gates run from any origin; push aliases work', async ($, on) => {
   const state = engine(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const run = (args: string) => $.command.run({
