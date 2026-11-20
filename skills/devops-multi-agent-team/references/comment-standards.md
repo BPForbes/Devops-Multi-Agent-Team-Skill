@@ -7,6 +7,70 @@ The only relaxation is the limits for interface files (section 2b). The language
 and line-comment marker are in the profile ("Comments and documentation",
 from `languages.json` `docs`).
 
+## Summary
+
+The rules every seat loads each session. `rules/comments.md` is generated from this
+block (`npm run rules`); edit it here.
+
+<!-- rules:begin comments -->
+- **Never add a comment because code was added.** If the code is
+  self-explanatory, add none. The default for a change is no new comments.
+- **Pass the comment gate** before writing, keeping or changing a comment:
+  (a) is it needed, or do the names, types and tests already say it?
+  (b) does it say more than the code that runs (a reason, constraint, rejected
+  alternative, trap, external rule)? (c) does it explain which existing concept
+  or helper this code is built on and why, without narrating the
+  implementation? Yes to (a) and to (b) or (c), or it does not go in.
+- **Simple explanations, no narratives**, in comments and docs: state the
+  fact or the reason plainly; no story of how it came to be, no walkthroughs,
+  no filler.
+- **Strict.** Every comment and doc finding is blocking, formatting and the
+  language's style guide included.
+- **Interface files** (`.h`, `.hpp`, `.d.ts`, `.pyi`, `.mli`, ...) are where
+  comments are welcome: they describe how and why the source file is
+  implemented, at the design level, so the source needs fewer. Relaxed limits,
+  not loose ones: no restating, no line-by-line narration, no tutorial. A
+  source comment that repeats the interface is deleted.
+- **Comment or docs?** Text about a concept, flow or decision that spans
+  several files, or about how to use or run something, goes in the docs (extend
+  the existing doc) with at most a one-line pointer in code. Local detail stays
+  a comment or nothing. Docs only as needed: update the existing doc with the
+  smallest edit that makes it true; a new doc file only for a new system or
+  module (named in the Push JSON `docs` row as `new`). One place per fact,
+  updated in the same change. List every doc edit in the Push JSON `docs`.
+- Follow the language's standard style guide for comments (profile
+  "Comments and documentation", `docs.guide`).
+- Prefer self-documenting code: descriptive names and clean structure first.
+  Rename or extract before you comment.
+- Explain intent (why, constraints, workarounds), never mechanics. Do not
+  restate what the code does.
+- When you change code, update or delete its comments in the same change.
+  A stale comment is a defect.
+- Delete commented-out code; version control keeps history.
+- Never leave a question, remark or note to a person inside a comment. That
+  belongs in the PR (Q&A, line remarks), and the comment is deleted once
+  answered.
+- Function behavior that is not obvious, and the lasting reason behind a bug
+  fix or workaround, go in a comment. The story of the change goes in the
+  commit or the PR.
+- Use the language's standard doc format (Javadoc/JSDoc/TSDoc, PEP 257
+  docstrings, XML docs, rustdoc, ...) only where the contract is not obvious
+  from the name and signature (units, errors, side effects, lifetime,
+  security assumptions), or where the project publishes generated API docs.
+  A comment that repeats the signature is noise; delete it. The profile
+  (`.devops/project.md`) names the format.
+- Use `TODO:`, `FIXME:` and `NOTE:` (all caps) for incomplete work, known
+  bugs or workarounds, and subtle or security-sensitive spots.
+- Write comments as complete sentences: capital letter, full stop, wrapped
+  at `lineLength.comment` (80 columns by default). Link the source of any borrowed algorithm or protocol.
+- Review feedback uses Conventional Comments: `<label> [decorations]: <subject>`,
+  for example `issue (blocking): ...` or `suggestion (non-blocking): ...`.
+
+Run the comment audit before handing off (`comment_audit` or
+`scripts/devops-comments.mjs audit --staged`) and list every comment you keep in
+the Push JSON `comments` with the reason the code cannot say it.
+<!-- rules:end -->
+
 ## 0. A comment is never a deliverable
 
 **Do not add a comment because code was added.** New code does not owe anyone

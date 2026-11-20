@@ -31,6 +31,8 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Language and standards data
         run: node scripts/check-languages.mjs
+      - name: Rule files match their references
+        run: node scripts/sync-rules.mjs --check
       - name: Unit tests
         run: >-
           node --test scripts/devops-setup.test.mjs scripts/devops-modules.test.mjs

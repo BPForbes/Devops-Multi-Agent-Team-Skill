@@ -219,6 +219,8 @@ in this repository.
 
 The installer also copies the reuse and comment rules into `.cursor/rules/`
 (always on) and `.claude/rules/`, and installs a Coder agent that follows them.
+`rules/clean-code.md` and `rules/comments.md` are generated from the `Summary` block of their
+reference (`npm run rules`); edit the reference, and CI fails if a rule file is out of date.
 
 ## How it fits together
 
