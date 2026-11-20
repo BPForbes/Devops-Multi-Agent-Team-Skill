@@ -44,6 +44,7 @@
     "scripts/devops-formal.mjs",
     "scripts/devops-lint.mjs",
     "scripts/devops-lint-rules.mjs",
+    "scripts/devops-main.mjs",
     "scripts/devops-research.mjs",
     "scripts/devops-setup.mjs",
     "scripts/devops-standards.mjs",

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { PACKAGE_ROOT, assertInside, lexists, resolveDest } from './devops-setup.mjs'
 import { git } from './devops-tags.mjs'
+import { isMain } from './devops-main.mjs'
 
 export const STATUSES = ['PROPOSED', 'DECIDED', 'REVISED', 'IN-PROGRESS', 'DONE', 'SUPERSEDED', 'DROPPED']
 export const STORY_ID = /^[A-Z]{1,6}-\d{1,4}$/
@@ -299,7 +299,7 @@ export function guidance(destInput, { apply = false, roots } = {}) {
   return { applied: apply, file: path.relative(dest, target), patterns: Object.keys(graph.patterns).length, text: out.join('\n') }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const argv = process.argv.slice(2)
   const command = argv.shift()
   const opt = name => { const i = argv.indexOf(name); return i === -1 ? undefined : argv[i + 1] }

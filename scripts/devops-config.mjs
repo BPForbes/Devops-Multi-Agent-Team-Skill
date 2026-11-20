@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { assertInside, loadLanguages, resolveDest } from './devops-setup.mjs'
 import {
   deepMerge, loadStandards, packageStandards, standardsFor, validateStandards,
 } from './devops-standards.mjs'
+import { isMain } from './devops-main.mjs'
 
 const PROJECT_FILE = path.join('.devops', 'standards.json')
 const PROJECT_SOURCE = '.devops/standards.json'
@@ -205,7 +205,7 @@ function main(argv) {
   return result.problems?.length > 0 ? 1 : 0
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   try {
     process.exitCode = main(process.argv.slice(2))
   } catch (error) {

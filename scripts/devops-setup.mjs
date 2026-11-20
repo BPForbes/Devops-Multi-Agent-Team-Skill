@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isMain } from './devops-main.mjs'
 
 export const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -45,8 +46,27 @@ export function parseVerify(text) {
 
 const KEBAB = /^[a-z][a-z0-9-]*$/
 /** Language-specific comment checks the audit knows; `comments.checks` in languages.json picks from these. */
-export const COMMENT_CHECKS = ['marker-space', 'inline-two-spaces', 'go-doc-name', 'no-trailing', 'rust-safety', 'jsdoc-no-types', 'hash-only']
+export const COMMENT_CHECKS = [
+  'marker-space', 'inline-two-spaces', 'go-doc-name', 'no-trailing', 'rust-safety',
+  'jsdoc-no-types', 'hash-only',
+]
 const isStringList = value => Array.isArray(value) && value.every(item => typeof item === 'string')
+
+/** Problems with the optional comment settings: interface extensions, audit-only names, checks. */
+function commentOptionProblems({ interface: interfaces, extensions, checks }) {
+  const problems = []
+  const extensionList = interfaces === undefined
+    || (isStringList(interfaces) && interfaces.every(e => e.startsWith('.')))
+  if (!extensionList) problems.push('comments.interface must be a list of extensions (".h")')
+  if (extensions !== undefined && !isStringList(extensions)) {
+    problems.push('comments.extensions must be a list of extensions or exact file names, '
+      + 'audited but not used for detection')
+  }
+  const knownChecks = checks === undefined
+    || (isStringList(checks) && checks.every(c => COMMENT_CHECKS.includes(c)))
+  if (!knownChecks) problems.push(`comments.checks must come from: ${COMMENT_CHECKS.join(', ')}`)
+  return problems
+}
 
 /** `partial` is for an override of a known id: only the fields given are checked. */
 export function validateLanguage(lang, ctx, { partial = false } = {}) {
@@ -78,11 +98,12 @@ export function validateLanguage(lang, ctx, { partial = false } = {}) {
     if (s?.sast?.tool === 'codeql') need(ctx.codeqlLanguages.includes(s.sast.language), `unknown CodeQL language ${s.sast.language}`)
   }
   if (has('comments')) need(isStringList(lang.comments?.line) && Array.isArray(lang.comments?.block), 'comments needs line (list of markers) and block (list of [open, close])')
-  if (has('comments') && lang.comments?.interface !== undefined) need(isStringList(lang.comments.interface) && lang.comments.interface.every(e => e.startsWith('.')), 'comments.interface must be a list of extensions (".h", ".d.ts")')
-  if (has('comments') && lang.comments?.extensions !== undefined) need(isStringList(lang.comments.extensions), 'comments.extensions must be a list of extensions or exact file names, audited but not used for detection')
-  if (has('comments') && lang.comments?.checks !== undefined) need(isStringList(lang.comments.checks) && lang.comments.checks.every(c => COMMENT_CHECKS.includes(c)), `comments.checks must be a list from: ${COMMENT_CHECKS.join(', ')}`)
+  const commentProblems = has('comments') ? commentOptionProblems(lang.comments ?? {}) : []
+  commentProblems.forEach(message => need(false, message))
   if (has('docs')) need(typeof lang.docs?.format === 'string' && typeof lang.docs?.lineComment === 'string' && typeof lang.docs?.check === 'string', 'docs needs format, lineComment and check (see LANGUAGES.md)')
-  if (has('docs') && lang.docs?.guide !== undefined) need(typeof lang.docs.guide === 'string' && lang.docs.guide.trim() !== '', 'docs.guide must be a non-empty string')
+  const guide = lang.docs?.guide
+  const badGuide = guide !== undefined && (typeof guide !== 'string' || guide.trim() === '')
+  if (has('docs') && badGuide) need(false, 'docs.guide must be a non-empty string')
   for (const key of ['style', 'sensitiveHints', 'setupNotes', 'seenIn']) if (key in lang) need(isStringList(lang[key]), `${key} must be a list of strings`)
   for (const edge of lang.interactsWith ?? []) need(edge && typeof edge.with === 'string' && typeof edge.via === 'string' && typeof edge.contract === 'string', 'interactsWith entries need with, via, contract')
   return problems
@@ -355,7 +376,13 @@ export function renderProfile(config, selected, dest, ctx = {}) {
     ? `${bullets(config.codeqlNotes)}\n\n` : ''
   const docsBody = section(selected, l => {
     const d = l.docs ?? {}
-    return `### ${l.name}\n${bullets([`Doc format: ${d.format ?? '_not set_'}`, ...(d.guide ? [`Comment style guide: ${d.guide}`] : []), `Line comment marker: ${code(d.lineComment ?? '')}`, `Doc check (only if the project publishes API docs): ${d.check ?? '_not set_'}`])}`
+    const lines = [
+      `Doc format: ${d.format ?? '_not set_'}`,
+      ...(d.guide ? [`Comment style guide: ${d.guide}`] : []),
+      `Line comment marker: ${code(d.lineComment ?? '')}`,
+      `Doc check (only if the project publishes API docs): ${d.check ?? '_not set_'}`,
+    ]
+    return `### ${l.name}\n${bullets(lines)}`
   })
   const docs = config.docsNote ? `${config.docsNote}\n\n${docsBody}` : docsBody
   const presets = Object.entries(config.presets ?? {}).map(([id, p]) => `### Preset \`${id}\` (opt-in)\n${bullets(p.rules)}`).join('\n\n')
@@ -1054,7 +1081,7 @@ function main(argv) {
   process.exitCode = 2
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   try {
     main(process.argv.slice(2))
   } catch (error) {

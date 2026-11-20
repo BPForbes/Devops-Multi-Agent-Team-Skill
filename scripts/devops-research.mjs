@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { loadLanguages, resolveDest, walk } from './devops-setup.mjs'
+import { isMain } from './devops-main.mjs'
 
 const CONTAINERS = new Set(['src', 'packages', 'crates', 'apps', 'services', 'lib', 'libs', 'internal', 'cmd', 'modules', 'projects', 'plugins', 'drivers', 'kernel', 'userland'])
 const MAX_FILE_BYTES = 200 * 1024
@@ -168,7 +168,7 @@ export function reuseSearch(destInput, terms, roots, { maxPerTerm = 20 } = {}) {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const args = process.argv.slice(2)
   const command = args.shift()
   const destIndex = args.indexOf('--dest')

@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { bareCode, scanProject } from './devops-cleanup.mjs'
 import { auditDiff, codeRows, parseAdded, readDiff, syntaxTable } from './devops-comments.mjs'
 import { PATTERNS, RULES } from './devops-lint-rules.mjs'
 import { assertInside, detectLanguages, resolveDest } from './devops-setup.mjs'
 import { loadStandards, magicLimits } from './devops-standards.mjs'
 import { git } from './devops-tags.mjs'
+import { isMain } from './devops-main.mjs'
 
 const TEST_FILE = /(^|\/)(tests?|__tests__|spec)\/|(\.|_)(test|spec)\.[a-z]+$|^test_|\/test_/i
 const EXEMPT_NAME = /^(_.*|main|init|constructor|default|setup|teardown|__\w+__|test\w*|Test\w*)$/
@@ -329,7 +329,7 @@ function main(argv) {
   return result.blocking > 0 ? 1 : 0
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   try {
     process.exitCode = main(process.argv.slice(2))
   } catch (error) {

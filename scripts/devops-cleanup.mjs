@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { assertInside, resolveDest, walk } from './devops-setup.mjs'
 import { cleanupLimits, loadStandards } from './devops-standards.mjs'
 import { auditDiff, syntaxTable } from './devops-comments.mjs'
 import { extensionTable, languageOf } from './devops-research.mjs'
+import { isMain } from './devops-main.mjs'
 
 const BRACE_LANGUAGES = new Set(['c', 'cpp', 'csharp', 'java', 'kotlin', 'typescript', 'javascript', 'go', 'rust', 'php', 'swift', 'dart', 'scala', 'zig', 'shell', 'powershell'])
 const SKIP_FILE = /(\.min\.|\.generated\.|\.pb\.|\.lock$|package-lock\.json$|(^|\/)(dist|build|vendor|node_modules|third_party|deps)\/)/
@@ -23,44 +23,102 @@ const GOALS = {
   constants: /\b(magic numbers?|constants?|hard-?coded|literals?)\b/,
   oop: /\b(oop|solid|liskov|lsp|open[- ]closed|ocp|substitut\w+|polymorph\w+|inherit\w*|subclass\w*|subtype\w*|parent|child(?:ren)?|extensib\w*|extend\w*)\b/,
 }
+/** A function this many times over the line limit is a large refactor. */
+const HIGH_EFFORT_FACTOR = 3
 const ALL_GOALS = ['comments', 'duplicates', 'split', 'constants', 'naming', 'oop']
 
 /** Turn a plain-English cleanup statement into a brief: goals, scope, thresholds, constraints, and anything left over. */
+const NUMBER_IN = {
+  maxFunctionLines: [
+    /(?:over|more than|longer than|above|exceed\w*|>)\s*(\d+)\s*(?:lines|loc)/,
+    /(\d+)\s*(?:lines|loc)\s*(?:long|or more)?/,
+  ],
+  maxNesting: [/nest\w*\D{0,14}(\d+)/],
+  maxParams: [/(\d+)\s*(?:params|parameters|arguments|args)/],
+  minDuplicateLines: [
+    new RegExp(/(?:at least|over|more than)\s*(\d+)\s*(?:duplicate|repeated|identical)?/.source
+      + /\s*lines\s*(?:of )?(?:duplicate|repeated|identical)/.source),
+  ],
+}
+const THRESHOLD_MIN = 2
+const THRESHOLD_MAX = 1000
+const MAX_STATEMENT = 2000
+const MAX_PATHS = 20
+const MAX_CONSTRAINTS = 8
+const PATH_WORD = /^[A-Za-z0-9._][A-Za-z0-9._/-]*$/
+const EXCLUDING = new RegExp(
+  /(?:don'?t|do not|never|without|except|excluding|skip|ignore|leave)\s+/.source
+    + /(?:touch(?:ing)?\s+|chang(?:e|ing)\s+|modify(?:ing)?\s+|edit(?:ing)?\s+)?/.source
+    + /(?:the\s+)?([a-z0-9._/-]+)/.source,
+  'g',
+)
+/** "skip the tests", "leave tests alone": the leave-word and "tests" within a short span. */
+const SKIP_TESTS = new RegExp(/\b(skip|ignore|exclude|excluding|except|not|without|leave)\b/.source
+  + /[^.]{0,20}\btests?\b/.source)
+const CONSTRAINT = /\b(don'?t|do not|never|must|keep|preserve|only|without|no new|stay|same)\b/i
+const CLEANUP_WORDS = /\b(clean ?up|tidy|refactor|clean[- ]code)\b/i
+const STANDING = [
+  'Behavior is preserved: the same inputs give the same outputs, errors and side effects.',
+  'The validation commands pass before the first step and after every step.',
+  'No public API, wire format or file format changes unless the statement says so.',
+  'One kind of change per step; no cleanup mixed with a feature or a bug fix.',
+]
+const NAMING_NOTE = 'naming: the scan only finds names that are plainly vague; judging whether a '
+  + 'name reveals intent is the Reviewer\'s call, and the Coder renames only what the statement '
+  + 'asked for'
+
+/** Limits a statement names ("split functions over 40 lines"), within a sane range. */
+function thresholdsIn(lower) {
+  const thresholds = {}
+  for (const [key, patterns] of Object.entries(NUMBER_IN)) {
+    const match = patterns.map(rx => rx.exec(lower)).find(Boolean)
+    const value = match ? Number(match[1]) : undefined
+    const sane = value !== undefined && value >= THRESHOLD_MIN && value <= THRESHOLD_MAX
+    if (sane) thresholds[key] = value
+  }
+  return thresholds
+}
+
+/** Paths a statement names that exist, split into the scope and the ones it says to leave alone. */
+function scopeIn(statement, lower, dest) {
+  const words = (statement.match(/[A-Za-z0-9._][A-Za-z0-9._/-]*/g) ?? [])
+    .map(w => w.replace(/[.,;:]+$/, '')).filter(Boolean)
+  const safe = word => PATH_WORD.test(word) && !word.includes('..')
+  const exists = word => safe(word) && fs.existsSync(path.join(dest, word))
+  const excluded = new Set([...lower.matchAll(EXCLUDING)].map(m => m[1].replace(/[.,;:]+$/, '')))
+  const found = words.filter(exists)
+  const paths = [...new Set(found.filter(w => !excluded.has(w.toLowerCase())))].slice(0, MAX_PATHS)
+  const exclude = [...new Set(found.filter(w => excluded.has(w.toLowerCase())))]
+  if (SKIP_TESTS.test(lower)) exclude.push('tests')
+  return { paths, exclude }
+}
+
+/** The statement's sentences: the constraints it sets and the ones nothing understood. */
+function sentencesIn(statement) {
+  const sentences = statement.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean)
+  const constraints = sentences.filter(s => CONSTRAINT.test(s)).slice(0, MAX_CONSTRAINTS)
+  const known = s => Object.values(GOALS).some(rx => rx.test(s.toLowerCase()))
+    || constraints.includes(s) || CLEANUP_WORDS.test(s)
+  return { constraints, unrecognized: sentences.filter(s => !known(s)) }
+}
+
 export function parseStatement(text, destInput, roots) {
   const dest = resolveDest(destInput, roots)
-  const statement = String(text ?? '').trim().slice(0, 2000)
+  const statement = String(text ?? '').trim().slice(0, MAX_STATEMENT)
   const lower = statement.toLowerCase()
   const goals = Object.keys(GOALS).filter(g => GOALS[g].test(lower))
   const generic = /\b(clean ?up|tidy|refactor|polish|clean[- ]code)\b/.test(lower)
   const cleanCode = /\bclean[- ]code\b/.test(lower)
   const chosen = cleanCode ? ALL_GOALS : goals.length > 0 ? goals : ALL_GOALS
-  const thresholds = {}
-  const number = rx => { const m = rx.exec(lower); return m ? Number(m[1]) : undefined }
-  thresholds.maxFunctionLines = number(/(?:over|more than|longer than|above|exceed\w*|>)\s*(\d+)\s*(?:lines|loc)/) ?? number(/(\d+)\s*(?:lines|loc)\s*(?:long|or more)?/)
-  thresholds.maxNesting = number(/nest\w*\D{0,14}(\d+)/)
-  thresholds.maxParams = number(/(\d+)\s*(?:params|parameters|arguments|args)/)
-  thresholds.minDuplicateLines = number(/(?:at least|over|more than)\s*(\d+)\s*(?:duplicate|repeated|identical)?\s*lines\s*(?:of )?(?:duplicate|repeated|identical)/)
-  for (const k of Object.keys(thresholds)) if (thresholds[k] === undefined || thresholds[k] < 2 || thresholds[k] > 1000) delete thresholds[k]
-
-  const words = (statement.match(/[A-Za-z0-9._][A-Za-z0-9._\/-]*/g) ?? []).map(w => w.replace(/[.,;:]+$/, '')).filter(Boolean)
-  const exists = word => /^[A-Za-z0-9._][A-Za-z0-9._\/-]*$/.test(word) && !word.includes('..') && fs.existsSync(path.join(dest, word))
-  const excludeWords = new Set([...lower.matchAll(/(?:don'?t|do not|never|without|except|excluding|skip|ignore|leave)\s+(?:touch(?:ing)?\s+|chang(?:e|ing)\s+|modify(?:ing)?\s+|edit(?:ing)?\s+)?(?:the\s+)?([a-z0-9._\/-]+)/g)].map(m => m[1].replace(/[.,;:]+$/, '')))
-  const paths = [...new Set(words.filter(w => exists(w) && !excludeWords.has(w.toLowerCase())))].slice(0, 20)
-  const exclude = [...new Set(words.filter(w => exists(w) && excludeWords.has(w.toLowerCase())))]
-  const skipTests = /\b(skip|ignore|exclude|excluding|except|not|without|leave)\b[^.]{0,20}\btests?\b/.test(lower)
-  if (skipTests) exclude.push('tests')
-
-  const sentences = statement.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean)
-  const constraints = sentences.filter(s => /\b(don'?t|do not|never|must|keep|preserve|only|without|no new|stay|same)\b/i.test(s)).slice(0, 8)
-  const understood = sentences.filter(s => Object.values(GOALS).some(rx => rx.test(s.toLowerCase())) || constraints.includes(s) || /\b(clean ?up|tidy|refactor|clean[- ]code)\b/i.test(s))
+  const { constraints, unrecognized } = sentencesIn(statement)
   return {
     dest, statement,
     goals: chosen, defaultedGoals: goals.length === 0, generic,
-    scope: { paths, exclude },
-    thresholds: { ...cleanupLimits(loadStandards(dest), null), ...thresholds },
-    constraints: ['Behavior is preserved: the same inputs give the same outputs, errors and side effects.', 'The validation commands pass before the first step and after every step.', 'No public API, wire format or file format changes unless the statement says so.', 'One kind of change per step; no cleanup mixed with a feature or a bug fix.', ...constraints],
-    notScanned: chosen.includes('naming') ? ['naming: the scan only finds names that are plainly vague; judging whether a name reveals intent is the Reviewer\'s call, and the Coder renames only what the statement asked for'] : [],
-    unrecognized: sentences.filter(s => !understood.includes(s)),
+    scope: scopeIn(statement, lower, dest),
+    thresholds: { ...cleanupLimits(loadStandards(dest), null), ...thresholdsIn(lower) },
+    constraints: [...STANDING, ...constraints],
+    notScanned: chosen.includes('naming') ? [NAMING_NOTE] : [],
+    unrecognized,
   }
 }
 
@@ -169,7 +227,8 @@ const CLASS_DECLARATION = /\b(?:class|struct|interface|trait|impl)\s+\w+/
 const REFUSES = /\b(?:throw|raise)\b.*\b(?:Unsupported\w*|NotImplemented\w*|NotSupported\w*)\b|\b(?:throw|raise)\b.*['"`][^'"`]*(?:not supported|unsupported|not implemented|can't|cannot|can not)[^'"`]*['"`]|\b(?:unimplemented|todo)!\s*\(/i
 const FLAG_PARAM = /\b(?:bool|boolean|Boolean)\b|=\s*(?:true|false|True|False)\b|\b(?:flag|force|verbose|strict|(?:is|has|can|should|apply|enable|disable|use|with|include|skip)[A-Z_]\w*)\b/
 
-const REGEX_START = /(^\s*|[(=,:[!&|?{};]\s*)/
+/** Where a `/` opens a regex rather than divides: line start, or after punctuation or `+`. */
+const REGEX_START = /(^\s*|[(=,:[!&|?{};+]\s*)/
 const REGEX_BODY = /\/(?![/*])(?:[^/\\\n[]|\\.|\[(?:[^\]\\]|\\.)*\])+\/[a-z]*/
 const REGEX_LITERAL = new RegExp(REGEX_START.source + REGEX_BODY.source, 'g')
 const stripRegexLiterals = code => code.replace(REGEX_LITERAL, '$1//')
@@ -367,7 +426,7 @@ export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude 
               `helpers (pure ones first), use early returns to cut nesting` +
               `${params > limit.maxParams ? ', and group the parameters into one value' : ''}. ` +
               'Keep the signature, error handling, ordering and side effects.',
-            effort: codeLines > fileSettings.maxFunctionLines * 3 ? 'high' : 'medium',
+            effort: codeLines > limit.maxFunctionLines * HIGH_EFFORT_FACTOR ? 'high' : 'medium',
           })
         }
       }
@@ -465,7 +524,7 @@ export function snapshot(destInput, name, current, { save = false } = {}) {
   return { comparedWith: path.relative(dest, file), savedAt: before.savedAt, delta, worse, improved: Object.values(delta).some(v => v.change < 0) && worse.length === 0 }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const argv = process.argv.slice(2)
   const command = argv.shift()
   const opt = name => { const i = argv.indexOf(name); return i === -1 ? undefined : argv[i + 1] }

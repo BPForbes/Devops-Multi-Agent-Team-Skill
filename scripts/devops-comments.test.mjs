@@ -112,17 +112,33 @@ test('a commit range is audited, and a bad ref is refused', () => {
   assert.ok(auditDiff('', loadStandards(dir), { syntaxFor: () => undefined }).findings.length === 0)
 })
 
-test('a comment that narrates the implementation step by step fails the gate, and a design-choice comment passes', () => {
+const WHO = ['-c', 'user.name=t', '-c', 'user.email=t@t']
+const commitAll = (dir, message) => {
+  execFileSync('git', [...WHO, 'commit', '-q', '-m', message], { cwd: dir })
+}
+const lines = (...rows) => `${rows.join('\n')}\n`
+const filesWith = (result, rule) => result.findings.filter(f => f.rule === rule).map(f => f.file)
+const RETRY_NOTE = '// Retries the send twice because the broker drops the first frame after '
+  + 'reconnect.'
+const HEADER = lines(RETRY_NOTE, 'int send_frame(int fd);')
+const SOURCE = lines('#include "net.h"', RETRY_NOTE, 'int send_frame(int fd) { return fd; }')
+const SAFE_RUST = lines(
+  'fn f(p: *const u8) -> u8 {',
+  '    // SAFETY: callers pass a pointer from a live slice.',
+  '    unsafe { *p }',
+  '}',
+)
+
+test('narrating the implementation fails the gate; naming the design choice passes', () => {
   const dir = repo({
-    'src/n.ts': [
+    'src/n.ts': lines(
       '// First we read the header, then we parse it.',
       'const h = read()',
       '// Step 2: build the map.',
       'const m = build(h)',
       '// Parsing is delegated to net/header so retry limits stay in one place.',
       'const p = parseHeader(h)',
-      '',
-    ].join('\n'),
+    ),
   })
   const result = commentAudit(dir, { staged: true })
   const at = line => result.findings.filter(f => f.line === line).map(f => f.rule)
@@ -132,17 +148,20 @@ test('a comment that narrates the implementation step by step fails the gate, an
   assert.deepEqual(at(5), [])
 })
 
-test('concept or usage text blocks in a source file and is only a suggestion in an interface file', () => {
-  const text = '# Architecture: the queue feeds the workers, which write to the store.\nrun()\n'
+test('concept text blocks in a source file and is only a suggestion in an interface file', () => {
+  const concept = '# Architecture: the queue feeds the workers, which write to the store.'
+  const text = lines(concept, 'run()')
   const dir = repo({ 'src/s.py': text, 'src/t.pyi': text })
-  const found = commentAudit(dir, { staged: true }).findings.filter(f => f.rule === 'docs-candidate')
+  const found = commentAudit(dir, { staged: true }).findings
+    .filter(f => f.rule === 'docs-candidate')
   assert.equal(found.find(f => f.file === 'src/s.py').blocking, true)
   assert.equal(found.find(f => f.file === 'src/t.pyi').blocking, false)
 })
 
 test('interface files allow more comment density, but not unlimited', () => {
   const comment = i => `// Callers must hold the queue lock before slot ${i} is used.`
-  const body = n => [...Array.from({ length: n }, (_, i) => comment(i)), 'int run(void);', 'int stop(void);', 'int size(void);', ''].join('\n')
+  const code = ['int run(void);', 'int stop(void);', 'int size(void);']
+  const body = n => lines(...Array.from({ length: n }, (_, i) => comment(i)), ...code)
   const dir = repo({ 'q.h': body(6), 'q.cpp': body(6), 'z.h': body(12) })
   const density = commentAudit(dir, { staged: true }).findings.filter(f => f.rule === 'density')
   assert.equal(density.find(f => f.file === 'q.cpp').blocking, true)
@@ -150,33 +169,39 @@ test('interface files allow more comment density, but not unlimited', () => {
   assert.equal(density.find(f => f.file === 'z.h').blocking, true)
 })
 
-test('a source comment that repeats its interface comment is flagged, also when the header is already committed', () => {
-  const header = '// Retries the send twice because the broker drops the first frame after reconnect.\nint send_frame(int fd);\n'
-  const source = '#include "net.h"\n// Retries the send twice because the broker drops the first frame after reconnect.\nint send_frame(int fd) { return fd; }\n'
-  const together = repo({ 'net.h': header, 'net.c': source })
-  assert.deepEqual(commentAudit(together, { staged: true }).findings.filter(f => f.rule === 'repeats-interface').map(f => f.file), ['net.c'])
-  const later = repo({ 'net.h': header })
-  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'h'], { cwd: later })
-  fs.writeFileSync(path.join(later, 'net.c'), source)
+test('a source comment repeating its interface is flagged, even if the header is committed', () => {
+  const together = repo({ 'net.h': HEADER, 'net.c': SOURCE })
+  const both = commentAudit(together, { staged: true })
+  assert.deepEqual(filesWith(both, 'repeats-interface'), ['net.c'])
+  const later = repo({ 'net.h': HEADER })
+  commitAll(later, 'h')
+  fs.writeFileSync(path.join(later, 'net.c'), SOURCE)
   execFileSync('git', ['add', '-A'], { cwd: later })
   assert.ok(rules(commentAudit(later, { staged: true })).includes('repeats-interface'))
 })
 
 test('a new doc file blocks unless the docs row names the new system', () => {
-  const dir = repo({ 'docs/queue.md': '# Queue\n\nWorkers pull from one queue.\n' })
+  const dir = repo({ 'docs/queue.md': lines('# Queue', '', 'Workers pull from one queue.') })
   assert.ok(rules(commentAudit(dir, { staged: true })).includes('new-doc'))
-  const named = commentAudit(dir, { staged: true, docs: [{ file: 'docs/queue.md', section: 'Queue', from: null, why: 'new queue system', new: 'job queue' }] })
+  const row = {
+    file: 'docs/queue.md', section: 'Queue', from: null, why: 'new queue system', new: 'job queue',
+  }
+  const named = commentAudit(dir, { staged: true, docs: [row] })
   assert.ok(!rules(named).includes('new-doc'))
 })
 
-test('language style-guide checks: marker spacing, PEP 8 inline gap, Go doc names, Rust SAFETY, TS JSDoc types, C# and Terraform', () => {
+test('style checks: marker space, PEP 8, Go docs, Rust SAFETY, JSDoc types, C#, Terraform', () => {
   const dir = repo({
-    'a.py': 'x = 1 # Offset because the API counts from one.\n#Tight comment here.\ny = 2\n',
-    'b.go': 'package b\n\n// Parses the frame header because callers pass raw bytes.\nfunc Parse() {}\n',
-    'c.rs': 'fn f(p: *const u8) -> u8 {\n    unsafe { *p }\n}\n',
-    'd.ts': '/** @param {string} id The order number from the billing system. */\nexport function load(id: string) {}\n',
-    'e.cs': 'var n = 1; // Starts at one because the ledger is one-based.\n',
-    'f.tf': '// Pinned because 5.x renames the bucket argument.\nresource "x" "y" {}\n',
+    'a.py': lines('x = 1 # Offset because the API counts from one.', '#Tight comment.', 'y = 2'),
+    'b.go': lines('package b', '', '// Parses the frame because callers pass raw bytes.',
+      'func Parse() {}'),
+    'c.rs': lines('fn f(p: *const u8) -> u8 {', '    unsafe { *p }', '}'),
+    'd.ts': lines(
+      '/** @param {string} id The order number from the billing system. */',
+      'export function load(id: string) {}',
+    ),
+    'e.cs': lines('var n = 1; // Starts at one because the ledger is one-based.'),
+    'f.tf': lines('// Pinned because 5.x renames the bucket argument.', 'resource "x" "y" {}'),
   })
   const found = commentAudit(dir, { staged: true }).findings
   const has = (file, rule) => found.some(f => f.file === file && f.rule === rule && f.blocking)
@@ -187,51 +212,58 @@ test('language style-guide checks: marker spacing, PEP 8 inline gap, Go doc name
   assert.ok(has('d.ts', 'jsdoc-types'))
   assert.ok(has('e.cs', 'trailing'))
   assert.ok(has('f.tf', 'hash-only'))
-  const good = repo({ 'g.go': 'package g\n\n// Parse reads the header because callers pass raw bytes.\nfunc Parse() {}\n', 'h.rs': 'fn f(p: *const u8) -> u8 {\n    // SAFETY: callers pass a pointer from a live slice.\n    unsafe { *p }\n}\n' })
+  const goDoc = lines('package g', '', '// Parse reads the frame because callers pass raw bytes.',
+    'func Parse() {}')
+  const good = repo({ 'g.go': goDoc, 'h.rs': SAFE_RUST })
   assert.deepEqual(commentAudit(good, { staged: true }).findings.map(f => f.rule), [])
 })
 
-test('doc lines are counted, and with a Push JSON docs list an unlisted doc change is reported', () => {
-  const dir = repo({ 'docs/retry.md': '# Retry\n\nThe client retries twice.\n', 'README.md': 'Intro.\n', 'a.ts': 'const x = 1\n' })
+test('doc lines are counted; with a Push JSON docs list an unlisted doc change is reported', () => {
+  const retry = lines('# Retry', '', 'The client retries twice.')
+  const dir = repo({ 'docs/retry.md': retry, 'README.md': 'Intro.\n', 'a.ts': 'const x = 1\n' })
   const plain = commentAudit(dir, { staged: true })
   assert.equal(plain.docLinesAdded, 3)
   assert.ok(!rules(plain).includes('unlisted-doc'), 'no list given: doc budget check skipped')
-  assert.ok(rules(plain).includes('new-doc'), 'new doc files are refused unless a new system is named')
-  const listed = commentAudit(dir, { staged: true, docs: [{ file: 'docs/retry.md', section: 'Retry', from: null, why: 'shared by every client' }] })
-  assert.deepEqual(listed.findings.filter(f => f.rule === 'unlisted-doc').map(f => f.file), ['README.md'])
+  assert.ok(rules(plain).includes('new-doc'), 'a new doc file is refused unless a system is named')
+  const row = { file: 'docs/retry.md', section: 'Retry', from: null, why: 'shared by every client' }
+  const listed = commentAudit(dir, { staged: true, docs: [row] })
+  assert.deepEqual(filesWith(listed, 'unlisted-doc'), ['README.md'])
 })
 
 test('narratives are blocked in comments and in docs', () => {
-  const dir = repo({ 'a.ts': '// Originally we tried a map, but it turned out to be slow.\nconst x = 1\n', 'README.md': 'Intro.\n\nAfter much debate we decided to use one queue.\n' })
+  const dir = repo({
+    'a.ts': lines('// Originally we tried a map, but it turned out to be slow.', 'const x = 1'),
+    'README.md': lines('Intro.', '', 'After much debate we decided to use one queue.'),
+  })
   const found = commentAudit(dir, { staged: true }).findings.filter(f => f.rule === 'narrative')
   assert.deepEqual(found.map(f => `${f.file}:${f.line}`).sort(), ['README.md:3', 'a.ts:1'])
   const quoted = repo({ 'b.md': 'No story ("originally", "we tried").\n' })
-  assert.ok(!rules(commentAudit(quoted, { staged: true })).includes('narrative'), 'quoted examples are not narratives')
+  const quotedRules = rules(commentAudit(quoted, { staged: true }))
+  assert.ok(!quotedRules.includes('narrative'), 'quoted examples are not narratives')
   assert.ok(found.every(f => f.blocking))
 })
 
-test('a C++ source and its .h interface share one check, and a SAFETY comment above an unchanged line counts', () => {
-  const header = '// Retries the send twice because the broker drops the first frame after reconnect.\nint send_frame(int fd);\n'
-  const source = '#include "net.h"\n// Retries the send twice because the broker drops the first frame after reconnect.\nint send_frame(int fd) { return fd; }\n'
-  const dir = repo({ 'net.h': header, 'net.cpp': source })
-  assert.deepEqual(commentAudit(dir, { staged: true }).findings.filter(f => f.rule === 'repeats-interface').map(f => f.file), ['net.cpp'])
+test('a C++ source and its .h share one check; SAFETY above an unchanged line counts', () => {
+  const dir = repo({ 'net.h': HEADER, 'net.cpp': SOURCE })
+  assert.deepEqual(filesWith(commentAudit(dir, { staged: true }), 'repeats-interface'), ['net.cpp'])
 
-  const rust = repo({ 'r.rs': 'fn f(p: *const u8) -> u8 {\n    // SAFETY: callers pass a pointer from a live slice.\n    unsafe { *p }\n}\n' })
-  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'r'], { cwd: rust })
-  fs.writeFileSync(path.join(rust, 'r.rs'), 'fn f(p: *const u8) -> u8 {\n    // SAFETY: callers pass a pointer from a live slice.\n    unsafe { *p.add(0) }\n}\n')
+  const rust = repo({ 'r.rs': SAFE_RUST })
+  commitAll(rust, 'r')
+  fs.writeFileSync(path.join(rust, 'r.rs'), SAFE_RUST.replace('*p }', '*p.add(0) }'))
   execFileSync('git', ['add', '-A'], { cwd: rust })
   assert.ok(!rules(commentAudit(rust, { staged: true })).includes('rust-safety'))
 })
 
 test('file types a human edits are audited with their language syntax', () => {
   const dir = repo({
-    'build.gradle.kts': '// Pinned because the plugin 2.x drops the old task name.\nplugins {}\n',
-    'Rakefile': '# Runs the suite because CI calls rake by default.\ntask :test\n',
-    'Containerfile': '# Pins the base because 3.x lacks the CA bundle.\nFROM alpine\n',
-    'lib/mod.cppm': '// Exports the queue because consumers import it as a module.\nexport module q;\n',
-    'lib/mod.ipp': '// Keeps the fast path inline because it runs per packet.\ntemplate <class T> void f();\n',
-    'src/x.pyx': '# Releases the GIL because the callback re-enters Python.\ncdef int f()\n',
-    'src/x.pxd': '# Declares the C type because the .pyx needs it.\ncdef int f()\n',
+    'build.gradle.kts': lines('// Pinned because plugin 2.x drops the task name.', 'plugins {}'),
+    'Rakefile': lines('# Runs the suite because CI calls rake by default.', 'task :test'),
+    'Containerfile': lines('# Pins the base because 3.x lacks the CA bundle.', 'FROM alpine'),
+    'lib/mod.cppm': lines('// Exports the queue because consumers import it.', 'export module q;'),
+    'lib/mod.ipp': lines('// Keeps the fast path inline because it runs per packet.',
+      'template <class T> void f();'),
+    'src/x.pyx': lines('# Releases the GIL because the callback re-enters Python.', 'cdef int f()'),
+    'src/x.pxd': lines('# Declares the C type because the .pyx needs it.', 'cdef int f()'),
   })
   const found = commentAudit(dir, { staged: true })
   assert.equal(found.findings.filter(f => f.blocking).length, 0, JSON.stringify(found.findings))

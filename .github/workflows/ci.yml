@@ -1,0 +1,80 @@
+name: CI
+
+# On every push and pull request: the unit tests, then the MCP smoke test.
+# The smoke test packs the package as npm would publish it, installs it,
+# sets up fresh projects through each install path and talks to every MCP
+# server over stdio. No API key is used.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Language and standards data
+        run: node scripts/check-languages.mjs
+      - name: Unit tests
+        run: >-
+          node --test scripts/devops-setup.test.mjs scripts/devops-modules.test.mjs
+          scripts/devops-comments.test.mjs scripts/devops-standards.test.mjs
+          scripts/devops-lint.test.mjs scripts/devops-config.test.mjs
+          scripts/devops-stories.test.mjs scripts/devops-cleanup.test.mjs
+          scripts/devops-formal.test.mjs mcp/server.test.mjs
+
+  mcp-smoke:
+    name: MCP install and server smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pack, install, set up projects, talk to the MCP servers
+        run: node scripts/mcp-smoke.mjs
+
+  lint-gate:
+    name: Lint gate on the pull request
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Built-in rules on every line the pull request adds
+        run: >-
+          node scripts/devops-lint.mjs check
+          --base "origin/${{ github.base_ref }}" --head HEAD
+
+  plugin:
+    name: Claude Code plugin (manifest, mod tests, plugin MCP server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the Claude Code CLI
+        run: npm install --global @anthropic-ai/claude-code
+      - name: Validate, run the mod's tests, start the plugin's MCP server
+        run: node scripts/mcp-smoke.mjs --with-claude

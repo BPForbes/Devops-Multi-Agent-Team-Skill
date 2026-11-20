@@ -8,7 +8,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import {
   PACKAGE_ROOT, addLocalLanguage, checkToolchain, detectLanguages, detectServices, ensureGitignore, install,
   loadLanguages, loadServices, renderProfile, resolveDest, sandboxArgv, status,
@@ -16,6 +16,7 @@ import {
 import { commentAudit } from '../scripts/devops-comments.mjs'
 import { parseStatement, scanProject, snapshot } from '../scripts/devops-cleanup.mjs'
 import { formalCheck } from '../scripts/devops-formal.mjs'
+import { isMain } from '../scripts/devops-main.mjs'
 import { lintCheck, lintCommands } from '../scripts/devops-lint.mjs'
 import { changeSetting, getSetting } from '../scripts/devops-config.mjs'
 import { ghasPlan } from '../scripts/devops-ghas.mjs'
@@ -73,6 +74,12 @@ function idList(value, name, { allow = ['auto'] } = {}) {
   throw new Error(`${name} must be ${allow.map(a => `"${a}"`).join(', ')} or a list of ids`)
 }
 const TARGETS = ['auto', 'cursor', 'claude', 'both', 'none']
+const MAX_LISTED_COMMENTS = 500
+const MAX_LISTED_DOCS = 200
+/** A JSON schema for a list of objects that each name a file. */
+const listOf = (maxItems, properties) => ({
+  type: 'array', maxItems, items: { type: 'object', properties, required: ['file'] },
+})
 const optionalBool = (args, key, fallback) => (args[key] === undefined ? fallback : args[key] === true)
 
 const text = value => ({ content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }], ...(typeof value === 'object' ? { structuredContent: value } : {}) })
@@ -307,20 +314,41 @@ const TOOLS = [
   },
   {
     name: 'comment_audit',
-    description: 'Audit the comments a change adds (staged, working tree vs HEAD, or base...head) and return ready-to-paste Conventional Comments remarks: comments that restate the code, commented-out code, questions or notes to a person left in code, process notes, bare TODO/FIXME, signature-only doc lines, over-commented files, long prose, comments that narrate the implementation step by step, concept or usage text that belongs in the interface file or the docs, source comments that repeat their interface file (.h, .d.ts, .pyi, ...), new doc files with no new system named, and the language style-guide checks. Strict: every finding blocks, except the relaxed limits for interface files. Coders run it before handoff; Reviewers use the findings as line remarks on the virtual PR. Pass `listed` (the Push JSON `comments` array) to also flag comments the Coder did not justify, and `docs` (the Push JSON `docs` array) to flag doc changes nobody listed. Read-only.',
+    description: [
+      'Audit the comments a change adds (staged, working tree vs HEAD, or base...head) and',
+      'return ready-to-paste Conventional Comments remarks: comments that restate the code,',
+      'commented-out code, questions or notes to a person left in code, process notes, bare',
+      'TODO/FIXME, signature-only doc lines, over-commented files, long prose, comments that',
+      'narrate the implementation step by step, concept or usage text that belongs in the',
+      'interface file or the docs, source comments that repeat their interface file (.h,',
+      '.d.ts, .pyi, ...), new doc files with no new system named, and the language style-',
+      'guide checks. Strict: every finding blocks, except the relaxed limits for interface',
+      'files. Coders run it before handoff; Reviewers use the findings as line remarks on the',
+      'virtual PR. Pass `listed` (the Push JSON `comments` array) to also flag comments the',
+      'Coder did not justify, and `docs` (the Push JSON `docs` array) to flag doc changes',
+      'nobody listed. Read-only.',
+    ].join(' '),
     inputSchema: {
       type: 'object',
       properties: {
         dest, base: { type: 'string' }, head: { type: 'string' }, staged: { type: 'boolean' },
-        listed: { type: 'array', maxItems: 500, items: { type: 'object', properties: { file: { type: 'string' }, line: { type: ['string', 'number'] }, why: { type: 'string' } }, required: ['file'] } },
-        docs: { type: 'array', maxItems: 200, items: { type: 'object', properties: { file: { type: 'string' }, section: { type: 'string' }, from: { type: ['string', 'null'] }, why: { type: 'string' }, new: { type: 'string' } }, required: ['file'] } },
+        listed: listOf(MAX_LISTED_COMMENTS, {
+          file: { type: 'string' }, line: { type: ['string', 'number'] }, why: { type: 'string' },
+        }),
+        docs: listOf(MAX_LISTED_DOCS, {
+          file: { type: 'string' }, section: { type: 'string' }, from: { type: ['string', 'null'] },
+          why: { type: 'string' }, new: { type: 'string' },
+        }),
       },
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true },
     run: args => {
       gitAllowed()
-      return commentAudit(projectDir(args), { base: args.base, head: args.head, staged: optionalBool(args, 'staged', false), listed: args.listed, docs: args.docs, roots: allowedRoots() })
+      const staged = optionalBool(args, 'staged', false)
+      const range = { base: args.base, head: args.head, staged }
+      const budgets = { listed: args.listed, docs: args.docs }
+      return commentAudit(projectDir(args), { ...range, ...budgets, roots: allowedRoots() })
     },
   },
   {
@@ -673,4 +701,4 @@ export function serve(input = process.stdin) {
   input.on('end', () => process.exit(0))
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) serve()
+if (isMain(import.meta.url)) serve()

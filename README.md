@@ -302,6 +302,17 @@ npm test      # data check, setup CLI and MCP server tests, claude plugin valida
 Tests for the setup CLI are `scripts/devops-setup.test.mjs` and for the MCP
 server `mcp/server.test.mjs` (node:test); the mod's are `hooks/*.test.ts` (run by `claude plugin test`).
 
+```bash
+node scripts/mcp-smoke.mjs [--with-claude]   # pack, install, set up fresh projects, talk to the MCP servers
+```
+
+### Continuous integration
+
+| Workflow | When | Checks |
+|----------|------|--------|
+| `ci.yml` | every push and pull request | Unit tests on Node 18 and 22. The MCP smoke test: `npm pack` and install as a person downloads it, then set up fresh git projects through `devops-setup init`, through chat (the package's MCP server: detect, plan, apply) and in plugin mode, calling `status`, `config_get` and `lint_check` over stdio and checking `git status` stays clean. The plugin as Claude Code loads it: `claude plugin validate`, `claude plugin test`, and the plugin's MCP server connecting (`claude --plugin-dir . mcp list`). On a pull request, the lint gate on every line it adds. No API key. |
+| `agent-eval.yml` | after a merge to `main`, and on demand | A real agent run (`claude plugin eval`, cases in `evals/`) with the plugin and its real MCP server: set the team up in a fresh project through MCP (detect before install, plan before apply, applied, an accurate report), and answer a review question through `devops_brief` without reading the skill whole. Needs the repository secret `ANTHROPIC_API_KEY`; without it the job is skipped with a notice. Runs once per case, threshold 0.75, capped at 5 USD. |
+
 ## Licence
 
 MIT, see [LICENSE](LICENSE).

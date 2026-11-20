@@ -2,8 +2,8 @@
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { assertInside, loadLanguages, resolveDest } from './devops-setup.mjs'
+import { isMain } from './devops-main.mjs'
 
 const SEMVER = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/
 export const REF = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}(?:[~^]\d{0,3})*$/
@@ -196,7 +196,7 @@ export function tagCreate(destInput, { version, message, ref = 'HEAD', apply = f
   return { dest, tag: version, commit, applied: true, next: `git push origin refs/tags/${version}   # publishing: QA PASS and the human's go first` }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const argv = process.argv.slice(2)
   const command = argv.shift()
   const opt = name => { const i = argv.indexOf(name); return i === -1 ? undefined : argv[i + 1] }

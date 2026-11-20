@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { connectClients, hostFolders, initProject, install } from './devops-setup.mjs'
 import { ghasPlan } from './devops-ghas.mjs'
 import { moduleMap, moduleOf, reuseSearch } from './devops-research.mjs'
@@ -325,4 +326,14 @@ test('research fixes the scope and cites online resources in the brief', () => {
   const doc = fs.readFileSync(path.join(root, 'skills/devops-multi-agent-team/references/research-and-reuse.md'), 'utf8')
   for (const part of ['## 0. Scope', '## Scope (', '## Online resources (', 'online resources']) assert.ok(doc.includes(part), part)
   assert.match(fs.readFileSync(path.join(root, 'agents/devops-researcher.md'), 'utf8'), /Fix the scope/)
+})
+
+test('every command still runs when npm links it as a symlink (global install, npx)', () => {
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'dmat-bin-'))
+  const linked = path.join(bin, 'devops-setup')
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  fs.symlinkSync(path.join(here, 'devops-setup.mjs'), linked)
+  const ran = spawnSync('node', [linked, 'list'], { encoding: 'utf8' })
+  assert.equal(ran.status, 0)
+  assert.match(ran.stdout, /python/)
 })
