@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { assertInside, resolveDest } from './devops-setup.mjs'
+import { isMain } from './devops-main.mjs'
 
 const SKIP_DIRS = new Set(['.git', '.lake', 'node_modules', 'build', 'target', 'dist'])
 const MAX_FILES = 2000
@@ -128,7 +128,7 @@ function checkRecords(dest, pushPath, findings, problems) {
   })
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const argv = process.argv.slice(2)
   const flag = name => { const i = argv.indexOf(name); return i === -1 ? undefined : argv[i + 1] }
   const result = formalCheck(flag('--dest') ?? process.cwd(), { paths: argv.filter((a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--')), push: flag('--push') })

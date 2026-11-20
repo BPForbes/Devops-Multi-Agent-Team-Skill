@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { parseStatement, scanProject, snapshot } from './devops-cleanup.mjs'
+import { bareCode, parseStatement, scanProject, snapshot } from './devops-cleanup.mjs'
 
 function project(files) {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dmat-cl-')))
@@ -32,12 +32,14 @@ test('a plain-English statement becomes goals, scope, thresholds and constraints
   assert.deepEqual(brief.goals.sort(), ['comments', 'duplicates', 'split'])
   assert.deepEqual(brief.scope.paths, ['src'])
   assert.deepEqual(brief.scope.exclude, ['vendor'])
-  assert.equal(brief.thresholds.maxFunctionLines, 30)
+  assert.equal(brief.thresholds.maxFunctionLines, 30, 'the number the statement gives')
   assert.ok(brief.constraints.some(c => /Do not touch vendor/.test(c)) && brief.constraints.some(c => /Keep the public API/.test(c)))
   assert.ok(brief.constraints[0].startsWith('Behavior is preserved'))
 
   const only = parseStatement('just reduce the comments, skip the tests', dir)
   assert.deepEqual(only.goals, ['comments'])
+  assert.deepEqual(only.thresholds, {}, 'no number given: the per-language limits still apply')
+  assert.equal(only.defaults.maxFunctionLines, 30)
   assert.ok(only.scope.exclude.includes('tests'))
 
   const vague = parseStatement('tidy this up', dir)
@@ -199,4 +201,22 @@ test('the scan finds functions named for two jobs, type switches that close code
   const names = of('multi-purpose-name').map(c => c.name).sort()
   assert.deepEqual(names, ['loadAndParse', 'save_and_notify'])
   assert.ok(scan.summary.typeSwitches >= 1 && scan.summary.lspRisks === 2 && scan.summary.multiPurpose === 2)
+})
+
+test('per-language limits apply in the scan; code in a docs folder is not a new doc', () => {
+  const body = Array.from({ length: 12 }, (_, i) => `    total += i * ${i}`).join('\n')
+  const python = `def long_one(i):\n    total = 0\n${body}\n    return total\n`
+  const standards = { schemaVersion: 1, languages: { python: { function: { maxLines: 10 } } } }
+  const dir = project({
+    '.devops/standards.json': JSON.stringify(standards),
+    'docs/sample.py': `# Prints the greeting.\n${python}`,
+  })
+  const scan = scanProject(dir, { goals: ['split', 'comments'] })
+  assert.ok(scan.candidates.some(c => c.kind === 'long-function'), 'python is limited to 10 lines')
+  assert.ok(!JSON.stringify(scan.candidates).includes('new-doc'))
+})
+
+test('a regex after return is stripped, and a division after return is kept', () => {
+  assert.ok(!bareCode('  return /404/.test(url)', ['//']).includes('404'))
+  assert.ok(bareCode('  return size / 404', ['//']).includes('404'))
 })

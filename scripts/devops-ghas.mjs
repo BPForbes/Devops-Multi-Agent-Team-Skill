@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { assertInside, detectLanguages, lexists, loadLanguages, resolveDest, walk } from './devops-setup.mjs'
+import { isMain } from './devops-main.mjs'
 
 const BUILD_MODE = { 'python': 'none', 'javascript-typescript': 'none', 'ruby': 'none', 'rust': 'none', 'actions': 'none', 'csharp': 'none', 'java-kotlin': 'none', 'cpp': 'autobuild', 'go': 'autobuild', 'swift': 'autobuild' }
 
@@ -249,7 +249,7 @@ export function ghasPlan(destInput, { branch = 'main', apply = false, force = fa
   return { dest, applied: apply, codeqlLanguages: codeql, ecosystems, requiredChecks: checks, files: plan, warnings, humanOnly: 'Repository settings are printed in .devops/ghas/commands.md for a human to run; nothing was changed on GitHub.' }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const argv = process.argv.slice(2)
   argv.shift()
   const opt = name => { const i = argv.indexOf(name); return i === -1 ? undefined : argv[i + 1] }

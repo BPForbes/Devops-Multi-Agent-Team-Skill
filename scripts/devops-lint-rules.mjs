@@ -1,0 +1,181 @@
+/**
+ * Every lint rule: its category and how to fix a finding. The comment audit, the size checks, the
+ * unused-symbol check and the pattern rules below all report under these ids, and standards.json
+ * `lint.rules` can turn one off.
+ */
+export const RULES = {
+  'restates-code': ['comments', 'Delete the comment, or rename or extract so the code says it.'],
+  'commented-out-code': ['comments', 'Delete the code; version control keeps it.'],
+  'process-note': ['comments',
+    'Move the note to the commit message or the PR; keep only a lasting reason.'],
+  'question': ['comments', 'Move the question to the PR Q&A and delete the comment.'],
+  'doc-repeats-signature': ['comments',
+    'Delete the doc line, or state what the name cannot (units, range).'],
+  'marker': ['comments',
+    'Write TODO(#issue) or FIXME(#issue) in capitals and list it in the Handoff.'],
+  'long-line': ['comments', 'Wrap the comment within lineLength.comment.'],
+  'sentence': ['comments', 'Start with a capital letter and end with a full stop.'],
+  'long-prose': ['comments',
+    'Cut it to the one reason the code cannot show; move the rest to the docs.'],
+  'density': ['comments',
+    'Delete comments the code already says; keep only reasons and contracts.'],
+  'unlisted': ['comments',
+    'List the comment in the Push JSON `comments` with its reason, or delete it.'],
+  'divider': ['comments', 'Delete the divider line.'],
+  'narrates-code': ['comments',
+    'Delete the step-by-step narration; keep only the reason or design choice.'],
+  'narrative': ['comments', 'State the fact or the reason in one plain sentence.'],
+  'docs-candidate': ['comments',
+    'Move the concept to the interface file or the existing docs; keep a pointer.'],
+  'unlisted-doc': ['comments', 'List the doc edit in the Push JSON `docs`, or drop it.'],
+  'new-doc': ['comments',
+    'Update the existing doc, or name the new system in the Push JSON `docs` `new`.'],
+  'repeats-interface': ['comments',
+    'Delete the copy in the source; the interface file says it once.'],
+  'marker-space': ['comments', 'Put one space after the comment marker.'],
+  'inline-gap': ['comments', 'Put at least two spaces before an inline comment (PEP 8).'],
+  'trailing': ['comments', 'Move the comment to its own line above the code.'],
+  'hash-only': ['comments', 'Use # for comments.'],
+  'jsdoc-types': ['comments', 'Remove the {type} from the JSDoc tag; the signature declares it.'],
+  'go-doc-name': ['comments', 'Start the doc comment with the declared name.'],
+  'rust-safety': ['comments',
+    'Add `// SAFETY:` above the unsafe block saying why the invariants hold.'],
+  'long-code-line': ['style',
+    'Break the line within lineLength.code: extract a variable or wrap arguments.'],
+  'function-length': ['size',
+    'Extract cohesive blocks into well-named helpers until under function.maxLines.'],
+  'nesting': ['size', 'Use early returns or extract the inner block into a helper.'],
+  'too-many-params': ['size', 'Group related parameters into one value or options object.'],
+  'flag-argument': ['size', 'Split into two functions named for what each does.'],
+  'magic-number': ['size',
+    'Define a named constant once (MAX_PASSWORD_SIZE = 7) and use the name instead.'],
+  'unused-symbol': ['unused', 'Use it or delete it: every declared name must be used.'],
+  'sec-eval': ['security',
+    'Do not evaluate strings as code; parse the data or dispatch through a table.'],
+  'sec-shell': ['security',
+    'Pass an argument list without a shell (execFile, subprocess.run([...])).'],
+  'sec-deserialize': ['security', 'Use a safe format (JSON) or a safe loader (yaml.safe_load).'],
+  'sec-tls-off': ['security',
+    'Keep certificate checks on; trust a CA bundle instead of disabling them.'],
+  'sec-secret': ['security',
+    'Remove the secret, rotate it, and read it from the environment or a vault.'],
+  'sec-weak-hash': ['security',
+    'Use SHA-256 or better; for passwords use bcrypt, scrypt or Argon2.'],
+  'sec-xss': ['security',
+    'Set textContent or use the framework escaping; sanitize HTML you must render.'],
+  'sec-sql-concat': ['security',
+    'Use parameterized queries (placeholders) instead of building SQL strings.'],
+  'sec-c-unsafe': ['security', 'Use a bounded call: fgets, strncpy/strlcpy, snprintf.'],
+  'sec-insecure-url': ['security', 'Use https://, or move the URL to configuration.'],
+  'outdated': ['outdated', 'Use the current API named in the finding.'],
+  'debug-leftover': ['debug', 'Remove the debugging statement before handoff.'],
+  'linter-not-run': ['tools',
+    'Run the open-source linter in the sandbox and record it in the Push JSON `lint`.'],
+  'linter-failed': ['tools',
+    'Fix every issue the linter reports and run it again until it exits 0.'],
+}
+
+export const RULE_IDS = Object.keys(RULES)
+
+const JS = ['javascript', 'typescript']
+const ALL = '*'
+
+/** One pattern that matches any of the given patterns; `flags` apply to the whole. */
+const anyOf = (flags, ...patterns) => new RegExp(patterns.map(p => p.source).join('|'), flags)
+
+const TLS_OFF = anyOf('',
+  /verify\s*=\s*False/,
+  /rejectUnauthorized\s*:\s*false/,
+  /InsecureSkipVerify\s*:\s*true/,
+  /NODE_TLS_REJECT_UNAUTHORIZED\W+0/,
+  /SSL_VERIFYPEER\s*,\s*(false|0)/)
+const KNOWN_KEYS = anyOf('',
+  /AKIA[0-9A-Z]{16}/,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+  /\bghp_[A-Za-z0-9]{36}\b/,
+  /\bxox[abprs]-[A-Za-z0-9-]{10,}/)
+const SECRET_NAME = /\b(password|passwd|secret|api_?key|access_?token)\b/
+const ASSIGNED_SECRET = new RegExp(`${SECRET_NAME.source}\\s*[:=]\\s*["'][^"'\\s$<{]{8,}["']`, 'i')
+const WEAK_HASH = anyOf('',
+  /hashlib\.(md5|sha1)\s*\(/,
+  /createHash\(\s*["'](md5|sha1)["']/,
+  /getInstance\(\s*"(MD5|SHA-?1)"/,
+  /"crypto\/(md5|sha1)"/)
+const SQL_VERB = /\b(select|insert|update|delete)\b/
+const SQL_CONCAT = anyOf('i',
+  new RegExp(`\\b(execute|executemany|query|raw)\\s*\\(\\s*f["'][^"']*${SQL_VERB.source}`),
+  new RegExp(`\\b(execute|executemany|query|raw)\\s*\\(\\s*["'][^"']*${SQL_VERB.source}` +
+    '[^"\']*["\']\\s*(\\+|%|\\.format)'))
+const LOCAL_HOSTS = anyOf('',
+  /localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]/,
+  /[\w.-]*example\.(com|org)|www\.w3\.org|schemas\./)
+const PLAIN_HTTP = new RegExp(`["']http:\\/\\/(?!${LOCAL_HOSTS.source})`)
+const XSS_SINK = anyOf('',
+  /\.(inner|outer)HTML\s*=[^=]/,
+  /dangerously\w*InnerHTML/,
+  /document\.write\s*\(/,
+  /\bv-html\b/)
+const BOXED = /\bnew\s+(Integer|Long|Double|Float|Short|Byte|Boolean|Character)\s*\(/
+
+/**
+ * Line patterns checked on added code lines. `languages` limits a pattern to those language ids;
+ * `use` names the replacement for an outdated API and is shown in the finding.
+ */
+export const PATTERNS = [
+  { rule: 'sec-eval', languages: JS, re: /\beval\s*\(|\bnew\s+Function\s*\(/ },
+  { rule: 'sec-eval', languages: ['python', 'ruby', 'php'], re: /(^|[^.\w])(eval|exec)\s*\(/ },
+  { rule: 'sec-shell', languages: ['python'], re: /shell\s*=\s*True|\bos\.(system|popen)\s*\(/ },
+  { rule: 'sec-shell', languages: JS, re: /\bexec(Sync)?\s*\(\s*(`[^`]*\$\{|["'][^"']*["']\s*\+)/ },
+  { rule: 'sec-shell', languages: ['go'], re: /exec\.Command\(\s*"(ba)?sh"\s*,\s*"-c"/ },
+  { rule: 'sec-shell', languages: ['php'], re: /\b(shell_exec|passthru|system|popen)\s*\(/ },
+  { rule: 'sec-deserialize', languages: ['python'],
+    re: /\b(pickle|marshal)\.loads?\s*\(|\byaml\.load\s*\((?!.*Safe)/ },
+  { rule: 'sec-deserialize', languages: ['ruby'], re: /\bMarshal\.load\b|\bYAML\.load\s*\(/ },
+  { rule: 'sec-deserialize', languages: ['php'], re: /\bunserialize\s*\(/ },
+  { rule: 'sec-deserialize', languages: ['java', 'csharp'],
+    re: /\bObjectInputStream\b|\bBinaryFormatter\b/ },
+  { rule: 'sec-tls-off', languages: ALL, re: TLS_OFF },
+  { rule: 'sec-secret', languages: ALL, re: KNOWN_KEYS },
+  { rule: 'sec-secret', languages: ALL, re: ASSIGNED_SECRET },
+  { rule: 'sec-weak-hash', languages: ALL, re: WEAK_HASH },
+  { rule: 'sec-xss', languages: [...JS, 'html'], re: XSS_SINK },
+  { rule: 'sec-xss', languages: ['python', 'ruby'],
+    re: /\|\s*safe\b|\.html_safe\b|\bmark_safe\s*\(/ },
+  { rule: 'sec-sql-concat', languages: ALL, re: SQL_CONCAT },
+  { rule: 'sec-c-unsafe', languages: ['c', 'cpp'],
+    re: /\b(gets|strcpy|strcat|sprintf|vsprintf)\s*\(/ },
+  { rule: 'sec-insecure-url', languages: ALL, re: PLAIN_HTTP },
+  { rule: 'outdated', languages: JS, re: /^\s*var\s+[\w$]/, use: 'let or const' },
+  { rule: 'outdated', languages: JS, re: /\bnew\s+Buffer\s*\(/,
+    use: 'Buffer.from or Buffer.alloc' },
+  { rule: 'outdated', languages: JS, re: /\.substr\s*\(/, use: 'slice or substring' },
+  { rule: 'outdated', languages: JS, re: /\burl\.parse\s*\(/, use: 'new URL()' },
+  { rule: 'outdated', languages: JS, re: /\.__(?:proto)__\b|\b__(?:proto)__\s*:/,
+    use: 'Object.getPrototypeOf / Object.setPrototypeOf' },
+  { rule: 'outdated', languages: ['python'],
+    re: /^\s*(import imp\b|from imp import|import distutils|from distutils)/,
+    use: 'importlib / setuptools' },
+  { rule: 'outdated', languages: ['python'], re: /\bdatetime\.utcnow\s*\(/,
+    use: 'datetime.now(timezone.utc)' },
+  { rule: 'outdated', languages: ['python'], re: /\basyncio\.get_event_loop\s*\(/,
+    use: 'asyncio.run or asyncio.get_running_loop' },
+  { rule: 'outdated', languages: ['python'], re: /^\s*(import optparse|from optparse)/,
+    use: 'argparse' },
+  { rule: 'outdated', languages: ['go'], re: /\bioutil\./, use: 'the io and os packages' },
+  { rule: 'outdated', languages: ['java'], re: BOXED, use: 'valueOf' },
+  { rule: 'outdated', languages: ['cpp'], re: /\bstd::auto_ptr\b/, use: 'std::unique_ptr' },
+  { rule: 'outdated', languages: ['csharp'], re: /\bnew\s+WebClient\s*\(/, use: 'HttpClient' },
+  { rule: 'outdated', languages: ['rust'], re: /\btry!\s*\(/, use: 'the ? operator' },
+  { rule: 'outdated', languages: ['ruby'], re: /\b(File|Dir)\.exists\?/,
+    use: 'File.exist? / Dir.exist?' },
+  { rule: 'outdated', languages: ['php'], re: /\bmysql_\w+\s*\(|\bcreate_function\s*\(/,
+    use: 'PDO or mysqli; closures' },
+  { rule: 'outdated', languages: ['shell'], re: /`[^`]+`/, use: '$(...) instead of backticks' },
+  { rule: 'outdated', languages: ['shell'], re: /\b(egrep|fgrep)\b/, use: 'grep -E / grep -F' },
+  { rule: 'debug-leftover', languages: JS, re: /^\s*debugger\s*;?\s*$/ },
+  { rule: 'debug-leftover', languages: ['python'],
+    re: /\bbreakpoint\s*\(\s*\)|\bpdb\.set_trace\s*\(/ },
+  { rule: 'debug-leftover', languages: ['ruby'], re: /\bbinding\.(pry|irb)\b|\bbyebug\b/ },
+  { rule: 'debug-leftover', languages: ['rust'], re: /\bdbg!\s*\(/ },
+  { rule: 'debug-leftover', languages: ['php'], re: /\b(var_dump|print_r|dd)\s*\(/ },
+]

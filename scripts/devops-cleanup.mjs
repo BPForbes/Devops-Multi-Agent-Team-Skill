@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { assertInside, loadLanguages, resolveDest, walk } from './devops-setup.mjs'
+import { assertInside, resolveDest, walk } from './devops-setup.mjs'
+import { cleanupLimits, loadStandards } from './devops-standards.mjs'
 import { auditDiff, syntaxTable } from './devops-comments.mjs'
 import { extensionTable, languageOf } from './devops-research.mjs'
+import { isMain } from './devops-main.mjs'
 
-const DEFAULTS = { minDuplicateLines: 6, minDuplicateChars: 120, maxFunctionLines: 30, maxNesting: 3, maxParams: 4, maxMagicLiteralRepeats: 2, maxFiles: 4000, maxFileBytes: 307200 }
 const BRACE_LANGUAGES = new Set(['c', 'cpp', 'csharp', 'java', 'kotlin', 'typescript', 'javascript', 'go', 'rust', 'php', 'swift', 'dart', 'scala', 'zig', 'shell', 'powershell'])
 const SKIP_FILE = /(\.min\.|\.generated\.|\.pb\.|\.lock$|package-lock\.json$|(^|\/)(dist|build|vendor|node_modules|third_party|deps)\/)/
 const TEST_FILE = /(^|\/)(tests?|__tests__|spec)\/|(\.|_)(test|spec)\.[a-z]+$|^test_|\/test_/i
@@ -23,44 +23,103 @@ const GOALS = {
   constants: /\b(magic numbers?|constants?|hard-?coded|literals?)\b/,
   oop: /\b(oop|solid|liskov|lsp|open[- ]closed|ocp|substitut\w+|polymorph\w+|inherit\w*|subclass\w*|subtype\w*|parent|child(?:ren)?|extensib\w*|extend\w*)\b/,
 }
+/** A function this many times over the line limit is a large refactor. */
+const HIGH_EFFORT_FACTOR = 3
 const ALL_GOALS = ['comments', 'duplicates', 'split', 'constants', 'naming', 'oop']
 
 /** Turn a plain-English cleanup statement into a brief: goals, scope, thresholds, constraints, and anything left over. */
+const NUMBER_IN = {
+  maxFunctionLines: [
+    /(?:over|more than|longer than|above|exceed\w*|>)\s*(\d+)\s*(?:lines|loc)/,
+    /(\d+)\s*(?:lines|loc)\s*(?:long|or more)?/,
+  ],
+  maxNesting: [/nest\w*\D{0,14}(\d+)/],
+  maxParams: [/(\d+)\s*(?:params|parameters|arguments|args)/],
+  minDuplicateLines: [
+    new RegExp(/(?:at least|over|more than)\s*(\d+)\s*(?:duplicate|repeated|identical)?/.source
+      + /\s*lines\s*(?:of )?(?:duplicate|repeated|identical)/.source),
+  ],
+}
+const THRESHOLD_MIN = 2
+const THRESHOLD_MAX = 1000
+const MAX_STATEMENT = 2000
+const MAX_PATHS = 20
+const MAX_CONSTRAINTS = 8
+const PATH_WORD = /^[A-Za-z0-9._][A-Za-z0-9._/-]*$/
+const EXCLUDING = new RegExp(
+  /(?:don'?t|do not|never|without|except|excluding|skip|ignore|leave)\s+/.source
+    + /(?:touch(?:ing)?\s+|chang(?:e|ing)\s+|modify(?:ing)?\s+|edit(?:ing)?\s+)?/.source
+    + /(?:the\s+)?([a-z0-9._/-]+)/.source,
+  'g',
+)
+/** "skip the tests", "leave tests alone": the leave-word and "tests" within a short span. */
+const SKIP_TESTS = new RegExp(/\b(skip|ignore|exclude|excluding|except|not|without|leave)\b/.source
+  + /[^.]{0,20}\btests?\b/.source)
+const CONSTRAINT = /\b(don'?t|do not|never|must|keep|preserve|only|without|no new|stay|same)\b/i
+const CLEANUP_WORDS = /\b(clean ?up|tidy|refactor|clean[- ]code)\b/i
+const STANDING = [
+  'Behavior is preserved: the same inputs give the same outputs, errors and side effects.',
+  'The validation commands pass before the first step and after every step.',
+  'No public API, wire format or file format changes unless the statement says so.',
+  'One kind of change per step; no cleanup mixed with a feature or a bug fix.',
+]
+const NAMING_NOTE = 'naming: the scan only finds names that are plainly vague; judging whether a '
+  + 'name reveals intent is the Reviewer\'s call, and the Coder renames only what the statement '
+  + 'asked for'
+
+/** Limits a statement names ("split functions over 40 lines"), within a sane range. */
+function thresholdsIn(lower) {
+  const thresholds = {}
+  for (const [key, patterns] of Object.entries(NUMBER_IN)) {
+    const match = patterns.map(rx => rx.exec(lower)).find(Boolean)
+    const value = match ? Number(match[1]) : undefined
+    const sane = value !== undefined && value >= THRESHOLD_MIN && value <= THRESHOLD_MAX
+    if (sane) thresholds[key] = value
+  }
+  return thresholds
+}
+
+/** Paths a statement names that exist, split into the scope and the ones it says to leave alone. */
+function scopeIn(statement, lower, dest) {
+  const words = (statement.match(/[A-Za-z0-9._][A-Za-z0-9._/-]*/g) ?? [])
+    .map(w => w.replace(/[.,;:]+$/, '')).filter(Boolean)
+  const safe = word => PATH_WORD.test(word) && !word.includes('..')
+  const exists = word => safe(word) && fs.existsSync(path.join(dest, word))
+  const excluded = new Set([...lower.matchAll(EXCLUDING)].map(m => m[1].replace(/[.,;:]+$/, '')))
+  const found = words.filter(exists)
+  const paths = [...new Set(found.filter(w => !excluded.has(w.toLowerCase())))].slice(0, MAX_PATHS)
+  const exclude = [...new Set(found.filter(w => excluded.has(w.toLowerCase())))]
+  if (SKIP_TESTS.test(lower)) exclude.push('tests')
+  return { paths, exclude }
+}
+
+/** The statement's sentences: the constraints it sets and the ones nothing understood. */
+function sentencesIn(statement) {
+  const sentences = statement.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean)
+  const constraints = sentences.filter(s => CONSTRAINT.test(s)).slice(0, MAX_CONSTRAINTS)
+  const known = s => Object.values(GOALS).some(rx => rx.test(s.toLowerCase()))
+    || constraints.includes(s) || CLEANUP_WORDS.test(s)
+  return { constraints, unrecognized: sentences.filter(s => !known(s)) }
+}
+
 export function parseStatement(text, destInput, roots) {
   const dest = resolveDest(destInput, roots)
-  const statement = String(text ?? '').trim().slice(0, 2000)
+  const statement = String(text ?? '').trim().slice(0, MAX_STATEMENT)
   const lower = statement.toLowerCase()
   const goals = Object.keys(GOALS).filter(g => GOALS[g].test(lower))
   const generic = /\b(clean ?up|tidy|refactor|polish|clean[- ]code)\b/.test(lower)
   const cleanCode = /\bclean[- ]code\b/.test(lower)
   const chosen = cleanCode ? ALL_GOALS : goals.length > 0 ? goals : ALL_GOALS
-  const thresholds = {}
-  const number = rx => { const m = rx.exec(lower); return m ? Number(m[1]) : undefined }
-  thresholds.maxFunctionLines = number(/(?:over|more than|longer than|above|exceed\w*|>)\s*(\d+)\s*(?:lines|loc)/) ?? number(/(\d+)\s*(?:lines|loc)\s*(?:long|or more)?/)
-  thresholds.maxNesting = number(/nest\w*\D{0,14}(\d+)/)
-  thresholds.maxParams = number(/(\d+)\s*(?:params|parameters|arguments|args)/)
-  thresholds.minDuplicateLines = number(/(?:at least|over|more than)\s*(\d+)\s*(?:duplicate|repeated|identical)?\s*lines\s*(?:of )?(?:duplicate|repeated|identical)/)
-  for (const k of Object.keys(thresholds)) if (thresholds[k] === undefined || thresholds[k] < 2 || thresholds[k] > 1000) delete thresholds[k]
-
-  const words = (statement.match(/[A-Za-z0-9._][A-Za-z0-9._\/-]*/g) ?? []).map(w => w.replace(/[.,;:]+$/, '')).filter(Boolean)
-  const exists = word => /^[A-Za-z0-9._][A-Za-z0-9._\/-]*$/.test(word) && !word.includes('..') && fs.existsSync(path.join(dest, word))
-  const excludeWords = new Set([...lower.matchAll(/(?:don'?t|do not|never|without|except|excluding|skip|ignore|leave)\s+(?:touch(?:ing)?\s+|chang(?:e|ing)\s+|modify(?:ing)?\s+|edit(?:ing)?\s+)?(?:the\s+)?([a-z0-9._\/-]+)/g)].map(m => m[1].replace(/[.,;:]+$/, '')))
-  const paths = [...new Set(words.filter(w => exists(w) && !excludeWords.has(w.toLowerCase())))].slice(0, 20)
-  const exclude = [...new Set(words.filter(w => exists(w) && excludeWords.has(w.toLowerCase())))]
-  const skipTests = /\b(skip|ignore|exclude|excluding|except|not|without|leave)\b[^.]{0,20}\btests?\b/.test(lower)
-  if (skipTests) exclude.push('tests')
-
-  const sentences = statement.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean)
-  const constraints = sentences.filter(s => /\b(don'?t|do not|never|must|keep|preserve|only|without|no new|stay|same)\b/i.test(s)).slice(0, 8)
-  const understood = sentences.filter(s => Object.values(GOALS).some(rx => rx.test(s.toLowerCase())) || constraints.includes(s) || /\b(clean ?up|tidy|refactor|clean[- ]code)\b/i.test(s))
+  const { constraints, unrecognized } = sentencesIn(statement)
   return {
     dest, statement,
     goals: chosen, defaultedGoals: goals.length === 0, generic,
-    scope: { paths, exclude },
-    thresholds: { ...DEFAULTS, ...thresholds, ...(loadLanguages(dest).cleanup ?? {}), ...thresholds },
-    constraints: ['Behavior is preserved: the same inputs give the same outputs, errors and side effects.', 'The validation commands pass before the first step and after every step.', 'No public API, wire format or file format changes unless the statement says so.', 'One kind of change per step; no cleanup mixed with a feature or a bug fix.', ...constraints],
-    notScanned: chosen.includes('naming') ? ['naming: the scan only finds names that are plainly vague; judging whether a name reveals intent is the Reviewer\'s call, and the Coder renames only what the statement asked for'] : [],
-    unrecognized: sentences.filter(s => !understood.includes(s)),
+    scope: scopeIn(statement, lower, dest),
+    thresholds: thresholdsIn(lower),
+    defaults: cleanupLimits(loadStandards(dest), null),
+    constraints: [...STANDING, ...constraints],
+    notScanned: chosen.includes('naming') ? [NAMING_NOTE] : [],
+    unrecognized,
   }
 }
 
@@ -169,10 +228,19 @@ const CLASS_DECLARATION = /\b(?:class|struct|interface|trait|impl)\s+\w+/
 const REFUSES = /\b(?:throw|raise)\b.*\b(?:Unsupported\w*|NotImplemented\w*|NotSupported\w*)\b|\b(?:throw|raise)\b.*['"`][^'"`]*(?:not supported|unsupported|not implemented|can't|cannot|can not)[^'"`]*['"`]|\b(?:unimplemented|todo)!\s*\(/i
 const FLAG_PARAM = /\b(?:bool|boolean|Boolean)\b|=\s*(?:true|false|True|False)\b|\b(?:flag|force|verbose|strict|(?:is|has|can|should|apply|enable|disable|use|with|include|skip)[A-Z_]\w*)\b/
 
+/** Where a `/` opens a regex rather than divides: line start, after punctuation, `+` or `return`. */
+const REGEX_START = /(^\s*|[(=,:[!&|?{};+]\s*|\breturn\s+)/
+const REGEX_BODY = /\/(?![/*])(?:[^/\\\n[]|\\.|\[(?:[^\]\\]|\\.)*\])+\/[a-z]*/
+const REGEX_LITERAL = new RegExp(REGEX_START.source + REGEX_BODY.source, 'g')
+const stripRegexLiterals = code => code.replace(REGEX_LITERAL, '$1//')
+
+/** A line with its strings, regex literals and trailing comment removed: only the code is left. */
+export const bareCode = (line, markers) => stripRegexLiterals(stripLineComment(line, markers))
+
 function magicNumbers(lines, markers, settings) {
   const seen = new Map()
   lines.forEach((raw, index) => {
-    const code = stripLineComment(raw, markers)
+    const code = stripRegexLiterals(stripStrings(stripLineComment(raw, markers)))
     if (code.trim() === '' || CONSTANT_LINE.test(code) || IMPORT_LINE.test(code.trim()) || /\[\s*\d+\s*\]/.test(code)) return
     for (const m of code.matchAll(NUMBER)) {
       const entry = seen.get(m[0]) ?? { literal: m[0], count: 0, lines: [] }
@@ -280,14 +348,23 @@ function findDuplicates(entries, settings) {
 const F_line = (F, at) => F.norm[at].line
 
 /** Candidates for cleanup in the scope: duplicate blocks, long or deeply nested functions, noisy comments. */
-export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude = [], thresholds = {}, limit = 40, roots } = {}) {
+const SCAN_LIMIT = 40
+
+/**
+ * `readFile(rel)` reads a file from a snapshot (the index, a commit) instead of the working tree;
+ * then `paths` are the files to scan, even ones the working tree no longer has.
+ */
+export function scanProject(destInput, options = {}) {
+  const { goals = ALL_GOALS, paths = [], exclude = [], thresholds = {} } = options
+  const { limit = SCAN_LIMIT, roots, readFile } = options
   const dest = resolveDest(destInput, roots)
-  const config = loadLanguages(dest)
-  const settings = { ...DEFAULTS, ...(config.cleanup ?? {}), ...thresholds }
+  const standards = loadStandards(dest)
+  const settings = cleanupLimits(standards, null, thresholds)
   const syntaxFor = syntaxTable(dest)
   const table = extensionTable(dest)
   const inScope = rel => (paths.length === 0 || paths.some(p => rel === p || rel.startsWith(p.replace(/\/$/, '') + '/'))) && !exclude.some(p => (p === 'tests' ? TEST_FILE.test(rel) : rel === p || rel.startsWith(p.replace(/\/$/, '') + '/')))
-  const files = walk(dest).files.filter(rel => inScope(rel) && !SKIP_FILE.test(rel)).slice(0, settings.maxFiles)
+  const listed = readFile ? paths : walk(dest).files.filter(inScope)
+  const files = listed.filter(rel => !SKIP_FILE.test(rel)).slice(0, settings.maxFiles)
   const entries = []
   const candidates = []
   const unsupported = {}
@@ -298,11 +375,14 @@ export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude 
     const syntax = syntaxFor(rel)
     const language = languageOf(rel, table)
     if (!syntax || !language) continue
+    const fileSettings = cleanupLimits(standards, language, thresholds)
     let text
     try {
-      if (fs.statSync(path.join(dest, rel)).size > settings.maxFileBytes) continue
-      text = fs.readFileSync(path.join(dest, rel), 'utf8')
+      const full = path.join(dest, rel)
+      const tooBig = !readFile && fs.statSync(full).size > fileSettings.maxFileBytes
+      text = tooBig ? null : readFile ? readFile(rel) : fs.readFileSync(full, 'utf8')
     } catch { continue }
+    if (text == null || Buffer.byteLength(text) > fileSettings.maxFileBytes) continue
     if (text.includes('\0')) continue
     const lines = text.split('\n')
     summary.files += 1
@@ -338,21 +418,34 @@ export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude 
           summary.flagArguments += 1
           candidates.push({ kind: 'flag-argument', file: rel, from: fn.from, to: fn.to, name: fn.name, test: isTest, size: 1, suggestion: `${fn.name} takes a flag argument, so it does two things. Split it into two functions named for what each does, or use a descriptive enum or options value.`, effort: 'low' })
         }
-        if (codeLines > settings.maxFunctionLines) { reasons.push(`${codeLines} code lines (limit ${settings.maxFunctionLines})`); summary.longFunctions += 1 }
-        if (fn.deepest > settings.maxNesting) { reasons.push(`nesting ${fn.deepest} (limit ${settings.maxNesting})`); summary.deepFunctions += 1 }
-        if (params > settings.maxParams) { reasons.push(`${params} parameters (limit ${settings.maxParams})`); summary.manyParams += 1 }
+        const limit = fileSettings
+        if (codeLines > limit.maxFunctionLines) {
+          reasons.push(`${codeLines} code lines (limit ${limit.maxFunctionLines})`)
+          summary.longFunctions += 1
+        }
+        if (fn.deepest > limit.maxNesting) {
+          reasons.push(`nesting ${fn.deepest} (limit ${limit.maxNesting})`)
+          summary.deepFunctions += 1
+        }
+        if (params > limit.maxParams) {
+          reasons.push(`${params} parameters (limit ${limit.maxParams})`)
+          summary.manyParams += 1
+        }
         if (reasons.length > 0) {
           candidates.push({
             kind: 'long-function', file: rel, from: fn.from, to: fn.to, name: fn.name, test: isTest, size: codeLines, reasons,
-            suggestion: `${reasons.join('; ')}. Extract cohesive blocks into well-named private helpers (pure ones first), use early returns to cut nesting${params > settings.maxParams ? ', and group the parameters into one value' : ''}. Keep the signature, error handling, ordering and side effects.`,
-            effort: codeLines > settings.maxFunctionLines * 3 ? 'high' : 'medium',
+            suggestion: `${reasons.join('; ')}. Extract cohesive blocks into well-named private ` +
+              `helpers (pure ones first), use early returns to cut nesting` +
+              `${params > limit.maxParams ? ', and group the parameters into one value' : ''}. ` +
+              'Keep the signature, error handling, ordering and side effects.',
+            effort: codeLines > limit.maxFunctionLines * HIGH_EFFORT_FACTOR ? 'high' : 'medium',
           })
         }
       }
     }
 
     if (goals.includes('constants') && !isTest) {
-      for (const e of magicNumbers(lines, syntax.line, settings)) {
+      for (const e of magicNumbers(lines, syntax.line, fileSettings)) {
         summary.magicNumbers += 1
         candidates.push({ kind: 'magic-number', file: rel, literal: e.literal, count: e.count, lines: e.lines, test: false, size: e.count, suggestion: `${e.literal} appears ${e.count} times with no name. Give it a named constant that says what it means, defined once, so a change is made in one place.`, effort: 'low' })
       }
@@ -394,12 +487,15 @@ export function scanProject(destInput, { goals = ALL_GOALS, paths = [], exclude 
   }
 
   if (syntheticDiff.length > 0) {
-    const audit = auditDiff(syntheticDiff.join('\n'), config, { syntaxFor })
+    const audit = auditDiff(syntheticDiff.join('\n'), standards, { syntaxFor, scan: true })
     const wanted = audit.findings.filter(f => goals.includes('comments') ? true : f.rule === 'commented-out-code')
     summary.commentBlocking = wanted.filter(f => f.blocking).length
     summary.commentNonBlocking = wanted.length - summary.commentBlocking
     const byFile = new Map()
-    for (const f of wanted) byFile.set(f.file, [...(byFile.get(f.file) ?? []), f])
+    for (const f of wanted) {
+      if (!byFile.has(f.file)) byFile.set(f.file, [])
+      byFile.get(f.file).push(f)
+    }
     for (const [file, list] of byFile) {
       candidates.push({
         kind: 'comment-noise', file, test: TEST_FILE.test(file), size: list.length, blocking: list.filter(f => f.blocking).length,
@@ -443,7 +539,7 @@ export function snapshot(destInput, name, current, { save = false } = {}) {
   return { comparedWith: path.relative(dest, file), savedAt: before.savedAt, delta, worse, improved: Object.values(delta).some(v => v.change < 0) && worse.length === 0 }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const argv = process.argv.slice(2)
   const command = argv.shift()
   const opt = name => { const i = argv.indexOf(name); return i === -1 ? undefined : argv[i + 1] }

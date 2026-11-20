@@ -6,6 +6,37 @@ list is "but not limited to", the project's own conventions and the language's
 idioms win where they differ, and a rule is applied with judgement, not as a
 metric to game.
 
+## Summary
+
+The rules every seat loads each session. `rules/clean-code.md` is generated from this
+block (`npm run rules`); edit it here.
+
+<!-- rules:begin clean-code -->
+- Names reveal intent: precise, searchable, no misleading words, no noise words
+  (Info, Data, Manager, Util, Helper), no one-letter names outside tiny loops,
+  no m_ prefixes. A name that needs a comment should be renamed.
+- Small functions that do one thing, about 30 lines or fewer, shallow nesting,
+  two or fewer parameters as the aim, no boolean flag arguments. Cut nesting with
+  early returns and named helper functions.
+- A function that needs to do more calls helper functions; the parent only orchestrates. A name with And/Or
+  is two functions.
+- Closed for modification, open for extension: depend on the parent type, put the extension point on it, and
+  add new behavior as new children or table entries, never as another `if` on a concrete type.
+- Children must be able to replace their parent (Liskov): keep every promise the parent made, never throw
+  or no-op what it promises, never make callers check the type. If a child cannot, restructure the hierarchy.
+- DRY with care: define logic once and call it; prefer existing code to a copy;
+  do not merge things that only look alike, and do not abstract early.
+- No magic numbers: a number used directly in code, even once, gets a named
+  constant defined once. Only the numbers in `magicLiterals.allowed` (0, 1, 2 by default)
+  may appear directly.
+- Every declared name (variable, function, constant, import) must be used.
+- Comments only for the reason; the best comment is a better name.
+- Follow the project's conventions and let the formatter and linter enforce one
+  style. Simplicity and clarity over cleverness; shorter is not cleaner.
+- Errors are explicit: no swallowed errors, no empty catch.
+- Do not clean unrelated code in a feature change; that is a separate cleanup.
+<!-- rules:end -->
+
 ## Sources, and how they were read
 
 Four references were named for this standard:
@@ -56,8 +87,12 @@ the unreferenced items in "Beyond the four sources" as the team's own additions.
    calling code that already exists to writing a similar copy. But reduce
    duplication, do not worship it: two blocks that look alike by accident, or that
    will change for different reasons, stay separate. No premature abstraction.
-5. **No magic numbers or hard-coded values.** Give a literal a named constant
-   (or configuration entry) that says what it means, defined once.
+5. **No magic numbers or hard-coded values.** A magic number is any number used
+   directly in code, even once. Give it a named constant (or configuration entry)
+   that says what it means, defined once, and use the name. Only the numbers in
+   `magicLiterals.allowed` (default 0, 1, 2) may appear directly. Every declared
+   name, a constant included, must be used.
+   ([lint-rules.md](lint-rules.md))
 6. **Comments sparingly, for the reason.** Explain why, a constraint or a trap;
    never restate the code; delete commented-out code
    ([comment-standards.md](comment-standards.md)). The best comment is a better
@@ -100,13 +135,13 @@ the unreferenced items in "Beyond the four sources" as the team's own additions.
 |------|------|
 | **Researcher** | Finds the project's conventions and the existing code to reuse; notes names and constants that already exist. |
 | **Coder** | Writes new code to this standard; names carefully; extracts a function instead of commenting; defines a constant instead of repeating a literal; calls existing code instead of copying it. Does not clean unrelated code in a feature change. |
-| **Reviewer** | Checks the diff against it and labels findings: `issue (blocking)` for misleading or vague names in new code, copy-pasted logic, a repeated magic number, a swallowed error, a flag argument or a function far over the limits in new code; `suggestion (non-blocking)` for smaller simplifications. |
+| **Reviewer** | Checks the diff against it and labels findings: `issue (blocking)` for misleading or vague names in new code, copy-pasted logic, a magic number, a swallowed error, a flag argument or a function far over the limits in new code; `suggestion (non-blocking)` for smaller simplifications. |
 | **Cleaner** | Applies it to existing code on request, one behavior-preserving step at a time ([cleanup-rules.md](../../devops-cleanup/references/cleanup-rules.md)). |
 | **QA** | `cleanup_scan` on the final tree shows no new magic numbers, vague names, flag arguments or over-limit functions in the files the change touched. |
 
 ## Thresholds (defaults)
 
-`languages.json` `cleanup`, overridden per project in `.devops/project.md`:
+`standards.json` `defaults` (per language under `languages`), overridden per project in `.devops/standards.json`:
 
 | Check | Default | Source |
 |-------|---------|--------|

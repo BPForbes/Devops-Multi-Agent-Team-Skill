@@ -8,7 +8,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import {
   PACKAGE_ROOT, addLocalLanguage, checkToolchain, detectLanguages, detectServices, ensureGitignore, install,
   loadLanguages, loadServices, renderProfile, resolveDest, sandboxArgv, status,
@@ -16,6 +16,9 @@ import {
 import { commentAudit } from '../scripts/devops-comments.mjs'
 import { parseStatement, scanProject, snapshot } from '../scripts/devops-cleanup.mjs'
 import { formalCheck } from '../scripts/devops-formal.mjs'
+import { isMain } from '../scripts/devops-main.mjs'
+import { lintCheck, lintCommands } from '../scripts/devops-lint.mjs'
+import { changeSetting, getSetting } from '../scripts/devops-config.mjs'
 import { ghasPlan } from '../scripts/devops-ghas.mjs'
 import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, parseStory } from '../scripts/devops-stories.mjs'
 import { buildMindMap, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree } from '../scripts/devops-mindmap.mjs'
@@ -36,7 +39,13 @@ const INSTRUCTIONS = [
   'Sets up the DevOps multi-agent team (skill, agents, commands, per-language profile, services, sandbox) in a project.',
   'Flow: detect_project, then install_devops_team with apply=false and show the plan, then apply=true only after the user agrees.',
   'Any language can be used for any purpose; layers are only sorting tags. Use list_languages / get_language / add_language for languages not yet defined.',
-  'The server only writes .cursor/, .claude/, .devops/, devops-skill/ (thought files and cleanup snapshots), .gitignore and (ghas_plan with apply) the .github security files and SECURITY.md inside the project, and never runs project commands; sandbox_plan only prints a container command; tag tools never push, move or delete a tag.',
+  [
+    'The server only writes .cursor/, .claude/, .devops/, devops-skill/ (tools, thought files and',
+    'cleanup snapshots), .git/info/exclude (or .gitignore outside git), the removal of its own old',
+    'block from .gitignore, and (ghas_plan with apply) the .github security files and SECURITY.md',
+    'inside the project, and never runs project commands; sandbox_plan only prints a container',
+    'command; tag tools never push, move or delete a tag.',
+  ].join(' '),
   'Researchers: read documentation first, then module_map and reuse_search before any code is written.',
   MINDMAP_TEXT.t('serverInstructions'),
 ].join(' ') + '\n\n' + SETUP_SCRIPT
@@ -45,7 +54,9 @@ let clientRoots = []
 
 function allowedRoots() {
   const fromEnv = (process.env.DEVOPS_MCP_ROOTS ?? '').split(path.delimiter).filter(Boolean)
-  const candidates = fromEnv.length > 0 ? fromEnv : clientRoots.length > 0 ? clientRoots : [process.cwd()]
+  const claudeProject = process.env.CLAUDE_PROJECT_DIR ? [process.env.CLAUDE_PROJECT_DIR] : []
+  const fallback = claudeProject.length > 0 ? claudeProject : [process.cwd()]
+  const candidates = fromEnv.length > 0 ? fromEnv : clientRoots.length > 0 ? clientRoots : fallback
   const roots = []
   for (const candidate of candidates) {
     try {
@@ -67,6 +78,13 @@ function idList(value, name, { allow = ['auto'] } = {}) {
   if (Array.isArray(value) && value.length <= 64 && value.every(v => typeof v === 'string' && ID.test(v))) return value
   throw new Error(`${name} must be ${allow.map(a => `"${a}"`).join(', ')} or a list of ids`)
 }
+const TARGETS = ['auto', 'cursor', 'claude', 'both', 'none']
+const MAX_LISTED_COMMENTS = 500
+const MAX_LISTED_DOCS = 200
+/** A JSON schema for a list of objects that each name a file. */
+const listOf = (maxItems, properties) => ({
+  type: 'array', maxItems, items: { type: 'object', properties, required: ['file'] },
+})
 const optionalBool = (args, key, fallback) => (args[key] === undefined ? fallback : args[key] === true)
 
 const text = value => ({ content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }], ...(typeof value === 'object' ? { structuredContent: value } : {}) })
@@ -127,32 +145,50 @@ const TOOLS = [
   },
   {
     name: 'status',
-    description: 'What is installed in the project: skill for Cursor/Claude, profile, sandbox doc, .gitignore block.',
+    description: [
+      'What is installed in the project: skill for Cursor/Claude, profile, sandbox doc, the tools',
+      'in devops-skill/kit/, and the ignore block (gitignoreOk, ignoreFile).',
+    ].join(' '),
     inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
     annotations: { readOnlyHint: true },
     run: args => status(projectDir(args), allowedRoots()),
   },
   {
     name: 'install_devops_team',
-    description: 'Install the DevOps multi-agent team into a project: skill, agents, commands (Cursor and/or Claude), .devops/ language and service data, the project profile, the sandbox doc, and the .gitignore block that keeps devops-skill/thoughts/ out of git. With apply=false (default) it only reports the plan. Existing files that differ are kept unless force=true.',
+    description: [
+      'Install the DevOps multi-agent team into a project: skill, agents and commands (Cursor',
+      'and/or Claude), the tools in devops-skill/kit/ (MCP server, lint, config), the profile, the',
+      'sandbox doc and the standards file. Nothing it writes is committed: it all goes into',
+      '.git/info/exclude. shareConfig=true keeps .devops/ committable so a team shares the profile',
+      'and standards. With apply=false (default) it only reports the plan. Existing files that',
+      'differ are kept unless force=true.',
+    ].join(' '),
     inputSchema: {
       type: 'object',
       properties: {
         dest,
-        target: { type: 'string', enum: ['auto', 'cursor', 'claude', 'both'], description: 'Which host folders to install into. Default auto: the ones the project already has, else both.' },
+        target: {
+          type: 'string',
+          enum: ['auto', 'cursor', 'claude', 'both', 'none'],
+          description: 'Host folders to copy into (default auto: those the project has, else both).'
+            + ' none: the Claude Code plugin supplies them; only .devops/ is written.',
+        },
         languages: langs,
         services: svcs,
         sandbox: { type: 'boolean', description: 'Write .devops/sandbox.md (default true).' },
         skipRules: { type: 'array', items: { type: 'string' }, description: 'Rule files not to install (reuse-before-implement, comments) because the project already has an equivalent.' },
         force: { type: 'boolean', description: 'Overwrite files that differ (default false).' },
+        shareConfig: { type: 'boolean', description: 'Commit .devops/ (default false: local).' },
         apply: { type: 'boolean', description: 'false (default) = plan only; true = write.' },
       },
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     run: args => install({
+      shareConfig: args.shareConfig === undefined ? undefined : args.shareConfig === true,
       dest: projectDir(args), roots: allowedRoots(),
-      target: ['auto', 'cursor', 'claude', 'both'].includes(args.target) ? args.target : 'auto',
+      target: TARGETS.includes(args.target) ? args.target : 'auto',
+      kit: args.target !== 'none',
       lang: idList(args.languages, 'languages'),
       services: idList(args.services, 'services', { allow: ['auto', 'none'] }),
       sandbox: optionalBool(args, 'sandbox', true), skipRules: idList(args.skipRules ?? [], 'skipRules', { allow: [] }), force: optionalBool(args, 'force', false), dryRun: !optionalBool(args, 'apply', false),
@@ -173,7 +209,14 @@ const TOOLS = [
   },
   {
     name: 'ensure_gitignore',
-    description: 'Add or repair the managed .gitignore block that keeps devops-skill/thoughts/ (research notes, review threads, QA notes, scratch) out of git while keeping its .gitkeep and the committed .devops/project.md. Plan only unless apply=true.',
+    description: [
+      'Add or repair the managed ignore block that keeps everything the install wrote out of git:',
+      'the tools (devops-skill/kit/), thought files, the copies in .claude/ and .cursor/, the MCP',
+      'config files it created and, unless the project shares its config, .devops/. In a git',
+      'repository it writes .git/info/exclude, which is never committed, so no tracked file',
+      'changes. It also lists files git already tracks with the command to untrack them. Plan',
+      'only unless apply=true.',
+    ].join(' '),
     inputSchema: { type: 'object', properties: { dest, apply: { type: 'boolean' } }, additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     run: args => {
@@ -325,20 +368,139 @@ const TOOLS = [
   },
   {
     name: 'comment_audit',
-    description: 'Audit the comments a change adds (staged, working tree vs HEAD, or base...head) and return ready-to-paste Conventional Comments remarks: comments that restate the code, commented-out code, questions or notes to a person left in code, process notes, bare TODO/FIXME, signature-only doc lines, over-commented files, long prose. Coders run it before handoff; Reviewers use the findings as line remarks on the virtual PR. Pass `listed` (the Push JSON `comments` array) to also flag comments the Coder did not justify. Read-only.',
+    description: [
+      'Audit the comments a change adds (staged, working tree vs HEAD, or base...head) and',
+      'return ready-to-paste Conventional Comments remarks: comments that restate the code,',
+      'commented-out code, questions or notes to a person left in code, process notes, bare',
+      'TODO/FIXME, signature-only doc lines, over-commented files, long prose, comments that',
+      'narrate the implementation step by step, concept or usage text that belongs in the',
+      'interface file or the docs, source comments that repeat their interface file (.h,',
+      '.d.ts, .pyi, ...), new doc files with no new system named, and the language style-',
+      'guide checks. Strict: every finding blocks, except the relaxed limits for interface',
+      'files. Coders run it before handoff; Reviewers use the findings as line remarks on the',
+      'virtual PR. Pass `listed` (the Push JSON `comments` array) to also flag comments the',
+      'Coder did not justify, and `docs` (the Push JSON `docs` array) to flag doc changes',
+      'nobody listed. Read-only.',
+    ].join(' '),
     inputSchema: {
       type: 'object',
       properties: {
         dest, base: { type: 'string' }, head: { type: 'string' }, staged: { type: 'boolean' },
-        listed: { type: 'array', maxItems: 500, items: { type: 'object', properties: { file: { type: 'string' }, line: { type: ['string', 'number'] }, why: { type: 'string' } }, required: ['file'] } },
+        listed: listOf(MAX_LISTED_COMMENTS, {
+          file: { type: 'string' }, line: { type: ['string', 'number'] }, why: { type: 'string' },
+        }),
+        docs: listOf(MAX_LISTED_DOCS, {
+          file: { type: 'string' }, section: { type: 'string' }, from: { type: ['string', 'null'] },
+          why: { type: 'string' }, new: { type: 'string' },
+        }),
       },
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true },
     run: args => {
       gitAllowed()
-      return commentAudit(projectDir(args), { base: args.base, head: args.head, staged: optionalBool(args, 'staged', false), listed: args.listed, roots: allowedRoots() })
+      const staged = optionalBool(args, 'staged', false)
+      const range = { base: args.base, head: args.head, staged }
+      const budgets = { listed: args.listed, docs: args.docs }
+      return commentAudit(projectDir(args), { ...range, ...budgets, roots: allowedRoots() })
     },
+  },
+  {
+    name: 'config_get',
+    description: [
+      'Read the project standards in effect (.devops/standards.json over the package defaults):',
+      'line lengths, function limits, magic-number settings, comment density, lint rules and',
+      'excludes, linter commands. Give `path` (dotted, e.g. defaults.lineLength.code) for one',
+      'setting and where it comes from; give `language` to see that language\'s values. Read-only.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { dest, path: { type: 'string' }, language: { type: 'string' } },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => getSetting(projectDir(args), {
+      path: args.path, language: args.language, roots: allowedRoots(),
+    }),
+  },
+  {
+    name: 'config_set',
+    description: [
+      'Change one project standard in .devops/standards.json: op `set` (path, value), `unset`',
+      '(back to the default), `add` or `remove` (an item of a list such as lint.exclude or',
+      'defaults.magicLiterals.allowed). With apply=false (default) it shows the change; apply=true',
+      'writes it. A value the validator rejects is never written. Use it only when the person',
+      'asked for this change in their own words; never to loosen a rule so a gate passes.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        op: { type: 'string', enum: ['set', 'unset', 'add', 'remove'] },
+        path: { type: 'string' },
+        value: {
+          description: 'A number, text, true/false, list or object; JSON text is read as JSON.',
+        },
+        apply: { type: 'boolean' },
+      },
+      required: ['op', 'path'],
+      additionalProperties: false,
+    },
+    run: args => changeSetting(projectDir(args), {
+      op: args.op,
+      path: args.path,
+      value: args.value,
+      apply: optionalBool(args, 'apply', false),
+      roots: allowedRoots(),
+    }),
+  },
+  {
+    name: 'lint_check',
+    description: [
+      'The lint gate. Lints the lines a change adds (staged, working tree vs HEAD, or',
+      'base...head) and returns verdict PASS or DENY with every finding, its rule, its',
+      'category and how to fix it. Rules: every comment rule from comment_audit, code line',
+      'length, function length, nesting, parameters, flag arguments and repeated literals',
+      '(limits from .devops/standards.json), unused functions, variables and imports,',
+      'security patterns (eval, shell injection, unsafe deserialization, disabled TLS',
+      'checks, hardcoded secrets, weak hashes, XSS sinks, SQL built from strings, unbounded',
+      'C string calls, plain-http URLs), outdated APIs, and debug leftovers. Pass `push`',
+      '(the whole Push JSON) to also check that every open-source linter from lint_commands',
+      'ran in the sandbox and exited 0. Reviewers deny on any blocking finding and send the',
+      'whole list back. Read-only.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, base: { type: 'string' }, head: { type: 'string' }, staged: { type: 'boolean' },
+        push: {
+          type: 'object',
+          description: 'The Push JSON; its comments, docs and lint.tools are checked.',
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => {
+      gitAllowed()
+      const push = args.push
+      const staged = optionalBool(args, 'staged', false)
+      const options = { base: args.base, head: args.head, staged, push, roots: allowedRoots() }
+      return lintCheck(projectDir(args), { ...options, listed: push?.comments, docs: push?.docs })
+    },
+  },
+  {
+    name: 'lint_commands',
+    description: [
+      'The open-source linter commands for this project (from .devops/standards.json',
+      '`linters`, for the detected languages, plus the ones for every project such as',
+      'semgrep, gitleaks and osv-scanner). The server does not run them: the Coder runs',
+      'each in the sandbox (sandbox_plan) and records { command, exit } in the Push JSON',
+      '`lint.tools`. Read-only.',
+    ].join(' '),
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => lintCommands(projectDir(args), { roots: allowedRoots() }),
   },
   {
     name: 'formal_check',
@@ -593,4 +755,4 @@ export function serve(input = process.stdin) {
   input.on('end', () => process.exit(0))
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) serve()
+if (isMain(import.meta.url)) serve()

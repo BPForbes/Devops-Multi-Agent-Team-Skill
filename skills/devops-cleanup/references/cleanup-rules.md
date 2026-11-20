@@ -61,13 +61,24 @@ done; stop and say why.
 2. Do not delete a comment that explains why, and do not rewrite one to look
    tidier. Do not add comments; the aim is fewer.
 3. A question or note found in code goes to the PR Q&A, then is deleted.
-4. List every comment that remains in the files you touched and is new or moved
-   in the Push JSON `comments`.
+4. Put each comment through the gate (comment-standards.md 0a) and the
+   language's style guide (profile, `docs.guide`). Keep a comment only if it is
+   needed and says more than the code that runs, or names the design choice
+   behind the code without narrating it.
+5. Comment or docs (comment-standards.md 2b, 6b): when the same concept is
+   explained in comments in several files, move it once into the module's
+   interface file (`.h`, `.d.ts`, `.pyi`, ...) or the existing docs, with the
+   smallest edit, and leave a one-line pointer. That move is its own step. A
+   cleanup never creates a doc file, does not document local detail, and does
+   not grow the docs to make up for deleted comments. A source comment that
+   repeats its interface file is deleted.
+6. List every comment that remains in the files you touched and is new or moved
+   in the Push JSON `comments`, and every doc edit in `docs`.
 
 ## Constants, flag arguments and names
 
-- A repeated literal becomes one named constant that says what it means, defined once near its owners. Do not
-  name `0`, `1`, or a value that is already self-evident in context.
+- A number used directly in code becomes one named constant that says what it means, defined once near its owners. Only the
+  numbers in `magicLiterals.allowed` (default `0`, `1`, `2`) stay as they are.
 - A function with a boolean flag argument is split into two functions named for what each does (or takes a
   named option), with every caller updated in the same step.
 - Names follow clean-code.md: intention-revealing, no noise words, no misleading words, no `m_` prefixes.

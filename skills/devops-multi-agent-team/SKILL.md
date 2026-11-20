@@ -20,6 +20,10 @@ description: >-
 
 # DevOps multi-agent team
 
+> **Claude Code with the plugin:** read this skill in pieces. `devops_brief` returns the index
+> (no input), one section (`topic`) or a seat's brief (`role`); load only what your step needs
+> instead of the references whole. The session's devops section already names the gates and limits.
+
 You are the **Orchestrator**. Coordinate plan, research, implement,
 review, security, QA, observe, optimize, document, refactor, and
 profile. One plan is source of truth. Roles are **async** pods, not
@@ -181,6 +185,7 @@ multi-branch merge rule: [virtual-git.md](references/virtual-git.md).
 | Documentation first, module mind map, reuse | [research-and-reuse.md](references/research-and-reuse.md) |
 | **Repository mind map** (docs, modules, imports, functions, calls, libraries, possible duplicates; the Researcher owns it in a team run, plain chat uses its overview) | [mind-map.md](references/mind-map.md), `mindmap_*` tools, the `project-mindmap` skill |
 | Comments and doc comments (Reviewers strict) | [comment-standards.md](references/comment-standards.md) |
+| **Lint gate**: built-in rules and open-source linters; any blocking finding is a hard DENY with the full list and fixes sent back | [lint-rules.md](references/lint-rules.md), `lint_check`, `lint_commands` |
 | Failed checks: monitor, auto-correct, stop | [monitoring.md](references/monitoring.md) |
 | Releases: tags as project history | [version-tags.md](references/version-tags.md) |
 | GitHub Advanced Security setup | [github-advanced-security.md](references/github-advanced-security.md) |

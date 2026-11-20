@@ -88,6 +88,11 @@ touch, so the Coder comments those places and no others:
 - an algorithm or protocol taken from an outside source (record the link);
 - a security-sensitive spot.
 
+Record **doc-worthy** knowledge too: a concept or flow the change touches that
+spans several files and is explained nowhere (or only in scattered comments),
+with the existing doc it belongs in. Keep this list short; most changes have
+none ([comment-standards.md](comment-standards.md) 6b).
+
 Also record existing comments that are **wrong, stale, restate the code or are
 commented-out code** in that area, as candidates to delete (not as a license to
 sweep unrelated files). List them by `path:line` with one clause each.
@@ -109,7 +114,7 @@ is written, and a counterexample can reject a design. Basic logic stays plain En
 ## Docs read (path, what it says, any disagreement with the code)
 ## Module mind map (Mermaid) + extension points
 ## Reuse map (term | searched where | found | reuse / extend / new because)
-## Comment-worthy code (path:line, why) and comments to delete (path:line, why)
+## Comment-worthy code (path:line, why), doc-worthy concepts (concept, doc file) and comments to delete (path:line, why)
 ## Formal targets (only when Lean is on): claim, path:line, basic or advanced, result
 ## Online resources (URL, date read, what it contributed)
 ## Options and recommendation (cited)

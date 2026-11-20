@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "lint": {
+    "exclude": ["agents/**", "commands/**", "rules/**", "skills/**"]
+  }
+}

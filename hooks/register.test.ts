@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 const assert = {
-  ok: (value: unknown) => expect(Boolean(value)).toBe(true),
+  ok: (value: unknown, _message?: string) => expect(Boolean(value)).toBe(true),
   equal: (a: unknown, b: unknown) => expect(a).toBe(b),
   deepEqual: (a: unknown, b: unknown) => expect(a).toEqual(b),
 }
@@ -18,6 +18,7 @@ function engine(on: any, note: string | undefined) {
   on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: '/work' }))
   on('command.register', () => ({ value: { command: 'devops' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__devops-multi-agent-team__devops_brief' } }))
   on('ui.status', () => ({ value: undefined }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify([{ id: 'rust', name: 'Rust', layers: ['systems'], evidence: ['Cargo.toml'] }]), stderr: '' } }))
   on('fs.list', (_: unknown, e: { path?: string }) => ({
@@ -141,7 +142,7 @@ const ONE_BLOCKING = { blocking: 1, nonBlocking: 0, findings: [{ file: 'a.ts', l
 test('a commit is audited: the finding is added to the result, and the staged diff is used unless -a', async ($, on) => {
   const { calls } = engineWithAudit(on, ONE_BLOCKING)
   const ran = await $.tool.call({ tool: 'Bash', command: 'git commit -m "x"' })
-  assert.ok(String(ran.context).includes('comment audit: 1 blocking'))
+  assert.ok(String(ran.context).includes('lint: 1 blocking'))
   assert.ok(String(ran.context).includes('a.ts:3'))
   assert.ok(calls[0].includes('--staged'))
   await $.tool.call({ tool: 'Bash', command: 'git commit -am "x"' })

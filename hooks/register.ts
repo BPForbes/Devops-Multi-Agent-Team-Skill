@@ -1,10 +1,33 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Found } from '../types'
-import { branchNameOf, classify, classifySegments, commitInfo, splitArgs, verdictOf } from './guard'
+import {
+  branchNameOf, classify, classifySegments, commitInfo, shellWords, splitArgs, verdictOf,
+} from './guard'
+import { BRIEF_SPEC, BRIEF_TOOL, briefFor, card, readStandards, setupClaude } from './orchestrate'
 
 const PLUGIN = 'devops-multi-agent-team'
+const SCRIPT_TIMEOUT_MS = 20000
+const CONFIG_WRITES = ['set', 'unset', 'add', 'remove', 'rule']
 const THOUGHT_DIRS = ['devops-skill/thoughts/non-final', 'devops-skill/thoughts/final']
+const LANGUAGES_REF = { plugin: 'devops-multi-agent-team', key: 'languages' } as const
+const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
+const LINT_MODE_REF = { plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const
+const BRIEFED_REF = { plugin: 'devops-multi-agent-team', key: 'briefed' } as const
+const STANDARDS_REF = { plugin: 'devops-multi-agent-team', key: 'standards' } as const
+const STANDARDS_FILE_REF = { plugin: 'devops-multi-agent-team', key: 'standardsFile' } as const
+
+/** The standards summary, read again only when .devops/standards.json changed since the last read. */
+async function currentStandards($: EngineInterface, root: string): Promise<string> {
+  const text = await $.fs.read(`${root}/.devops/standards.json`).catch(() => '')
+  const seen = await $.state.get(STANDARDS_FILE_REF)
+  const cached = await $.state.get(STANDARDS_REF)
+  if (seen.value === text && cached.value !== undefined) return cached.value
+  const summary = (await readStandards($, root)) ?? ''
+  await $.state.set(STANDARDS_REF, summary)
+  await $.state.set(STANDARDS_FILE_REF, text)
+  return summary
+}
 const MINDMAP_OVERVIEW = '.devops/mindmap/OVERVIEW.md'
 /** The mind map's wording: the package defaults, then the project's own file, key by key. */
 const MINDMAP_TEXT_OVERRIDE = '.devops/mindmap/text.json'
@@ -16,12 +39,19 @@ const HELP = [
   '/devops              status: languages, gates, QA verdict',
   '/devops languages    what was detected and in which layer',
   '/devops setup        how to install the skill and profile in this project',
+  '/devops setup claude [--dry-run] [--share-config] (you) set this project up for Claude Code:',
+  '                     only .devops/ and the thought folders; the plugin supplies the rest',
+  '/devops brief [TOPIC | role NAME]  one section of the skill, or a seat\'s brief',
   '/devops push-ok      (you) allow ONE push once QA has recorded PASS',
   '/devops push-reset   (you) withdraw that permission',
   '/devops allow-branch NAME   (you) allow creating that git branch',
   '/devops gates on|off (you) turn the push and branch gates on or off',
   '/devops monitor on|off (you) turn the failed-check monitor on or off',
-  '/devops comments warn|strict|off (you) comment audit on git commit: warn (default), refuse a commit with blocking findings, or off',
+  '/devops comments warn|strict|off (you) lint gate on git commit (comment and code rules): ' +
+    'warn (default), refuse a commit with blocking findings, or off',
+  '/devops config [show|get PATH] read the project standards (line length, limits, lint rules)',
+  '/devops config set|unset|add|remove PATH [VALUE] | rule RULE error|off (you) change ' +
+    '.devops/standards.json; checked before it is written',
 ].join('\n')
 
 async function mindmapText($: EngineInterface, root: string): Promise<Record<string, string>> {
@@ -41,7 +71,10 @@ async function mindmapText($: EngineInterface, root: string): Promise<Record<str
 async function detect($: EngineInterface): Promise<Found[]> {
   const root = await $.session.root()
   const ran = await $.process
-    .run(['node', `${$.plugin.root}/scripts/devops-setup.mjs`, 'detect', '--json', '--dest', root], { timeoutMs: 20000 })
+    .run(
+      ['node', `${$.plugin.root}/scripts/devops-setup.mjs`, 'detect', '--json', '--dest', root],
+      { timeoutMs: SCRIPT_TIMEOUT_MS },
+    )
     .catch(() => undefined)
   if (ran === undefined || ran.exitCode !== 0) return []
   try {
@@ -135,8 +168,11 @@ type AuditSummary = { blocking: number; nonBlocking: number; findings: { file: s
 
 async function auditCommit($: EngineInterface, stagesAll: boolean): Promise<AuditSummary | undefined> {
   const root = await $.session.root()
+  const scope = stagesAll ? [] : ['--staged']
+  const script = `${$.plugin.root}/scripts/devops-lint.mjs`
+  const lintArgs = ['node', script, 'check', '--dest', root, ...scope, '--json']
   const ran = await $.process
-    .run(['node', `${$.plugin.root}/scripts/devops-comments.mjs`, 'audit', '--dest', root, ...(stagesAll ? [] : ['--staged']), '--json'], { timeoutMs: 20000 })
+    .run(lintArgs, { timeoutMs: SCRIPT_TIMEOUT_MS })
     .catch(() => undefined)
   if (ran === undefined || ran.stdout === '') return undefined
   try {
@@ -148,7 +184,10 @@ async function auditCommit($: EngineInterface, stagesAll: boolean): Promise<Audi
 
 function auditContext(audit: AuditSummary): string {
   const first = audit.findings.slice(0, 6).map(f => `${f.file}:${f.line} ${f.remark}`).join(' | ')
-  return `${PLUGIN} comment audit: ${audit.blocking} blocking, ${audit.nonBlocking} non-blocking. Delete the comment, or rename or extract so the code says it; keep one only for a reason the code cannot show, and list it in the Push JSON comments. Questions and notes to a person go to the PR Q&A, never into code. ${first}`
+  const counts = `${audit.blocking} blocking, ${audit.nonBlocking} non-blocking`
+  const advice = 'Each finding names its rule and its fix; fix them all before handoff, ' +
+    'then run the open-source linters (lint_commands) in the sandbox.'
+  return `${PLUGIN} lint: ${counts}. ${advice} ${first}`
 }
 
 export const register: Register = on => {
@@ -156,8 +195,11 @@ export const register: Register = on => {
     await $.command.register({
       name: 'devops',
       description: 'DevOps multi-agent team: languages, gates, QA verdict',
-      argumentHint: '[languages|setup|push-ok|push-reset|allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off]',
+      argumentHint: '[languages|setup [claude]|brief [TOPIC|role NAME]|push-ok|push-reset|' +
+        'allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off|config ...]',
     })
+    await $.tool.register(BRIEF_SPEC).catch(() => undefined)
+    await currentStandards($, await $.session.root())
     const found = await detect($)
     await $.state.set({ plugin: 'devops-multi-agent-team', key: 'languages' } as const, found.map(f => f.id))
     $.ui.status(found.length === 0 ? undefined : `devops: ${found.slice(0, 4).map(f => f.id).join('+')}`)
@@ -196,14 +238,28 @@ export const register: Register = on => {
           : found.map(f => `${f.id.padEnd(14)} ${f.layers.join(',').padEnd(18)} ${f.evidence.join('; ')}`).join('\n'),
       }
     }
+    if (word === 'setup' && rest.split(/\s+/)[0] === 'claude') {
+      const refused = personOnly()
+      if (refused) return refused
+      return { text: await setupClaude($, rest.split(/\s+/).slice(1)) }
+    }
+    if (word === 'brief') {
+      const [first, ...others] = rest.split(/\s+/).filter(Boolean)
+      const input = first === 'role' ? { role: others.join(' ') } : { topic: rest }
+      return { text: await briefFor($, input) }
+    }
     if (word === 'setup') {
       return {
         text: [
+          'Claude Code with this plugin: /devops setup claude (add --dry-run to preview,' +
+            ' --share-config to commit .devops/). It writes only .devops/ and the thought folders.',
           'Easiest: ask me "set up the DevOps team in this project" (MCP server devops-multi-agent-team; I plan first and write only after you agree).',
           'Or one command from a shell (installs and connects the MCP server):',
           `  node ${$.plugin.root}/scripts/devops-setup.mjs init --dest .`,
           '--dry-run previews; --lang rust,typescript chooses languages; --target cursor|claude|both overrides the auto-detected host folders.',
-          'Then fill in the "Fill in by hand" section of .devops/project.md and commit it.',
+          'It copies the tools into devops-skill/kit/ and keeps everything it writes out of git',
+          '(.git/info/exclude). --share-config commits .devops/ so the team shares the profile.',
+          'Then fill in the "Fill in by hand" section of .devops/project.md.',
         ].join('\n'),
       }
     }
@@ -234,6 +290,21 @@ export const register: Register = on => {
       if (rest !== 'warn' && rest !== 'strict' && rest !== 'off') return { text: 'Usage: /devops comments warn|strict|off' }
       await $.state.set({ plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const, rest)
       return { text: `Comment audit on commit: ${rest}.` }
+    }
+    if (word === 'config') {
+      const args = shellWords(rest)
+      if (CONFIG_WRITES.includes(args[0] ?? '')) {
+        const refused = personOnly()
+        if (refused) return refused
+      }
+      const root = await $.session.root()
+      const script = `${$.plugin.root}/scripts/devops-config.mjs`
+      const command = ['node', script, ...(args.length > 0 ? args : ['show']), '--dest', root]
+      const ran = await $.process
+        .run(command, { timeoutMs: SCRIPT_TIMEOUT_MS })
+        .catch(() => undefined)
+      if (ran === undefined) return { text: 'devops-config could not run.' }
+      return { text: `${ran.stdout}${ran.stderr}`.trim() || 'devops-config printed nothing.' }
     }
     if (word === 'monitor') {
       const refused = personOnly()
@@ -313,9 +384,17 @@ export const register: Register = on => {
     next.called ? next(e) : { deny: `${PLUGIN}: its gate failed to evaluate, so ${e.command.slice(0, 60)} is refused.` },
   )
 
+  on('tool.run', { tool: `mcp__${PLUGIN}__${BRIEF_TOOL}` }, async ($, e) => {
+    const input = e as unknown as { topic?: unknown; role?: unknown }
+    await $.state.set(BRIEFED_REF, true)
+    return { result: await briefFor($, input) }
+  })
+
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
     const root = await $.session.root()
+    const languages = (await $.state.get(LANGUAGES_REF)).value ?? []
+    const hasProfile = await $.fs.exists(`${root}/.devops/project.md`).catch(() => false)
     const overview = await $.fs.read(`${root}/${MINDMAP_OVERVIEW}`).catch(() => '')
     const wording = await mindmapText($, root)
     const mindmapSection = typeof overview === 'string' && overview.trim() !== ''
@@ -328,20 +407,20 @@ export const register: Register = on => {
           scope: 'session' as const,
         }]
       : []
-    const languages = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'languages' } as const)).value ?? []
-    const hasProfile = await $.fs.exists(`${root}/.devops/project.md`).catch(() => false)
-    if (languages.length === 0 && !hasProfile) return { sections: [...composed.sections, ...mindmapSection] }
-
-    const text = [
-      'The devops-multi-agent-team skill is available in this project.',
-      languages.length > 0 ? `Detected languages: ${languages.join(', ')}.` : undefined,
-      hasProfile
-        ? 'Read .devops/project.md before planning: it lists the validation and security commands per language.'
-        : 'No .devops/project.md yet: /devops setup shows how to create it.',
-      'Only QA may give the OK to push; git push, gh pr create|merge and creating a git branch are refused until QA records "Publish gate: PASS" and the person runs /devops push-ok.',
-      mindmapSection.length === 0 ? wording.chatNoMap : undefined,
-    ].filter(Boolean).join(' ')
-
+    const briefed = (await $.state.get(BRIEFED_REF)).value === true
+    if (languages.length === 0 && !hasProfile && !briefed) {
+      return { sections: [...composed.sections, ...mindmapSection] }
+    }
+    const gates = await $.state.get(GATES_REF)
+    const lint = await $.state.get(LINT_MODE_REF)
+    const standards = await currentStandards($, root)
+    const text = card({
+      languages,
+      hasProfile,
+      gates: gates.value ?? true,
+      lintMode: lint.value ?? 'warn',
+      standards: standards || undefined,
+    })
     return { sections: [...composed.sections, { id: `${PLUGIN}:context`, text, scope: 'session' as const }, ...mindmapSection] }
   })
 }

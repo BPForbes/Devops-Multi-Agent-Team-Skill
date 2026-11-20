@@ -4,7 +4,11 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { GITIGNORE_LINES, checkTool, detectLanguages, detectServices, install, loadLanguages, loadServices, parseVerify, renderProfile, resolveDest, sandboxArgv, status, validateLanguage } from './devops-setup.mjs'
+import {
+  GITIGNORE_LINES, checkTool, connectClients, detectLanguages, detectServices, ensureGitignore,
+  initProject, install, loadLanguages, loadServices, parseVerify, renderProfile, resolveDest,
+  sandboxArgv, status, validateLanguage,
+} from './devops-setup.mjs'
 
 function project(files) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dmat-'))
@@ -42,27 +46,44 @@ test('profile carries commands, departments and only real boundaries', () => {
   assert.match(text, /explicit-types/)
 })
 
-test('install writes both hosts, the profile and the gitignore, once', () => {
+test('install writes both hosts, the profile, the tools and the ignore block, once', () => {
   const dir = project(FULLSTACK)
   const first = install({ dest: dir, target: 'both' })
   assert.ok(first.created.length > 30)
+  assert.ok(first.kit.files > 20, 'the tools are copied into the project')
   for (const rel of [
     '.cursor/skills/devops-multi-agent-team/SKILL.md', '.claude/skills/devops-multi-agent-team/SKILL.md',
-    '.claude/agents/devops-reviewer.md', '.cursor/commands/goal.md', '.devops/project.md', '.devops/languages.json',
-    '.devops/LANGUAGES.md', '.devops/languages.local.json', 'devops-skill/thoughts/non-final', 'devops-skill/thoughts/final',
+    '.claude/agents/devops-reviewer.md', '.cursor/commands/goal.md', '.devops/project.md',
+    '.devops/languages.local.json', 'devops-skill/thoughts/non-final',
+    'devops-skill/thoughts/final',
+    'devops-skill/kit/mcp/server.mjs', 'devops-skill/kit/scripts/devops-lint.mjs',
+    'devops-skill/kit/standards.json',
   ]) assert.ok(fs.existsSync(path.join(dir, rel)), rel)
+  const absent = rel => !fs.existsSync(path.join(dir, rel))
+  assert.ok(absent('.devops/languages.json'), 'package data lives in the kit')
+  assert.ok(absent('devops-skill/kit/mcp/server.test.mjs'), 'tests are not copied')
   const ignoreText = fs.readFileSync(path.join(dir, '.gitignore'), 'utf8')
-  assert.ok(ignoreText.includes('devops-skill/thoughts/non-final/') && ignoreText.includes('devops-skill/thoughts/final/'))
+  assert.ok(ignoreText.includes('/devops-skill/'), 'outside git the block falls back to .gitignore')
 
   fs.appendFileSync(path.join(dir, '.devops/project.md'), '\nMY EDIT\n')
   const second = install({ dest: dir, target: 'both' })
   assert.equal(second.created.length, 0)
   assert.ok(second.skipped.some(f => f.endsWith('project.md')), 'a hand-edited profile is kept')
   assert.match(fs.readFileSync(path.join(dir, '.devops/project.md'), 'utf8'), /MY EDIT/)
-  assert.equal((fs.readFileSync(path.join(dir, '.gitignore'), 'utf8').match(/>>> devops-multi-agent-team/g) ?? []).length, 1)
+  const ignoreAgain = fs.readFileSync(path.join(dir, '.gitignore'), 'utf8')
+  const blocks = ignoreAgain.match(/>>> devops-multi-agent-team/g)
+  assert.equal(blocks.length, 1)
 
   install({ dest: dir, target: 'both', force: true })
   assert.doesNotMatch(fs.readFileSync(path.join(dir, '.devops/project.md'), 'utf8'), /MY EDIT/)
+})
+
+test('copied instructions point at the project\'s own tools', () => {
+  const dir = project({ 'a.py': '' })
+  install({ dest: dir, target: 'claude' })
+  const skill = path.join(dir, '.claude/skills/devops-multi-agent-team/references/lint-rules.md')
+  assert.match(fs.readFileSync(skill, 'utf8'), /node devops-skill\/kit\/scripts\/devops-lint\.mjs/)
+  assert.doesNotMatch(fs.readFileSync(skill, 'utf8'), /node scripts\//)
 })
 
 test('dry run writes nothing', () => {
@@ -92,23 +113,93 @@ test('an unknown --lang id is refused', () => {
 const git = (dir, ...args) => spawnSync('git', args, { cwd: dir, encoding: 'utf8' })
 const ignored = (dir, rel) => git(dir, 'check-ignore', '-q', rel).status === 0
 
-test('both thought folders are git-ignored and the committed profile is not (checked with real git)', () => {
-  const dir = project({ 'main.py': 'print(1)\n' })
-  execFileSync('git', ['init', '-q'], { cwd: dir })
-  install({ dest: dir, target: 'claude' })
-  for (const rel of ['devops-skill/thoughts/non-final/review-reviewer-0b0b0b.md', 'devops-skill/thoughts/non-final/push-coder-0a0a0a.json', 'devops-skill/thoughts/final/goal-x.md', 'devops-skill/thoughts/team-board.md', 'codeql-python.sarif']) {
+function gitProject(files) {
+  const dir = project(files)
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: dir })
+  execFileSync('git', ['add', '-A'], { cwd: dir })
+  const who = ['-c', 'user.name=t', '-c', 'user.email=t@t']
+  execFileSync('git', [...who, 'commit', '-q', '--allow-empty', '-m', 'init'], { cwd: dir })
+  return dir
+}
+const untracked = dir => git(dir, 'status', '--porcelain', '--untracked-files=all').stdout.trim()
+
+test('in a git repository nothing the install writes shows up; no tracked file changes', () => {
+  const dir = gitProject({ 'main.py': 'print(1)\n', '.gitignore': 'node_modules/\n' })
+  const report = initProject({ dest: dir, target: 'both' })
+  assert.equal(untracked(dir), '', 'git status stays clean')
+  assert.equal(fs.readFileSync(path.join(dir, '.gitignore'), 'utf8'), 'node_modules/\n')
+  const exclude = fs.readFileSync(path.join(dir, '.git/info/exclude'), 'utf8')
+  assert.match(exclude, /^\/devops-skill\/$/m)
+  assert.match(exclude, /^\/\.devops\/$/m)
+  const written = [
+    'devops-skill/thoughts/final/goal-x.md', '.devops/project.md', '.mcp.json',
+    'codeql-python.sarif',
+    '.claude/skills/devops-multi-agent-team/SKILL.md', '.cursor/rules/comments.mdc',
+    '.claude/agents/devops-coder.md',
+  ]
+  for (const rel of written) {
     assert.ok(ignored(dir, rel), `${rel} should be ignored`)
   }
-  for (const rel of ['.devops/project.md', '.devops/sandbox.md', '.devops/languages.json', '.claude/skills/devops-multi-agent-team/SKILL.md']) {
-    assert.ok(!ignored(dir, rel), `${rel} must not be ignored`)
-  }
+  assert.ok(status(dir).gitignoreOk)
+  assert.equal(status(dir).ignoreFile, path.join('.git', 'info', 'exclude'))
+  assert.deepEqual(report.installed.warnings, [])
 })
 
-test('the gitignore block is added to a missing file, repaired when damaged, and keeps the user\'s lines', () => {
+test('the project\'s own same-named files stay visible to git', () => {
+  const dir = gitProject({ 'a.py': '' })
+  fs.mkdirSync(path.join(dir, '.claude/commands'), { recursive: true })
+  fs.writeFileSync(path.join(dir, '.claude/commands/goal.md'), 'our own goal command\n')
+  install({ dest: dir, target: 'claude' })
+  assert.ok(!ignored(dir, '.claude/commands/goal.md'))
+  assert.ok(ignored(dir, '.claude/commands/cleanup.md'))
+})
+
+test('--share-config keeps .devops/ committable while the tools and copies stay local', () => {
+  const dir = gitProject({ 'a.py': '' })
+  install({ dest: dir, target: 'claude', shareConfig: true })
+  for (const rel of ['.devops/project.md', '.devops/standards.json']) {
+    assert.ok(!ignored(dir, rel), rel)
+  }
+  assert.ok(ignored(dir, 'devops-skill/kit/mcp/server.mjs'))
+  assert.ok(ignored(dir, '.claude/skills/devops-multi-agent-team/SKILL.md'))
+  const again = { created: [], replaced: [], same: [], warnings: [], commands: [] }
+  ensureGitignore(dir, { root: dir }, again)
+  assert.ok(!ignored(dir, '.devops/project.md'), 'the mode is remembered')
+})
+
+test('an earlier install is cleaned up: its block goes, tracked copies get a command', () => {
+  const dir = gitProject({
+    'a.py': '',
+    '.gitignore': 'build/\n\n# >>> devops-multi-agent-team (managed block; do not edit between'
+      + ' the markers)\ndevops-skill/thoughts/*\n# <<< devops-multi-agent-team\n',
+    '.claude/skills/devops-multi-agent-team/SKILL.md': 'old copy\n',
+  })
+  const report = install({ dest: dir, target: 'claude', force: true })
+  assert.equal(fs.readFileSync(path.join(dir, '.gitignore'), 'utf8'), 'build/\n')
+  assert.ok(report.warnings.some(w => /removed the old .* block from \.gitignore/.test(w)))
+  assert.ok(report.warnings.some(w => /git already tracks/.test(w)))
+  assert.ok(report.commands.some(c => c.startsWith('git rm -r --cached')))
+  const prefix = path.join(dir, '.claude/skills/devops-multi-agent-team/SKILL.md')
+  assert.ok(fs.existsSync(prefix), 'nothing is deleted from disk')
+})
+
+test('a .mcp.json that git tracks is not edited; a local connection is offered instead', () => {
+  const shared = JSON.stringify({ mcpServers: { other: { command: 'x' } } }, null, 2) + '\n'
+  const dir = gitProject({ 'a.py': '', '.mcp.json': shared, '.claude/.keep': '' })
+  const report = connectClients({ dest: dir, clients: 'claude' })
+  assert.equal(fs.readFileSync(path.join(dir, '.mcp.json'), 'utf8'), shared)
+  const local = 'claude mcp add devops-multi-agent-team --scope local'
+  assert.ok(report.commands.some(c => c.startsWith(local)))
+  const kit = path.join(dir, 'devops-skill/kit/mcp/server.mjs')
+  assert.ok(fs.existsSync(kit), 'connect also writes the tools')
+})
+
+test('outside git the block goes into .gitignore, is repaired, and keeps the user\'s lines', () => {
   const none = project({ 'a.py': '' })
-  install({ dest: none, target: 'claude' })
+  const report = install({ dest: none, target: 'claude' })
   const text = fs.readFileSync(path.join(none, '.gitignore'), 'utf8')
   for (const line of GITIGNORE_LINES) assert.ok(text.includes(line), line)
+  assert.ok(report.warnings.some(w => /not a git repository/.test(w)))
 
   const damaged = project({ 'a.py': '', '.gitignore': 'node_modules/\n# >>> devops-multi-agent-team (managed block; do not edit between the markers)\ndevops-skill/thoughts/*\n# <<< devops-multi-agent-team\ndist/\n' })
   install({ dest: damaged, target: 'claude' })
@@ -123,14 +214,8 @@ test('the gitignore block is added to a missing file, repaired when damaged, and
   const migrated = fs.readFileSync(path.join(legacy, '.gitignore'), 'utf8')
   assert.equal((migrated.match(/>>> devops-multi-agent-team/g) ?? []).length, 1)
   assert.ok(!migrated.includes('!devops-skill/thoughts/non-final/'), 'the legacy block is replaced')
-  assert.ok(migrated.includes('devops-skill/thoughts/final/'))
+  assert.ok(migrated.includes('/devops-skill/'))
   assert.ok(migrated.includes('build/') && migrated.includes('out/'))
-})
-
-test('a rule that ignores all of .devops/ is reported', () => {
-  const dir = project({ 'a.py': '', '.gitignore': '.devops/\n' })
-  const report = install({ dest: dir, target: 'claude' })
-  assert.ok(report.warnings.some(w => /ignores \.devops/.test(w)))
 })
 
 test('install never writes through a symlink or outside the project', () => {
@@ -196,4 +281,61 @@ test('a language can be used whatever its layer: any id installs', () => {
   const dir = project({})
   const report = install({ dest: dir, target: 'claude', lang: 'gdscript,cobol,r,html,zig', services: 'none', dryRun: true })
   assert.deepEqual(report.languages, ['gdscript', 'cobol', 'r', 'html', 'zig'])
+})
+
+test('two projects in one repository keep their own ignore blocks', () => {
+  const repo = gitProject({ 'api/a.py': '', 'web/b.ts': '' })
+  install({ dest: path.join(repo, 'api'), target: 'claude' })
+  install({ dest: path.join(repo, 'web'), target: 'claude' })
+  install({ dest: path.join(repo, 'api'), target: 'claude' })
+  assert.ok(ignored(repo, 'api/devops-skill/kit/mcp/server.mjs'))
+  assert.ok(ignored(repo, 'web/devops-skill/kit/mcp/server.mjs'))
+  const exclude = fs.readFileSync(path.join(repo, '.git/info/exclude'), 'utf8')
+  assert.equal(exclude.split('[/api]').length - 1, 1, 'the api block is replaced, not repeated')
+})
+
+test('the share-config choice made before git init is kept after it', () => {
+  const dir = project({ 'a.py': '' })
+  install({ dest: dir, target: 'claude', shareConfig: true })
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: dir })
+  install({ dest: dir, target: 'claude' })
+  assert.ok(!ignored(dir, '.devops/project.md'))
+  assert.ok(ignored(dir, 'devops-skill/thoughts/final/x.md'))
+})
+
+test('an npx connection is ignored, and a tracked config gets an npx alternative', () => {
+  const dir = gitProject({ 'a.py': '', '.claude/.keep': '' })
+  connectClients({ dest: dir, clients: 'claude', npx: true })
+  assert.ok(ignored(dir, '.mcp.json'))
+  const shared = gitProject({ 'a.py': '', '.mcp.json': '{}\n', '.claude/.keep': '' })
+  const report = connectClients({ dest: shared, clients: 'claude', npx: true })
+  assert.ok(report.commands.some(c => c.includes('DEVOPS_MCP_ROOTS=') && c.includes(' npx ')))
+})
+
+test('init --plugin prints its report and exits 0', () => {
+  const dir = gitProject({ 'a.py': '' })
+  const script = path.join(path.dirname(new URL(import.meta.url).pathname), 'devops-setup.mjs')
+  const ran = spawnSync('node', [script, 'init', '--plugin', '--dest', dir], { encoding: 'utf8' })
+  assert.equal(ran.status, 0, ran.stderr)
+  assert.match(ran.stdout, /plugin provides the MCP server/)
+})
+
+test('a root install leaves an older unnamed block that belongs to a subproject', () => {
+  const repo = gitProject({ 'api/a.py': '', 'b.py': '' })
+  const old = '# >>> devops-multi-agent-team (managed block; do not edit between the markers)\n'
+    + '# mode: local-only (nothing the install wrote is committed)\n/api/devops-skill/\n'
+    + '# <<< devops-multi-agent-team\n'
+  fs.appendFileSync(path.join(repo, '.git/info/exclude'), old)
+  install({ dest: repo, target: 'claude' })
+  assert.ok(ignored(repo, 'api/devops-skill/kit/x.mjs'), 'the /api block is kept')
+  assert.ok(ignored(repo, 'devops-skill/kit/x.mjs'))
+})
+
+test('the install report states the sharing mode applied, also when it is remembered', () => {
+  const dir = gitProject({ 'a.py': '' })
+  assert.equal(install({ dest: dir, target: 'claude', shareConfig: true }).shareConfig, true)
+  const remembered = install({ dest: dir, target: 'claude' })
+  assert.equal(remembered.shareConfig, true, 'the shared mode is remembered')
+  const local = gitProject({ 'b.py': '' })
+  assert.equal(install({ dest: local, target: 'claude' }).shareConfig, false)
 })

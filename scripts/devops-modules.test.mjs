@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { connectClients, hostFolders, initProject, install } from './devops-setup.mjs'
 import { ghasPlan } from './devops-ghas.mjs'
 import { moduleMap, moduleOf, reuseSearch } from './devops-research.mjs'
@@ -60,6 +61,8 @@ test('reuse search finds definitions, docs and variants, skips secrets and redac
 test('tags: history between releases, warnings, unreleased bump, plan and create', () => {
   const dir = project({ 'src/a.ts': 'a\n' })
   git(dir, 'init', '-q', '-b', 'main')
+  git(dir, 'config', 'user.name', 't')
+  git(dir, 'config', 'user.email', 't@t')
   git(dir, 'add', '.')
   git(dir, 'commit', '-q', '-m', 'feat: first')
   git(dir, 'tag', '-a', 'v1.0.0', '-m', 'one')
@@ -174,7 +177,7 @@ test('the process puts notes in the PR and not in code, and gives Coders, Resear
   assert.match(read('skills/devops-multi-agent-team/references/push-json.md'), /comment budget/)
 })
 
-test('install creates the story catalog with a project code, committed rather than ignored', () => {
+test('install creates the story catalog with a project code; local unless shared', () => {
   const dir = project({ 'a.py': '' })
   fs.renameSync(dir, dir + '-ProjectX')
   const named = dir + '-ProjectX'
@@ -185,7 +188,13 @@ test('install creates the story catalog with a project code, committed rather th
   assert.ok(fs.existsSync(path.join(named, '.claude/skills/devops-multi-agent-team/references/story-template.md')))
   assert.ok(fs.existsSync(path.join(named, '.claude/commands/story.md')))
   execFileSyncGit(named, ['init', '-q'])
-  assert.notEqual(spawnSync('git', ['check-ignore', '-q', '.devops/stories/catalog.json'], { cwd: named }).status, 0)
+  const check = ['check-ignore', '-q', '.devops/stories/catalog.json']
+  const ignored = dir => spawnSync('git', check, { cwd: dir }).status === 0
+  assert.ok(ignored(named), 'nothing the install writes is committed by default')
+  const shared = project({ 'a.py': '' })
+  execFileSyncGit(shared, ['init', '-q'])
+  install({ dest: shared, target: 'claude', shareConfig: true })
+  assert.ok(!ignored(shared), 'with shareConfig the catalog is committed')
 })
 
 function execFileSyncGit(dir, args) {
@@ -210,8 +219,10 @@ test('init installs and connects the MCP server, keeping other servers, and conn
   assert.deepEqual(first.connected.written, [path.join(dir, '.cursor/mcp.json')])
   const config = JSON.parse(fs.readFileSync(path.join(dir, '.cursor/mcp.json'), 'utf8'))
   assert.equal(config.mcpServers.other.command, 'x')
-  assert.equal(config.mcpServers['devops-multi-agent-team'].env.DEVOPS_MCP_ROOTS, dir)
-  assert.ok(config.mcpServers['devops-multi-agent-team'].args[0].endsWith('mcp/server.mjs'))
+  const server = config.mcpServers['devops-multi-agent-team']
+  assert.equal(server.env.DEVOPS_MCP_ROOTS, '${workspaceFolder}', 'no machine-specific path')
+  assert.equal(server.args[0], '${workspaceFolder}/devops-skill/kit/mcp/server.mjs')
+  assert.ok(fs.existsSync(path.join(dir, 'devops-skill/kit/mcp/server.mjs')))
   assert.ok(!fs.existsSync(path.join(dir, '.mcp.json')), 'only the clients the project uses')
 
   const again = connectClients({ dest: dir, clients: 'cursor' })
@@ -219,7 +230,7 @@ test('init installs and connects the MCP server, keeping other servers, and conn
   const several = connectClients({ dest: dir, clients: 'claude,vscode', npx: true })
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, '.vscode/mcp.json'), 'utf8')).servers['devops-multi-agent-team'].type, 'stdio')
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, '.mcp.json'), 'utf8')).mcpServers['devops-multi-agent-team'].command, 'npx')
-  assert.ok(several.commands[0].includes('claude mcp add'))
+  assert.deepEqual(several.skipped, [])
   assert.throws(() => connectClients({ dest: dir, clients: 'emacs' }), /unknown client/)
 
   fs.writeFileSync(path.join(dir, '.mcp.json'), '{ not json')
@@ -317,4 +328,14 @@ test('research fixes the scope and cites online resources in the brief', () => {
   const doc = fs.readFileSync(path.join(root, 'skills/devops-multi-agent-team/references/research-and-reuse.md'), 'utf8')
   for (const part of ['## 0. Scope', '## Scope (', '## Online resources (', 'online resources']) assert.ok(doc.includes(part), part)
   assert.match(fs.readFileSync(path.join(root, 'agents/devops-researcher.md'), 'utf8'), /Fix the scope/)
+})
+
+test('every command still runs when npm links it as a symlink (global install, npx)', () => {
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'dmat-bin-'))
+  const linked = path.join(bin, 'devops-setup')
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  fs.symlinkSync(path.join(here, 'devops-setup.mjs'), linked)
+  const ran = spawnSync('node', [linked, 'list'], { encoding: 'utf8' })
+  assert.equal(ran.status, 0)
+  assert.match(ran.stdout, /python/)
 })

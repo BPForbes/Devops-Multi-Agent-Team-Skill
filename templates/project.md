@@ -54,7 +54,16 @@ Coders follow `comment-standards.md`: **no comment is added just because code
 was added** (self-explanatory code gets none); intent not mechanics; no comment
 rot; no commented-out code; doc comments only where the contract is not obvious
 or where API docs are published; TODO/FIXME/NOTE only for real follow-up;
-complete sentences; links for borrowed algorithms. Reviewers enforce it as
+complete sentences; links for borrowed algorithms. Every comment passes the
+comment gate (needed? more than the executed code? the design choice, not the
+implementation?) and the language's comment style guide below. Limits (line length, function
+size, nesting, parameters, comment density, linter rules) are in
+`.devops/standards.json`; a Coder reads it before writing code. Every finding is
+blocking. Interface files (`.h`, `.d.ts`, `.pyi`, ...) carry the design-level
+explanation of their source, under relaxed limits. Text about a concept that
+spans files, or about usage, updates the existing docs with the smallest edit
+(listed in the Push JSON `docs`); a new doc file only for a new system or module.
+Docs live in: `<README.md, docs/, ...>`. Reviewers enforce it as
 blocking, on the virtual PR as line remarks; questions and notes go in the PR Q&A,
 never in code. Coders run `comment_audit` before handoff and list the comments they
 keep in the Push JSON `comments`. Does this project publish generated API docs? `<yes (which packages) | no>`.
@@ -90,7 +99,7 @@ pinning them in tooling.
 - **Release rules:** `<changelog / version / lock rules the QA seat checks, or "none">`
 - **Tooling wired:** CI `<GitHub Actions | Buildkite | none>` · quality `<Sonar | none>` · security `<Snyk | none>` · tickets `<Linear | GitHub issues | none>` · browser `<MCP | none>`
 - **Story catalog:** project code `<XX>`, baseline `<branch sha>`, linked catalogs `<other repos' .devops/stories paths>`, issue tracker `<GitHub issues>`
-- **Cleanup thresholds** (defaults in `languages.json` `cleanup`, from `clean-code.md`; change here when the project wants different ones): function lines `30`, nesting `3`, parameters `4`, duplicate block `6` lines, repeated literal `2`
+- **Cleanup thresholds** (set in `.devops/standards.json` over the package `standards.json`; the scan does not read this line): function lines `30`, nesting `3`, parameters `4`, duplicate block `6` lines, repeated literal `2`
 - **Lean default** (`ask`, `on` or `off`; whether the Orchestrator asks at the start of a goal when Lean is present): `ask`
 - **Formal check rounds** (review rounds on one thread before the Orchestrator offers Lean again, if it is off): `3`
 - **Extension points** (the parents, interfaces or registries new behavior must plug into, and where children are listed): `<...>`

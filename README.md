@@ -21,6 +21,7 @@ commands, plus:
 | `agents/` | Nine role prompts: researcher, reviewer, CI, quality (QA), security, ticket lead, verifier, integrator, communicator. |
 | `commands/` | `/goal`, `/create-subagent`, `/code-review`, `/repro`, `/triage`. |
 | `languages.json`, `LANGUAGES.md` | The language setup file (40 languages) and its guide. |
+| `standards.json` | Project standards: line length, function size and nesting, parameters, duplicates, comment density, per-language overrides, and linter settings. Copied as `.devops/standards.json`, where a project overrides only the keys it sets. |
 | `services.json`, `SERVICES.md` | Docker, cloud, AI and VM services, the sandbox policy, and their guide. |
 | `mcp/server.mjs` | The MCP server for installing and managing through chat. |
 | `templates/project.md` | Skeleton of the per-project profile (`.devops/project.md`). |
@@ -64,13 +65,34 @@ The package ships an MCP server (`mcp/server.mjs`, Node 18+, no dependencies)
 so you can set up any project by talking to your assistant instead of copying
 files.
 
-**Fastest: one command** installs the skill (into the `.cursor/` and/or `.claude/` folders the project already has, else both) and connects the MCP server:
+**Fastest: one command** installs the skill (into the `.cursor/` and/or `.claude/` folders the project already has, else both), copies the tools into the project and connects the MCP server:
 
 ```bash
 node scripts/devops-setup.mjs init --dest ~/my-project        # or: scripts/install.sh --dest ~/my-project
 ```
 
-It writes the server into `.mcp.json` (Claude Code), `.cursor/mcp.json` (Cursor) and `.vscode/mcp.json` where those clients are used, keeps any other servers already listed, and refuses a config file that is not valid JSON. `connect --client claude,cursor,vscode [--npx]` does only the connection. The `--npx` form points at `npx -y -p github:BPForbes/Devops-Multi-Agent-Team-Skill devops-multi-agent-team-mcp` (not tried by me).
+**Self-contained and kept out of git.** The project gets its own copy of the tools (MCP server,
+lint, config, data) in `devops-skill/kit/`, so it needs nothing outside its own folder and the
+clone can be moved or deleted. Nothing the install writes is committed: the tools, thought files,
+the copies in `.claude/` and `.cursor/`, the MCP config files it created and `.devops/` are listed
+in `.git/info/exclude`, git's own local ignore file, so on a fresh install no tracked file changes
+and `git status` stays clean. Each person runs `init` once in their clone. Re-running it updates the kit.
+
+- `--share-config` keeps `.devops/` (profile, standards, stories) committable so a team shares them;
+  the tools and copies stay local.
+- A file of the project's own with the same name as one of ours (say `.claude/commands/goal.md`)
+  is kept and stays visible to git.
+- An earlier install that committed copies: the report lists the files git still tracks and the
+  `git rm -r --cached ...` command that untracks them (files stay on disk). It never runs it. An
+  old block in `.gitignore` is removed; that `.gitignore` change is yours to review and commit.
+- Outside a git repository the block goes into `.gitignore`; run `ensure_gitignore` after `git init`.
+
+`connect` points `.mcp.json` (Claude Code), `.cursor/mcp.json` (Cursor) and `.vscode/mcp.json` at
+the project's own server by a relative path (`${CLAUDE_PROJECT_DIR:-.}/devops-skill/kit/mcp/server.mjs`,
+`${workspaceFolder}/...`), keeping any other servers listed. If git tracks that config file, it is
+left alone and a local alternative is printed (`claude mcp add ... --scope local`, or the user-level
+Cursor file). `connect --client claude,cursor,vscode [--npx]` does only the connection; `--npx` runs
+the published package instead of the kit (not tried by me).
 
 **The MCP server carries its own setup script.** When a client connects, the server's instructions include [`mcp/setup-script.md`](mcp/setup-script.md): detect, choose languages and services, plan, ask, apply, check the toolchain, remind about the profile. Any assistant that connects knows how to do the install without further prompting, and the same text is the `setup_project` prompt and the resource `devops://setup`. Edit that file to change how the install is run.
 
@@ -78,7 +100,8 @@ It writes the server into `.mcp.json` (Claude Code), `.cursor/mcp.json` (Cursor)
 
 | Client | How |
 |--------|-----|
-| Claude Code, as a plugin | `claude --plugin-dir /path/to/devops-multi-agent-team` (the plugin's `.mcp.json` registers the server), or after the repo is on GitHub `/plugin install devops-multi-agent-team --marketplace <owner>/devops-multi-agent-team` |
+| Claude Code, as a plugin | `/plugin install devops-multi-agent-team --marketplace BPForbes/Devops-Multi-Agent-Team-Skill`, or locally `claude --plugin-dir /path/to/devops-multi-agent-team`. `plugin.json` registers the server from the plugin folder (`${CLAUDE_PLUGIN_ROOT}`) |
+| Claude Code, this repository opened as a project | nothing to do: the root `.mcp.json` starts `${CLAUDE_PROJECT_DIR:-.}/mcp/server.mjs`; approve it once when Claude Code asks. In plugin mode `plugin.json`'s entry of the same name replaces it |
 | Claude Code, server only | `claude mcp add devops-multi-agent-team -- node /path/to/devops-multi-agent-team/mcp/server.mjs` |
 | Cursor | add to `.cursor/mcp.json`: `{"mcpServers":{"devops-multi-agent-team":{"command":"node","args":["/path/to/devops-multi-agent-team/mcp/server.mjs"]}}}` |
 | Any MCP client | stdio command `node /path/to/devops-multi-agent-team/mcp/server.mjs` |
@@ -101,9 +124,9 @@ prompts) walks the same steps.
 | `list_languages`, `get_language` | the 40 languages, each with install, validation, security tools, style and how it interacts with the others |
 | `list_services`, `get_service` | Docker, Podman, devcontainers, Kubernetes, AWS, GCP, Azure, Cloudflare, Claude, GPT, Gemini, Ollama, Multipass, Lima, Vagrant, QEMU |
 | `detect_project`, `status` | what the project's files show; what is installed |
-| `install_devops_team` | skill, agents, commands for Cursor and/or Claude, `.devops/` data, profile, sandbox doc, `.gitignore` block (plan unless `apply=true`) |
+| `install_devops_team` | skill, agents, commands for Cursor and/or Claude, `.devops/` data, profile, sandbox doc, ignore block in `.git/info/exclude` (`.gitignore` outside git) (plan unless `apply=true`) |
 | `get_profile` | the profile it would write, without writing |
-| `ensure_gitignore` | add or repair the block that keeps `devops-skill/thoughts/` out of git |
+| `ensure_gitignore` | add or repair the ignore block (`.git/info/exclude`, or `.gitignore` outside git) |
 | `add_language` | define a language that is not listed; validated, saved to `.devops/languages.local.json` |
 | `check_toolchain` | is each tool installed? (`<tool> --version` only; env vars reported as set/unset, never their values) |
 | `sandbox_plan` | prints the container command that runs a command for a language in the sandbox; runs nothing |
@@ -114,7 +137,9 @@ prompts) walks the same steps.
 | `reuse_search` | research: where a term (or a spelling variant) already appears in code, comments and docs (Markdown, LaTeX, ...); secret files skipped |
 | `tag_history` | versions: how the project changed between git tags (commits, files, lines, directories, languages, commit types), unreleased work and a suggested bump; `save` keeps a snapshot in `.devops/tags/` |
 | `tag_plan`, `tag_create` | versions: plan the next semver tag; create one annotated local tag. Never pushes, moves or deletes a tag |
-| `comment_audit` | the comments a change adds (staged, working tree or `base...head`), as ready-to-paste Conventional Comments: restating comments, commented-out code, questions or notes left in code, process notes, bare TODO/FIXME, signature-only docs, over-commented files; with the Push JSON `comments` list it also flags comments the Coder did not justify |
+| `config_get`, `config_set` | read the project standards in effect (and where each value comes from); change one in `.devops/standards.json` (`set`, `unset`, `add`, `remove`), validated first, planned unless `apply=true` |
+| `lint_check`, `lint_commands` | the lint gate: every comment rule, line length, function size, unused symbols, security patterns, outdated APIs and debug leftovers on the added lines, each with its fix, verdict PASS or DENY; with the Push JSON it also checks that every open-source linter (ruff, ESLint, clippy, shellcheck, semgrep, gitleaks, osv-scanner, ...) ran in the sandbox and exited 0. `lint_commands` lists those commands |
+| `comment_audit` | the comments a change adds (staged, working tree or `base...head`), as ready-to-paste Conventional Comments: restating comments, commented-out code, questions or notes left in code, process notes, bare TODO/FIXME, signature-only docs, over-commented files, comments that narrate the implementation, concept or usage text that may belong in the docs; with the Push JSON `comments` and `docs` lists it also flags comments the Coder did not justify and unlisted doc changes |
 | `story_parse` | read a story in this format (an issue body) into structure: id, project, baseline, status, depends on, needed by, OLD and NEW blocks |
 | `story_new`, `story_link` | create a story from the template and link stories (depends-on, absorbs, supersedes, refines, shares-contract); both sides stay in step and a cycle is refused |
 | `story_graph` | link one or several catalogs (two projects): dependency order, ready work, longest chain, cross-project edges, patterns, a Mermaid graph, and every inconsistency |
@@ -138,11 +163,10 @@ never returns a secret. Commands inside language and service entries are
 guidance for the team; the server does not execute them.
 
 **Thought files stay out of git.** Research notes, review threads, QA notes and scratch live in
-`devops-skill/thoughts/non-final/` (open work) and `devops-skill/thoughts/final/` (closed work).
-Installing creates both folders and adds a managed block to `.gitignore` that ignores them. The
-block is repaired if damaged, and a warning appears if another rule ignores all of `.devops/`,
-which holds the committed profile `.devops/project.md`. The tests check this against real
-`git check-ignore`.
+`devops-skill/thoughts/non-final/` (open work) and `devops-skill/thoughts/final/` (closed work),
+next to the tools in `devops-skill/kit/`. The managed block in `.git/info/exclude` ignores all of
+`devops-skill/`, and is repaired if damaged. The tests check this against real `git check-ignore`
+and `git status`.
 
 ## Languages, services and the sandbox
 
@@ -163,10 +187,55 @@ which holds the committed profile `.devops/project.md`. The tests check this aga
   with your OK). `.devops/sandbox.md` has the commands.
   Cloud and Kubernetes: seats plan, the human applies.
 
+## Standards (`standards.json`)
+
+One JSON file sets the limits the audit and the cleanup scan use. The package
+ships `standards.json`; the installer creates `.devops/standards.json`, and a
+project sets only the keys it wants to change. Any other key, a wrong type or a
+value out of range stops the run with the problem named.
+
+```json
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "lineLength": { "comment": 80, "code": 100 },
+    "function": { "maxLines": 30, "maxNesting": 3, "maxParams": 4 }
+  },
+  "languages": { "python": { "lineLength": { "code": 88 } } }
+}
+```
+
+- `defaults`: line lengths (comments and code), function size, nesting, parameters,
+  duplicated blocks, magic numbers (allowed numbers, test files), comment density, and scan size.
+- `interface`: the relaxed comment limits for interface files (`.h`, `.d.ts`, ...).
+- `languages`: per-language overrides of any value in `defaults`.
+- `linters`: per language (or `all`), the linter tool, the command that runs it, its
+  config file and the options that file must set. The MCP server never runs them;
+  Coders run them in the sandbox.
+- `lint`: rules turned off, excluded paths, and `exemptPublic` for libraries.
+
+### Changing settings by command
+
+Every change is checked before it is written, and only `.devops/standards.json`
+changes. A value the validator rejects is refused with the reason.
+
+| Where | Read | Change |
+|-------|------|--------|
+| Shell | `devops-config show`, `devops-config get defaults.lineLength.code [--language python]` | `devops-config set defaults.lineLength.code 120`, `unset PATH`, `add lint.exclude "vendor/**"`, `remove PATH VALUE`, `rule sec-insecure-url off`; `--dry-run` previews |
+| Chat (MCP) | `config_get` | `config_set` (`op`, `path`, `value`); plans unless `apply=true` |
+| Claude Code mod | `/devops config`, `/devops config get PATH` | `/devops config set PATH VALUE` (and `unset`, `add`, `remove`, `rule`); only you can run these, not an agent |
+| Slash command | `/config get PATH` | `/config set PATH VALUE`; the agent shows the change and applies it after you agree |
+
+Paths are dotted; write `\.` for a dot inside a key
+(`linters.python.options.mccabe\.max-complexity`). Values are JSON when they parse
+(`120`, `true`, `[0,1,2]`), else text. `devops-config` is `node scripts/devops-config.mjs`
+in this repository.
+
 ## Rules built into the workflow
 
 | Rule | Where | Enforced by |
 |------|-------|-------------|
+| **Lint gate (hard deny)**: comment rules, line length, function size, unused symbols, security, outdated APIs and debug leftovers on added lines, plus the open-source linters run in the sandbox; every finding carries its fix | `lint-rules.md`, `standards.json` `lint` and `linters` | Reviewers DENY on any blocking finding and send the whole list back; the mod runs it on `git commit` |
 | **Documentation first** (Markdown, LaTeX, code comments, then code, then the web) | `research-and-reuse.md`, researcher agent | Reviewers reject a brief without it |
 | **Repository mind map**, with or without the team: plain chat answers from its overview; in a team run the Researcher refreshes and queries it and carries it into the brief, so other seats read files only at the line ranges given; fewer tokens and no second copy of a function | [`mind-map.md`](skills/devops-multi-agent-team/references/mind-map.md), `project-mindmap` skill, `mindmap_*` tools; no command, ask in plain words | Researcher: map date, definitions and duplicates in scope in the brief; Reviewers: a name it shows defined elsewhere is a re-implementation finding; QA checks the brief carries it |
 | **Module mind map + reuse map** before any Coder starts; "new, because ..." must hold up | `research-and-reuse.md`, `module_map`, `reuse_search` | Reviewers: re-implementation is a blocking finding; QA checks the brief |
@@ -175,6 +244,7 @@ which holds the committed profile `.devops/project.md`. The tests check this aga
 | **Single purpose, closed for modification, Liskov substitution** (`oop-principles.md`, from two explainer videos) | `oop-principles.md`, `rules/clean-code.md` | Reviewers block new type switches and children that refuse what the parent promises; `cleanup_scan` goal `oop` finds `type-switch`, `lsp-risk` and `multi-purpose-name` |
 | **Clean-code topics** (`clean-code-topics.md`, from the s4.codes lesson list) | `clean-code-topics.md` | Reviewers apply the Smell and Do pairs; titles only were visible, sources named in the doc |
 | **Comment budget and line remarks**: Coders default to zero new comments, list each one they keep in the Push JSON `comments`, and self-audit; Researchers mark the comment-worthy code; Reviewers leave line remarks on over-commented lines in the virtual PR; questions and notes go to the PR Q&A, never into code | `comment-standards.md` §6-7, `comment_audit` | the mod audits every `git commit` (`/devops comments strict` refuses blocking ones); reviewers post the findings |
+| **Comment gate and docs balance (strict: every finding blocks)**: before writing, keeping or changing a comment, Coders, Cleaners and Reviewers ask (a) is it needed, (b) does it say more than the code that runs, (c) does it name the design choice (the existing concept or helper used, and why) without narrating the implementation; interface files (`.h`, `.d.ts`, `.pyi`, ...) carry the design-level explanation of their source under relaxed limits, and the source does not repeat it; docs are updated with the smallest edit, and a new doc file is only for a new system or module (Push JSON `docs` `new`); each language's standard comment style guide applies and is checked where it can be | `comment-standards.md` §0a, §2b, §6b-6c, `languages.json` `docs.guide`, `comments.interface`, `comments.checks` | Reviewers balance comments against docs; `comment_audit` blocks narration, concept text in source files, repeats of the interface, new or unlisted doc files and style-guide breaks |
 | **Comment standards**: no comment just because code was added (self-explanatory code gets none); intent not mechanics; no comment rot; no commented-out code; doc comments only where the contract is not obvious or API docs are published; TODO/FIXME/NOTE for real follow-up | `comment-standards.md`, `rules/comments.md`, per-language `docs` | Reviewers: strict and blocking; Conventional Comments labels |
 | **Cleanup** (`devops-cleanup` skill, `/cleanup`): a plain-English statement drives behavior-preserving cleanup: fewer comments, duplicated code replaced by calls to one implementation, big functions split into helpers, one small step at a time | `skills/devops-cleanup/`, `cleanup_*` tools | Researchers scan and plan; the cleaner changes one thing per step; Reviewers check only structure changed; QA compares before/after numbers |
 | **Stories**: change proposals tied together (OLD verbatim from a baseline commit, then NEW; typed links; patterns and decisions kept for later) | `stories.md`, `/story`, `story_*` tools | Research organizes; Coders OLD then NEW; Reviewers the concepts; QA then Security approve; `story_check` proves OLD |
@@ -185,11 +255,13 @@ which holds the committed profile `.devops/project.md`. The tests check this aga
 
 The installer also copies the reuse and comment rules into `.cursor/rules/`
 (always on) and `.claude/rules/`, and installs a Coder agent that follows them.
+`rules/clean-code.md` and `rules/comments.md` are generated from the `Summary` block of their
+reference (`npm run rules`); edit the reference, and CI fails if a rule file is out of date.
 
 ## How it fits together
 
 ```text
-languages.json + services.json ──▶ MCP server / devops-setup ──▶ .devops/project.md, sandbox.md, .gitignore block
+languages.json + services.json + standards.json ──▶ MCP server / devops-setup ──▶ .devops/project.md, sandbox.md, devops-skill/kit/, .git/info/exclude block
                                            │                          ▲
                                            └──▶ mod: status line, /devops │ read first by every seat (SKILL.md, Step 0)
 ```
@@ -228,15 +300,26 @@ The plugin provides the skill, agents, commands, the MCP server and the mod.
 
 ## The mod
 
+The plugin's mod (`hooks/register.ts`, with `hooks/orchestrate.ts` and `hooks/brief.ts`) sets
+Claude Code up for the team and keeps agents from spending tokens to learn the skill.
+
+**Claude-only setup.** With the plugin installed, `/devops setup claude` (typed by you; add
+`--dry-run` to preview, `--share-config` to commit `.devops/`) runs `devops-setup init --plugin`:
+it writes only `.devops/` and the thought folders, kept out of git in `.git/info/exclude`. Nothing
+is copied into `.claude/` or `.cursor/` and no tools kit is needed, because the plugin supplies the
+skill, agents, commands and MCP server. The shell form is
+`node scripts/devops-setup.mjs init --plugin --dest .`.
+
 | Hook | Does |
 |------|------|
-| `tool.call` Bash (comment audit) | On `git commit` it runs the comment audit on the staged diff (the working tree for `-a`) and adds the findings to the result. `/devops comments strict` refuses a commit with blocking findings; `off` turns it off. |
+| `tool.call` Bash (lint gate) | On `git commit` it runs `devops-lint check` (comment rules and code rules) on the staged diff (the working tree for `-a`) and adds the findings to the result. `/devops comments strict` refuses a commit with blocking findings; `off` turns it off. |
 | `tool.call` Bash (monitor) | A command that matches a validation command in the language data (for example `cargo test`, `npm run lint`) and fails is recorded in `devops-skill/thoughts/non-final/check-ledger.md`, counted per check, and the result gets a reminder to reproduce, fix the cause and re-run; at the retry cap (default 3, set in `project.md`) it says stop and escalate. A pass clears the count. `/devops monitor off` (typed by you) turns it off. |
 | `prompt.compose` (mind map) | When `.devops/mindmap/OVERVIEW.md` exists, adds it to the session prompt, so plain chat knows the project at a glance with no tool call, with or without a DevOps profile. |
-| `session.start` | Runs `devops-setup detect --json`, shows `devops: rust+typescript` in the status line, registers `/devops`. |
-| `command.run` `/devops` | `status`, `languages`, `setup` (anyone); `push-ok`, `push-reset`, `allow-branch NAME`, `gates on|off` (only when **you** type them; an agent that runs the command is refused). |
+| `session.start` | Runs `devops-setup detect --json`, shows `devops: rust+typescript` in the status line, registers `/devops` and the `devops_brief` tool, and reads the project's standards into one line. |
+| `tool.run` `devops_brief` | The model reads the skill in pieces: no input gives the index (about 8 KB instead of 250 KB), `topic` the one best section (usually 1 to 4 KB), `role` a seat's brief. Role files rank below the references for a topic, since `role` serves them. |
+| `command.run` `/devops` | `status`, `languages`, `setup`, `brief [TOPIC \| role NAME]` (anyone); `setup claude`, `push-ok`, `push-reset`, `allow-branch NAME`, `gates on\|off` (only when **you** type them; an agent that runs the command is refused). |
 | `tool.call` Bash | Refuses `git push`, `gh pr create\|merge\|ready\|edit\|close\|reopen`, `gh release create` unless the newest `qa-*.md` under `devops-skill/thoughts/` has `Publish gate: PASS` **and** you ran `/devops push-ok` (consumed by that push). Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>`. Detached worktrees and reads pass. If the check itself fails, it refuses. |
-| `prompt.compose` | Adds a short session section naming the detected languages and pointing at `.devops/project.md`. |
+| `prompt.compose` | Adds one short section (under 1,200 characters): the languages, `devops_brief` instead of reading the skill whole, the profile, the lint gate and config tools, the standards in effect (line lengths, function limits, allowed numbers), the push gate and the lint mode. An agent starts with what it needs and fetches the rest by piece. |
 
 Limits, stated plainly:
 
@@ -257,6 +340,16 @@ npm test      # data check, setup CLI and MCP server tests, claude plugin valida
 
 Tests for the setup CLI are `scripts/devops-setup.test.mjs` and for the MCP
 server `mcp/server.test.mjs` (node:test); the mod's are `hooks/*.test.ts` (run by `claude plugin test`).
+
+```bash
+node scripts/mcp-smoke.mjs [--with-claude]   # pack, install, set up fresh projects, talk to the MCP servers
+```
+
+### Continuous integration
+
+| Workflow | When | Checks |
+|----------|------|--------|
+| `ci.yml` | every push and pull request | Unit tests on Node 18 and 22. The MCP smoke test: `npm pack` and install as a person downloads it, then set up fresh git projects through `devops-setup init`, through chat (the package's MCP server: detect, plan, apply) and in plugin mode, calling `status`, `config_get` and `lint_check` over stdio and checking `git status` stays clean. The plugin as Claude Code loads it: `claude plugin validate`, `claude plugin test`, and the plugin's MCP server connecting (`claude --plugin-dir . mcp list`). On a pull request, the lint gate on every line it adds. No API key. |
 
 ## Licence
 

@@ -38,15 +38,33 @@ the Orchestrator. Thoughts stay **gitignored**.
 
 - When Lean is on you write all of it: specify first (Lean model and theorem for each formal target), then implement the code to mirror the model, add tests from the model's values and counterexamples, write a write-up for each advanced claim ([proof-writeup-template.md](../skills/devops-multi-agent-team/references/proof-writeup-template.md)), add `formal` rows to the Push JSON and run `formal_check`. Basic logic stays plain English. Nobody else is asked to write Lean ([formal-check.md](../skills/devops-multi-agent-team/references/formal-check.md)).
 - Write to `oop-principles.md` too: each function has one purpose and calls helpers for more; new behavior is a new child or table entry, not an edit to existing code or another type check; every child can replace its parent without callers noticing (no throw or no-op for something the parent promises).
-- Write to `clean-code.md`: names that reveal intent and are never misleading or vague; functions that do one thing, about 30 lines or fewer, shallow nesting, two or fewer parameters as the aim, no flag arguments; one definition of each piece of logic, calling code that exists; a named constant instead of a repeated literal; explicit errors; the project's formatter. Do not clean unrelated code in this change.
+- Write to `clean-code.md`: names that reveal intent and are never misleading or vague; functions that do one thing, about 30 lines or fewer, shallow nesting, two or fewer parameters as the aim, no flag arguments; one definition of each piece of logic, calling code that exists; a named constant instead of any number used directly in code (only the numbers in `magicLiterals.allowed`; 0, 1, 2 by default); every declared name used; explicit errors; the project's formatter. Do not clean unrelated code in this change.
 - Follow `comment-standards.md` exactly. **Do not add a comment because you
   added code**; if the code is self-explanatory, write none. Rename or extract
   before commenting. Comments explain intent (why, constraints, traps), never
   mechanics; update or delete comments your change made stale; delete
   commented-out code; use a doc comment only where the contract is not obvious
   from the signature (or the project publishes API docs); `TODO:` / `FIXME:` /
-  `NOTE:` only for real follow-up; complete sentences under 80 columns; a link
+  `NOTE:` only for real follow-up; complete sentences within `lineLength.comment` (`.devops/standards.json`, 80 by default); a link
   for any borrowed algorithm. List new `TODO` / `FIXME` markers in the Handoff.
+- **Simple explanations, no narratives** in comments and docs: state the fact or the
+  reason plainly; no story of how the code came to be, no walkthroughs.
+- **Comment gate** (`comment-standards.md` 0a) before every comment: (a) is it
+  needed, or does the code already say it? (b) does it add what the executed code
+  cannot (reason, constraint, rejected alternative, trap)? (c) does it name the
+  existing concept or helper this code is built on and why, without narrating the
+  implementation? Follow the language's style guide (`docs.guide` in the profile).
+- **Interface files** (`.h`, `.hpp`, `.d.ts`, `.pyi`, `.mli`, ...; `comment-standards.md`
+  2b): put the design-level explanation of a module (what it does, how and why it is
+  implemented, which helpers it builds on) there, so the source stays lean. Do not
+  repeat it in the source. Relaxed limits, not a tutorial.
+- **Comment or docs?** (`comment-standards.md` 6b) If the text explains a concept
+  spanning several files, or how to use or run something, update the existing docs
+  with the smallest edit that makes them true, and keep at most a one-line pointer.
+  A new doc file only for a new system or module, named in the Push JSON `docs` row
+  as `new`; a new system with no docs at all is a blocking finding. Do not write docs
+  for local detail, one doc per function or a doc per change. List every doc edit in
+  the Push JSON `docs`.
 - **Do not over-comment.** Default to zero new comments. Before any comment, try a
   rename, an extracted function, a test. Comment only the places the research brief
   marks as comment-worthy or where you have a reason the code cannot say. Put every
@@ -55,9 +73,15 @@ the Orchestrator. Thoughts stay **gitignored**.
   PR Q&A (`qa` row in the Push JSON, the review thread); never as a comment. Function
   behavior that is not obvious and the lasting reason behind a bug fix or workaround
   do go in a comment; the story of the change goes in the commit message.
-- **Self-audit before handoff:** run `comment_audit` (MCP) or
-  `node scripts/devops-comments.mjs audit --staged` and fix what it reports. The mod
-  runs it on `git commit`.
+- **Lint before handoff** ([lint-rules.md](../skills/devops-multi-agent-team/references/lint-rules.md)):
+  run `lint_check` (MCP) or `node devops-skill/kit/scripts/devops-lint.mjs check --staged`
+  (in this repository, `node scripts/devops-lint.mjs ...`) and fix every
+  finding as its `Fix:` says. Then run every command from `lint_commands` (ruff, ESLint,
+  clippy, shellcheck, semgrep, gitleaks, osv-scanner, ...) in the sandbox, fix what they
+  report, and record each as `{ "command", "exit" }` in the Push JSON `lint.tools`.
+  Hand off only when every exit is 0 and `lint_check` with your Push JSON says `PASS`;
+  the Reviewer hard-denies anything else. Never turn a rule off to pass. The mod runs
+  `lint_check` on `git commit`.
 - **Answer line remarks:** Reviewers leave remarks on specific lines in the review
   thread. Delete the comment, or reply with the reason it stays; set nothing
   `fixed` that you did not change.

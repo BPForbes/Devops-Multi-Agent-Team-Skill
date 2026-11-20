@@ -116,6 +116,7 @@
       "sandboxImage": "gcc:14",
       "docs": {
         "format": "Doxygen comments (/** … */ or ///) on public functions, structs and headers",
+        "guide": "Linux kernel / GNU C style: /* */ block comments for explanations, // only where the project uses C99 comments; say what a function does and why above it, never how inside it; mark ownership, locking and lifetime rules.",
         "lineComment": "//",
         "check": "only if the project publishes API docs: doxygen with WARN_AS_ERROR=YES (or clang -Wdocumentation)"
       },
@@ -130,6 +131,12 @@
             "/*",
             "*/"
           ]
+        ],
+        "interface": [
+          ".h"
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -146,7 +153,14 @@
           ".cc",
           ".cxx",
           ".hpp",
-          ".hh"
+          ".hh",
+          ".cppm",
+          ".ixx",
+          ".mpp",
+          ".c++",
+          ".ipp",
+          ".tpp",
+          ".inl"
         ]
       },
       "toolchain": {
@@ -210,6 +224,7 @@
       "sandboxImage": "gcc:14",
       "docs": {
         "format": "Doxygen comments on public classes and functions",
+        "guide": "C++ Core Guidelines NL.1-NL.3 and the Google C++ Style Guide (Comments): do not say in comments what can be stated in code (types, const, contracts, names); comment intent at the declaration, implementation tricks at the definition; // for line comments.",
         "lineComment": "//",
         "check": "only if the project publishes API docs: doxygen with WARN_AS_ERROR=YES (or clang -Wdocumentation)"
       },
@@ -224,6 +239,19 @@
             "/*",
             "*/"
           ]
+        ],
+        "interface": [
+          ".h",
+          ".hpp",
+          ".hh",
+          ".hxx",
+          ".h++",
+          ".cppm",
+          ".ixx",
+          ".mpp"
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -283,6 +311,7 @@
       "sandboxImage": "gcc:14",
       "docs": {
         "format": "a header comment per routine stating the calling convention, inputs, outputs and clobbered registers (not recoverable from the code)",
+        "guide": "Comment every routine header (calling convention, inputs, outputs, clobbers) and any instruction whose purpose is not its mnemonic: in assembly, a comment explains the higher-level intent the instruction hides; align end-of-line comments in one column.",
         "lineComment": "; (GAS on x86 uses # or /* */; NASM uses ;)",
         "check": "none: reviewed by hand"
       },
@@ -297,6 +326,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -385,6 +417,7 @@
       "sandboxImage": "rust:1-slim",
       "docs": {
         "format": "rustdoc: /// on items, //! on modules and crates, with # Errors, # Panics and # Safety sections where they apply",
+        "guide": "Rust API Guidelines (C-EXAMPLE, C-FAILURE) and the rustdoc book: /// for items, //! for modules; a // SAFETY: comment on every unsafe block stating why the invariants hold; doc examples are tests; no comment that repeats the type signature.",
         "lineComment": "//",
         "check": "only if the project publishes API docs: RUSTDOCFLAGS=\"-D warnings\" cargo doc --no-deps; #![warn(missing_docs)] for libraries"
       },
@@ -399,6 +432,10 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space",
+          "rust-safety"
         ]
       }
     },
@@ -469,6 +506,7 @@
       "sandboxImage": "golang:1.23",
       "docs": {
         "format": "godoc: when a comment is warranted, put it directly above the name and start it with the name",
+        "guide": "Effective Go and Go Doc Comments (go.dev/doc/comment): a doc comment is a full sentence that starts with the declared name; package comment in one file only; // line comments, /* */ only for package docs or disabling large blocks temporarily (never committed).",
         "lineComment": "//",
         "check": "only if the project publishes API docs: go vet; staticcheck (ST1000 family); revive exported rule"
       },
@@ -481,6 +519,10 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space",
+          "go-doc-name"
         ]
       }
     },
@@ -566,6 +608,7 @@
       "sandboxImage": "mcr.microsoft.com/dotnet/sdk:8.0",
       "docs": {
         "format": "XML documentation (/// <summary>, <param>, <returns>, <exception>)",
+        "guide": "Microsoft C# coding conventions (Comment style): // on its own line, not at the end of code; begin with a capital letter and end with a period; one space after //; XML /// docs on public members only where the contract is not obvious.",
         "lineComment": "//",
         "check": "only if the project publishes API docs: <GenerateDocumentationFile>true</GenerateDocumentationFile> with CS1591 as an error for public APIs"
       },
@@ -580,6 +623,10 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space",
+          "no-trailing"
         ]
       }
     },
@@ -654,6 +701,7 @@
       "sandboxImage": "eclipse-temurin:21-jdk",
       "docs": {
         "format": "Javadoc (/** … */ with @param, @return, @throws)",
+        "guide": "Google Java Style Guide 7 (Javadoc) and Oracle 'How to Write Doc Comments': the summary fragment is the first sentence; @param/@return/@throws only when they add information; implementation comments explain why, not what; no Javadoc on self-explanatory getters.",
         "lineComment": "//",
         "check": "only if the project publishes API docs: javadoc -Xdoclint:all"
       },
@@ -668,6 +716,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -679,7 +730,8 @@
       ],
       "detect": {
         "extensions": [
-          ".kt"
+          ".kt",
+          ".kts"
         ]
       },
       "toolchain": {
@@ -731,6 +783,7 @@
       "sandboxImage": "eclipse-temurin:21-jdk",
       "docs": {
         "format": "KDoc (/** … */ with @param, @return, @throws)",
+        "guide": "Kotlin coding conventions (Documentation comments): prefer incorporating parameter and return descriptions into the KDoc prose; use @param/@return only for long descriptions that do not fit; avoid KDoc on obvious members.",
         "lineComment": "//",
         "check": "only if the project publishes API docs: dokka; detekt UndocumentedPublicClass/Function"
       },
@@ -745,6 +798,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -763,7 +819,10 @@
           "Pipfile"
         ],
         "extensions": [
-          ".py"
+          ".py",
+          ".pyw",
+          ".pyx",
+          ".pxd"
         ]
       },
       "toolchain": {
@@ -829,6 +888,7 @@
       "sandboxImage": "python:3.12-slim",
       "docs": {
         "format": "PEP 257 docstrings in triple quotes (Google or NumPy style, one style per project)",
+        "guide": "PEP 8 (Comments) and PEP 257: block comments start with '# ' and are indented to the code they describe; inline comments are used sparingly, separated by two spaces, and never state the obvious; docstrings describe the contract, comments describe why.",
         "lineComment": "#",
         "check": "only if the project publishes API docs: ruff check --select D (pydocstyle rules) or pydocstyle"
       },
@@ -837,7 +897,15 @@
           "#"
         ],
         "block": [],
-        "docstring": true
+        "docstring": true,
+        "interface": [
+          ".pyi",
+          ".pxd"
+        ],
+        "checks": [
+          "marker-space",
+          "inline-two-spaces"
+        ]
       }
     },
     {
@@ -853,7 +921,9 @@
         ],
         "extensions": [
           ".ts",
-          ".tsx"
+          ".tsx",
+          ".mts",
+          ".cts"
         ]
       },
       "toolchain": {
@@ -920,6 +990,7 @@
       "sandboxImage": "node:22-slim",
       "docs": {
         "format": "TSDoc/JSDoc (/** … */ with @param, @returns, @throws)",
+        "guide": "TSDoc spec and the Google TypeScript Style Guide (Comments and documentation): /** */ for documentation the IDE shows, // for implementation notes; do not declare types or @param types in JSDoc that the TypeScript types already say.",
         "lineComment": "//",
         "check": "only if the project publishes API docs: eslint-plugin-jsdoc or eslint-plugin-tsdoc; typedoc --treatWarningsAsErrors"
       },
@@ -934,6 +1005,15 @@
             "/*",
             "*/"
           ]
+        ],
+        "interface": [
+          ".d.ts",
+          ".d.mts",
+          ".d.cts"
+        ],
+        "checks": [
+          "marker-space",
+          "jsdoc-no-types"
         ]
       }
     },
@@ -1002,6 +1082,7 @@
       "sandboxImage": "node:22-slim",
       "docs": {
         "format": "JSDoc (/** … */ with @param, @returns, @throws)",
+        "guide": "Google JavaScript Style Guide 7 (JSDoc) and the Airbnb guide (Comments): /** */ for multi-line docs, // for single-line notes on their own line above the code; a space after the marker; prefix FIXME and TODO; do not restate the code.",
         "lineComment": "//",
         "check": "only if the project publishes API docs: eslint-plugin-jsdoc"
       },
@@ -1016,6 +1097,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -1072,6 +1156,7 @@
       "sandboxImage": "node:22-slim",
       "docs": {
         "format": "a short comment above a section or hack when the reason is not clear",
+        "guide": "Google HTML/CSS Style Guide and stylelint conventions: comment sections and non-obvious values (a browser hack, a z-index layer, a magic size) with the reason and the browser or issue it targets; delete commented-out rules.",
         "lineComment": "/* … */",
         "check": "only if the project publishes API docs: stylelint (comment-empty-line-before)"
       },
@@ -1082,7 +1167,8 @@
             "/*",
             "*/"
           ]
-        ]
+        ],
+        "checks": []
       }
     },
     {
@@ -1145,6 +1231,7 @@
       "sandboxImage": "koalaman/shellcheck-alpine:stable",
       "docs": {
         "format": "a header comment with purpose, usage and exit codes (a script's interface); comments on non-obvious options",
+        "guide": "Google Shell Style Guide (Comments): a file header with a description; a function header comment with globals used, arguments, outputs and return values for any non-trivial function; comment tricky or non-obvious code, not everything; TODO(name) markers.",
         "lineComment": "#",
         "check": "only if the project publishes API docs: shellcheck; shfmt -d"
       },
@@ -1152,7 +1239,10 @@
         "line": [
           "#"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -1207,6 +1297,7 @@
       "sandboxImage": "mcr.microsoft.com/powershell:lts-ubuntu-22.04",
       "docs": {
         "format": "comment-based help (.SYNOPSIS, .DESCRIPTION, .PARAMETER, .EXAMPLE) on functions users call directly",
+        "guide": "PowerShell Practice and Style guide (Documentation and Comments): comment-based help inside functions users call; comments in English, full sentences, explaining intent and not restating the cmdlet; avoid #region noise.",
         "lineComment": "#",
         "check": "only if the project publishes API docs: PSScriptAnalyzer rule PSProvideCommentHelp"
       },
@@ -1219,6 +1310,9 @@
             "<#",
             "#>"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -1278,6 +1372,7 @@
       "sandboxImage": "python:3.12-slim",
       "docs": {
         "format": "a comment on each non-obvious query or migration step naming the reason; COMMENT ON for tables and columns where the engine supports it",
+        "guide": "SQL Style Guide (Simon Holywell) and sqlfluff: -- comments for single lines, /* */ for blocks; comment why a join, filter or index hint exists, never what the SELECT does; in migrations, say why a destructive step is safe.",
         "lineComment": "--",
         "check": "only if the project publishes API docs: sqlfluff"
       },
@@ -1290,6 +1385,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -1351,6 +1449,7 @@
       "sandboxImage": "hashicorp/terraform:1.9",
       "docs": {
         "format": "a description on variables and outputs whose purpose is not clear from the name (module consumers see it); comments only for why",
+        "guide": "HashiCorp Terraform style conventions: # for comments (not //); prefer description arguments on variables and outputs over comments; comment only why a resource, lifecycle rule or dependency exists.",
         "lineComment": "#",
         "check": "only if the project publishes API docs: terraform-docs; tflint terraform_documented_variables / outputs"
       },
@@ -1364,6 +1463,10 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space",
+          "hash-only"
         ]
       }
     },
@@ -1379,7 +1482,8 @@
           "docker-compose.yml",
           "docker-compose.yaml",
           "compose.yaml",
-          "Chart.yaml"
+          "Chart.yaml",
+          "Containerfile"
         ],
         "extensions": [
           ".dockerfile"
@@ -1433,6 +1537,7 @@
       "sandboxImage": null,
       "docs": {
         "format": "a comment above each non-obvious instruction (why this base image, why this flag)",
+        "guide": "Docker best practices and hadolint: # comments above an instruction explaining a pinned version, a non-default flag or a layer-ordering choice; never commented-out RUN lines; labels, not comments, for metadata.",
         "lineComment": "#",
         "check": "only if the project publishes API docs: hadolint"
       },
@@ -1440,7 +1545,13 @@
         "line": [
           "#"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ],
+        "extensions": [
+          "Containerfile"
+        ]
       }
     },
     {
@@ -1502,6 +1613,7 @@
       "sandboxImage": "rhysd/actionlint:1.7.1",
       "docs": {
         "format": "a name on every workflow, job and step (needed for readable runs); comments only for why a permission or pin exists",
+        "guide": "GitHub Actions security hardening and actionlint: give names instead of comments; comment only why a permission is granted, an action is pinned to a SHA (with the version in a trailing comment) or a condition exists.",
         "lineComment": "#",
         "check": "only if the project publishes API docs: actionlint"
       },
@@ -1509,7 +1621,10 @@
         "line": [
           "#"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -1579,6 +1694,7 @@
       ],
       "docs": {
         "format": "comments only for non-obvious structure or a required workaround; never commented-out markup",
+        "guide": "Google HTML/CSS Style Guide: comment only to explain what a non-obvious block is for or why markup must look this way; never commented-out markup; no comments shipped that reveal internals to the browser.",
         "lineComment": "<!-- … -->",
         "check": "only if the project publishes API docs: html-validate"
       },
@@ -1589,7 +1705,8 @@
             "<!--",
             "-->"
           ]
-        ]
+        ],
+        "checks": []
       }
     },
     {
@@ -1604,7 +1721,8 @@
           "composer.json"
         ],
         "extensions": [
-          ".php"
+          ".php",
+          ".phtml"
         ]
       },
       "toolchain": {
@@ -1670,6 +1788,7 @@
       ],
       "docs": {
         "format": "PHPDoc (/** … */ with @param, @return, @throws)",
+        "guide": "PSR-12 and PSR-5/PSR-19 PHPDoc: /** */ for docblocks, // for line comments; type declarations in code replace @param and @return types; docblocks only where they add meaning (generics, array shapes, @throws).",
         "lineComment": "//",
         "check": "only if the project publishes API docs: phpcs with the PEAR/PSR-5 doc sniffs, or phpstan"
       },
@@ -1683,6 +1802,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -1696,10 +1818,14 @@
       "detect": {
         "files": [
           "Gemfile",
-          "*.gemspec"
+          "*.gemspec",
+          "Rakefile"
         ],
         "extensions": [
-          ".rb"
+          ".rb",
+          ".rake",
+          ".ru",
+          ".gemspec"
         ]
       },
       "toolchain": {
@@ -1763,6 +1889,7 @@
       ],
       "docs": {
         "format": "YARD (# @param, @return, @raise)",
+        "guide": "Ruby Style Guide (Comments): good code is its own best documentation; one space after #; English, capitalised; no superfluous or obvious comments; keep comments up to date; annotations TODO/FIXME/OPTIMIZE/HACK/REVIEW on the line above.",
         "lineComment": "#",
         "check": "only if the project publishes API docs: yard stats --list-undoc; rubocop Style/Documentation"
       },
@@ -1775,6 +1902,12 @@
             "=begin",
             "=end"
           ]
+        ],
+        "checks": [
+          "marker-space"
+        ],
+        "extensions": [
+          "Rakefile"
         ]
       }
     },
@@ -1846,6 +1979,7 @@
       ],
       "docs": {
         "format": "dartdoc: /// comments, first line a one-sentence summary, where the contract is not obvious",
+        "guide": "Effective Dart (Documentation): /// for doc comments, // for others; start with a single-sentence summary; avoid redundancy with the surrounding context; never /* */ for docs; prefer prose to markup.",
         "lineComment": "//",
         "check": "only if the project publishes API docs: dart doc; public_member_api_docs lint"
       },
@@ -1860,6 +1994,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -1875,7 +2012,8 @@
           "build.sbt"
         ],
         "extensions": [
-          ".scala"
+          ".scala",
+          ".sc"
         ]
       },
       "toolchain": {
@@ -1931,6 +2069,7 @@
       ],
       "docs": {
         "format": "Scaladoc (/** … */ with @param, @return, @throws)",
+        "guide": "Scala Style Guide (Scaladoc): /** */ with the first sentence a summary; document what is not obvious from types; // for implementation notes; Scaladoc on public API of libraries.",
         "lineComment": "//",
         "check": "only if the project publishes API docs: sbt doc with -Xfatal-warnings"
       },
@@ -1945,6 +2084,9 @@
             "/*",
             "*/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -2030,6 +2172,7 @@
       ],
       "docs": {
         "format": "DocC / Swift markup: /// with - Parameter:, - Returns:, - Throws:",
+        "guide": "Swift API Design Guidelines and DocC: write a documentation comment for every declaration whose use is not obvious from its name; begin with a summary sentence fragment; /// for docs, // for notes; MARK: only to group large types.",
         "lineComment": "//",
         "check": "only if the project publishes API docs: swift package generate-documentation; SwiftLint missing_docs"
       },
@@ -2044,6 +2187,12 @@
             "/*",
             "*/"
           ]
+        ],
+        "interface": [
+          ".swiftinterface"
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -2060,7 +2209,10 @@
         ],
         "extensions": [
           ".pl",
-          ".pm"
+          ".pm",
+          ".t",
+          ".pod",
+          ".psgi"
         ]
       },
       "toolchain": {
@@ -2115,6 +2267,7 @@
       ],
       "docs": {
         "format": "POD (=head1, =head2, =item) in or after the code",
+        "guide": "perlstyle and Perl Best Practices (Documentation): POD for user-facing docs, # comments for maintainers and only for algorithmic or non-obvious code; keep POD separate from implementation comments.",
         "lineComment": "#",
         "check": "only if the project publishes API docs: podchecker; Perl::Critic Documentation policies"
       },
@@ -2127,6 +2280,9 @@
             "=pod",
             "=cut"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -2202,6 +2358,7 @@
       ],
       "docs": {
         "format": "LDoc (--- with @param, @return)",
+        "guide": "Lua-users style guide and LDoc: -- for line comments with a space after; --- for LDoc; comment intent and non-obvious table structures, not each statement.",
         "lineComment": "--",
         "check": "only if the project publishes API docs: ldoc"
       },
@@ -2215,6 +2372,9 @@
             "--[[",
             "]]"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -2284,6 +2444,7 @@
       ],
       "docs": {
         "format": "## doc comments above classes, signals, exports and functions",
+        "guide": "GDScript style guide (Godot docs): ## for documentation comments, # for code comments with a space after; commented-out code uses # with no space only while editing and is never committed.",
         "lineComment": "#",
         "check": "only if the project publishes API docs: gdlint"
       },
@@ -2292,7 +2453,10 @@
           "#",
           "##"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -2355,6 +2519,7 @@
       ],
       "docs": {
         "format": "/// doc comments on declarations and //! on modules",
+        "guide": "Zig style guide (language reference): /// doc comments on public declarations, //! for the file; // for notes; no multi-line comments exist, so keep comments short and about why.",
         "lineComment": "//",
         "check": "only if the project publishes API docs: zig build-lib -femit-docs"
       },
@@ -2364,7 +2529,10 @@
           "///",
           "//!"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -2444,6 +2612,7 @@
       ],
       "docs": {
         "format": ";; comments on imports and exports whose contract the host must know",
+        "guide": "WebAssembly text format conventions: ;; line comments above each import and export naming the host contract; (; ;) only for inline notes; prefer named functions and locals over comments.",
         "lineComment": "(;; …)  line comments use ;;",
         "check": "only if the project publishes API docs: wasm-tools validate"
       },
@@ -2456,6 +2625,9 @@
             "(;",
             ";)"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -2474,7 +2646,10 @@
           ".f90",
           ".f95",
           ".f03",
-          ".f08"
+          ".f08",
+          ".f",
+          ".for",
+          ".fpp"
         ]
       },
       "toolchain": {
@@ -2529,6 +2704,7 @@
       ],
       "docs": {
         "format": "FORD-style !> doc comments before procedures and modules",
+        "guide": "Fortran best practices (fortran-lang.org) and FORD: !> doc comments before procedures, ! comments for why; state units and array shapes the declarations do not show.",
         "lineComment": "!",
         "check": "only if the project publishes API docs: ford"
       },
@@ -2536,7 +2712,10 @@
         "line": [
           "!"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -2602,6 +2781,7 @@
       ],
       "docs": {
         "format": "a short comment block at the top of each program naming its purpose, inputs, outputs and return codes where the code does not make them plain",
+        "guide": "IBM Enterprise COBOL guidance: a program header block (purpose, inputs, outputs, return codes) and a short comment above a non-obvious paragraph; meaningful paragraph and data names instead of per-line comments.",
         "lineComment": "*>",
         "check": "none: reviewed by hand"
       },
@@ -2610,7 +2790,11 @@
           "*>",
           "      *"
         ],
-        "block": []
+        "block": [],
+        "interface": [
+          ".cpy"
+        ],
+        "checks": []
       }
     },
     {
@@ -2684,6 +2868,7 @@
       ],
       "docs": {
         "format": "roxygen2 (#' with @param, @return, @export, @examples)",
+        "guide": "Tidyverse style guide (Comments, Documentation): # followed by one space; use comments to explain why, not what or how; if you need comments to explain what, rewrite the code; roxygen2 #' for functions.",
         "lineComment": "#",
         "check": "only if the project publishes API docs: devtools::document(); R CMD check (undocumented arguments)"
       },
@@ -2691,7 +2876,10 @@
         "line": [
           "#"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -2759,6 +2947,7 @@
       ],
       "docs": {
         "format": "docstrings in triple quotes above the definition, with a signature, Arguments and Examples",
+        "guide": "Julia manual (Documentation) and Blue style: docstrings above definitions with an indented signature; # for why-comments; doctests in Examples sections.",
         "lineComment": "#",
         "check": "only if the project publishes API docs: Documenter.jl doctests"
       },
@@ -2772,7 +2961,10 @@
             "=#"
           ]
         ],
-        "docstring": true
+        "docstring": true,
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -2788,7 +2980,8 @@
           "*.cabal"
         ],
         "extensions": [
-          ".hs"
+          ".hs",
+          ".lhs"
         ]
       },
       "toolchain": {
@@ -2845,6 +3038,7 @@
       ],
       "docs": {
         "format": "Haddock (-- | on the line above, -- ^ after a field)",
+        "guide": "Haskell style guide (Johan Tibell) and Haddock: -- | for top-level docs, -- ^ for fields and arguments; let the type signature carry what it can; comment why, laziness and strictness choices, and partiality.",
         "lineComment": "--",
         "check": "only if the project publishes API docs: cabal haddock"
       },
@@ -2857,6 +3051,9 @@
             "{-",
             "-}"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -2926,6 +3123,7 @@
       ],
       "docs": {
         "format": "odoc comments (** … *) in the .mli where a value's contract is not obvious from its type",
+        "guide": "OCaml programming guidelines: (** *) doc comments in the .mli interface, (* *) for implementation notes; the interface documents the contract, the implementation documents only non-obvious choices.",
         "lineComment": "(* … *)",
         "check": "only if the project publishes API docs: dune build @doc"
       },
@@ -2936,7 +3134,11 @@
             "(*",
             "*)"
           ]
-        ]
+        ],
+        "interface": [
+          ".mli"
+        ],
+        "checks": []
       }
     },
     {
@@ -3007,6 +3209,7 @@
       ],
       "docs": {
         "format": "edoc (%% @doc, @param, @returns) where useful, and -spec on exported functions (specs are code, not comments)",
+        "guide": "Erlang programming rules (Ericsson) and edoc: % for end-of-line, %% for code-level, %%% for module-level comments; -spec over prose for types; comment why a process, message or timeout exists.",
         "lineComment": "%%",
         "check": "only if the project publishes API docs: rebar3 edoc; dialyzer for specs"
       },
@@ -3015,7 +3218,13 @@
           "%",
           "%%"
         ],
-        "block": []
+        "block": [],
+        "interface": [
+          ".hrl"
+        ],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -3093,6 +3302,7 @@
       ],
       "docs": {
         "format": "@moduledoc and @doc with iex> doctests where the behaviour is not obvious, and @spec on public functions (specs are code)",
+        "guide": "Elixir style guide and the official Writing Documentation page: @moduledoc and @doc are documentation, # comments are for maintainers; prefer doctests to prose; @moduledoc false for internal modules instead of empty docs.",
         "lineComment": "#",
         "check": "only if the project publishes API docs: mix docs; credo Readability.ModuleDoc; ExUnit doctests"
       },
@@ -3101,7 +3311,10 @@
           "#"
         ],
         "block": [],
-        "docstring": true
+        "docstring": true,
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -3174,6 +3387,7 @@
       ],
       "docs": {
         "format": "docstrings as the first element of def, defn and ns",
+        "guide": "Clojure style guide (Comments): ;;;; for headings, ;;; top-level, ;; in code, ; end-of-line; docstrings over comments for vars; good code is its own best documentation.",
         "lineComment": "; (;; for line comments)",
         "check": "only if the project publishes API docs: clj-kondo missing-docstring linter"
       },
@@ -3182,7 +3396,10 @@
           ";",
           ";;"
         ],
-        "block": []
+        "block": [],
+        "checks": [
+          "marker-space"
+        ]
       }
     },
     {
@@ -3254,6 +3471,7 @@
       ],
       "docs": {
         "format": "XML documentation (/// <summary> …)",
+        "guide": "F# style guide (Formatting, Comments): prefer // to (* *); /// XML docs on public API; comment intent, not the pipeline steps the code already shows.",
         "lineComment": "//",
         "check": "only if the project publishes API docs: --warnon:3390 (XML doc validation)"
       },
@@ -3267,6 +3485,12 @@
             "(*",
             "*)"
           ]
+        ],
+        "interface": [
+          ".fsi"
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     },
@@ -3337,6 +3561,7 @@
       ],
       "docs": {
         "format": "doc comments (/-- ... -/ before a declaration, /-! ... -/ for a module)",
+        "guide": "Mathlib documentation style: /-! -/ module docstrings summarise the file's main results, /-- -/ docstrings on definitions and main theorems; -- comments for proof strategy only where a tactic step is not self-evident.",
         "lineComment": "--",
         "check": "only if the project publishes docs: the doc-gen4 dependency"
       },
@@ -3349,6 +3574,9 @@
             "/-",
             "-/"
           ]
+        ],
+        "checks": [
+          "marker-space"
         ]
       }
     }
@@ -3377,22 +3605,5 @@
     "Run CodeQL for every affected language, and always for changes to authentication, secrets, cryptography, HTTP handling, SQL/ORM, file uploads, command execution, deserialization, XSS/SSRF surfaces and security configuration.",
     "Unaffected languages may be NOT APPLICABLE when CI does not require all of them."
   ],
-  "docsNote": "Doc formats apply only where a doc comment is warranted: when the contract is not obvious from the name and signature, or when the project publishes generated API docs. Self-explanatory code gets no comment, and no comment is added just because code was added.",
-  "commentAudit": {
-    "maxLineColumns": 80,
-    "densityWarn": 0.35,
-    "densityBlock": 0.5,
-    "densityMinComments": 5,
-    "longBlockLines": 6
-  },
-  "cleanup": {
-    "minDuplicateLines": 6,
-    "minDuplicateChars": 120,
-    "maxFunctionLines": 30,
-    "maxNesting": 3,
-    "maxParams": 4,
-    "maxFiles": 4000,
-    "maxFileBytes": 307200,
-    "maxMagicLiteralRepeats": 2
-  }
+  "docsNote": "Doc formats apply only where a doc comment is warranted: when the contract is not obvious from the name and signature, or when the project publishes generated API docs. Self-explanatory code gets no comment, and no comment is added just because code was added."
 }

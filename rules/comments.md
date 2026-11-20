@@ -2,6 +2,31 @@
 
 - **Never add a comment because code was added.** If the code is
   self-explanatory, add none. The default for a change is no new comments.
+- **Pass the comment gate** before writing, keeping or changing a comment:
+  (a) is it needed, or do the names, types and tests already say it?
+  (b) does it say more than the code that runs (a reason, constraint, rejected
+  alternative, trap, external rule)? (c) does it explain which existing concept
+  or helper this code is built on and why, without narrating the
+  implementation? Yes to (a) and to (b) or (c), or it does not go in.
+- **Simple explanations, no narratives**, in comments and docs: state the
+  fact or the reason plainly; no story of how it came to be, no walkthroughs,
+  no filler.
+- **Strict.** Every comment and doc finding is blocking, formatting and the
+  language's style guide included.
+- **Interface files** (`.h`, `.hpp`, `.d.ts`, `.pyi`, `.mli`, ...) are where
+  comments are welcome: they describe how and why the source file is
+  implemented, at the design level, so the source needs fewer. Relaxed limits,
+  not loose ones: no restating, no line-by-line narration, no tutorial. A
+  source comment that repeats the interface is deleted.
+- **Comment or docs?** Text about a concept, flow or decision that spans
+  several files, or about how to use or run something, goes in the docs (extend
+  the existing doc) with at most a one-line pointer in code. Local detail stays
+  a comment or nothing. Docs only as needed: update the existing doc with the
+  smallest edit that makes it true; a new doc file only for a new system or
+  module (named in the Push JSON `docs` row as `new`). One place per fact,
+  updated in the same change. List every doc edit in the Push JSON `docs`.
+- Follow the language's standard style guide for comments (profile
+  "Comments and documentation", `docs.guide`).
 - Prefer self-documenting code: descriptive names and clean structure first.
   Rename or extract before you comment.
 - Explain intent (why, constraints, workarounds), never mechanics. Do not
@@ -24,7 +49,7 @@
 - Use `TODO:`, `FIXME:` and `NOTE:` (all caps) for incomplete work, known
   bugs or workarounds, and subtle or security-sensitive spots.
 - Write comments as complete sentences: capital letter, full stop, wrapped
-  before 80 columns. Link the source of any borrowed algorithm or protocol.
+  at `lineLength.comment` (80 columns by default). Link the source of any borrowed algorithm or protocol.
 - Review feedback uses Conventional Comments: `<label> [decorations]: <subject>`,
   for example `issue (blocking): ...` or `suggestion (non-blocking): ...`.
 

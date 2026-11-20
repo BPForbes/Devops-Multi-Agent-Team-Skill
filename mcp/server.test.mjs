@@ -61,7 +61,9 @@ test('initialize negotiates, lists 34 tools, prompts and resources', async () =>
   try {
     const tools = (await c.rpc('tools/list')).result.tools.map(t => t.name)
     for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_overview', 'mindmap_tree', 'mindmap_note', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 34)
+    const added = ['lint_check', 'lint_commands', 'config_get', 'config_set']
+    for (const name of added) assert.ok(tools.includes(name), name)
+    assert.equal(tools.length, 38)
     const writers = (await c.rpc('tools/list')).result.tools.filter(t => t.name === 'install_devops_team')
     assert.equal(writers[0].annotations.destructiveHint, false)
     assert.ok((await c.rpc('prompts/list')).result.prompts.some(p => p.name === 'setup_project'))
@@ -312,5 +314,25 @@ test('cleanup through chat: a plain-English statement, a scan, a saved baseline 
     assert.equal(after.compare.improved, true)
     assert.ok((await c.call('cleanup_scan', { save: '../x' })).isError)
     assert.ok((await c.call('cleanup_scan', { dest: os.tmpdir() })).isError)
+  } finally { c.close() }
+})
+
+test('config_set plans by default, writes only with apply, refuses an invalid value', async () => {
+  const root = tmp({ 'a.py': 'print(1)\n' })
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  const file = path.join(root, '.devops', 'standards.json')
+  try {
+    const set = { op: 'set', path: 'defaults.lineLength.code', value: 120 }
+    const plan = (await c.call('config_set', set)).json()
+    assert.equal(plan.written, false)
+    assert.equal(plan.now, 120)
+    assert.ok(!fs.existsSync(file))
+    assert.equal((await c.call('config_set', { ...set, apply: true })).json().written, true)
+    const read = (await c.call('config_get', { path: 'defaults.lineLength.code' })).json()
+    assert.deepEqual([read.value, read.source], [120, '.devops/standards.json'])
+    const bad = (await c.call('config_set', { ...set, value: -5, apply: true })).json()
+    assert.equal(bad.written, false)
+    assert.ok(bad.problems.length > 0)
+    assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).defaults.lineLength.code, 120)
   } finally { c.close() }
 })

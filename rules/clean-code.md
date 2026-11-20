@@ -14,7 +14,10 @@
   or no-op what it promises, never make callers check the type. If a child cannot, restructure the hierarchy.
 - DRY with care: define logic once and call it; prefer existing code to a copy;
   do not merge things that only look alike, and do not abstract early.
-- No magic numbers: name the constant, define it once.
+- No magic numbers: a number used directly in code, even once, gets a named
+  constant defined once. Only the numbers in `magicLiterals.allowed` (0, 1, 2 by default)
+  may appear directly.
+- Every declared name (variable, function, constant, import) must be used.
 - Comments only for the reason; the best comment is a better name.
 - Follow the project's conventions and let the formatter and linter enforce one
   style. Simplicity and clarity over cleverness; shorter is not cleaner.
