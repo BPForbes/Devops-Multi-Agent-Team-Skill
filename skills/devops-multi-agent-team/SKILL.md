@@ -38,6 +38,12 @@ for anything. It is built by `scripts/devops-setup.mjs install` from
 installed project; per-project tweaks go in `.devops/languages.local.json`)
 and edited by hand afterwards.
 
+- **Then the repository mind map** ([mind-map.md](references/mind-map.md)):
+  the Orchestrator reads `.devops/mindmap/OVERVIEW.md` (or `mindmap_overview`)
+  to scope the goal. The **Researcher owns the map** in a team run: refreshes
+  it, queries it and puts what the other seats need in the brief; other seats
+  use `mindmap_query` only for narrow lookups. Outside a team run, plain chat
+  uses the `project-mindmap` skill.
 - **No profile:** say so, run `node <plugin>/scripts/devops-setup.mjs
   detect`, show the human the result and ask before installing one.
   Do not guess commands from memory.
@@ -173,6 +179,7 @@ multi-branch merge rule: [virtual-git.md](references/virtual-git.md).
 | **Clean-code topics** (error handling, boundaries, unit tests, Law of Demeter, special case, feature envy, overengineering) | [clean-code-topics.md](references/clean-code-topics.md) |
 | **Single purpose, closed for modification, Liskov substitution** (with the Shape and Bird examples) | [oop-principles.md](references/oop-principles.md) |
 | Documentation first, module mind map, reuse | [research-and-reuse.md](references/research-and-reuse.md) |
+| **Repository mind map** (docs, modules, imports, functions, calls, libraries, possible duplicates; the Researcher owns it in a team run, plain chat uses its overview) | [mind-map.md](references/mind-map.md), `mindmap_*` tools, the `project-mindmap` skill |
 | Comments and doc comments (Reviewers strict) | [comment-standards.md](references/comment-standards.md) |
 | Failed checks: monitor, auto-correct, stop | [monitoring.md](references/monitoring.md) |
 | Releases: tags as project history | [version-tags.md](references/version-tags.md) |
@@ -230,7 +237,7 @@ background subagents.
 
 | Agent file | Role | Primary tool |
 |------------|------|--------------|
-| `devops-researcher.md` | Documentation & Research | docs first, module map, reuse search, tags |
+| `devops-researcher.md` | Documentation & Research | docs first, mind map, module map, reuse search, tags |
 | `devops-coder.md` | Implementation | detached worktree, profile validation |
 | `devops-reviewer.md` | Pre-QA reviewers | review thread |
 | `devops-ci-engineer.md` | CI | Buildkite / GitHub Actions |
@@ -255,7 +262,8 @@ Label every substantive reply with the active role, e.g. `[Planner]`; a spawned 
 
 - **Planner** — `/goal` when the human named X. Plans in
   `devops-skill/thoughts/non-final/`; durable docs in `docs/`.
-- **Researcher** — reads documentation first (Markdown, LaTeX, code
+- **Researcher** — owns the repository mind map (refresh, query, carry it
+  into the brief), reads documentation first (Markdown, LaTeX, code
   comments), maps the modules (Mermaid mind map), double-checks reuse and
   writes the reuse map; online media last; then **join the Coder of the same
   department** ([research-and-reuse.md](references/research-and-reuse.md)).

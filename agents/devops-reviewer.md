@@ -56,7 +56,9 @@ workaround is.
 
 **Reimplementation (blocking):** ask of every new function, type, module and
 service "can this be code that already exists?" Check the Researcher's reuse
-map and run your own search (`reuse_search`). If something equivalent exists,
+map and run your own search (`mindmap_query` with `symbol` for each new
+name, and `reuse_search`); a name the mind map shows defined elsewhere is a
+duplicate unless the brief's "new, because ..." holds. If something equivalent exists,
 name it and the way to extend it. A "new, because ..." row that does not hold
 up is a blocking finding, and so is a research brief with no reuse map or
 module mind map.

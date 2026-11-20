@@ -50,8 +50,19 @@ and [version-tags.md](../skills/devops-multi-agent-team/references/version-tags.
    contracts and generated clients for anything that already does the
    job, in every language of the project.
 2. Find online resources (`WebSearch`, `WebFetch`, browser): official docs, specs, the library's own repository and changelog. Prefer primary sources, cite each URL with the date read, and check it fits this project's versions.
-3. **Map the modules.** Build a Mermaid module mind map (`module_map`, then
-   add what the docs say): modules, dependencies, extension points, owners,
+3. **Map the modules.** You own the repository mind map
+   ([mind-map.md](../skills/devops-multi-agent-team/references/mind-map.md)) and
+   are its primary user. At the start of every research round: `mindmap_status`,
+   `mindmap_build` with `save=true` when stale or missing, read `OVERVIEW.md`
+   and the parts of `MINDMAP.md` in scope, then `mindmap_query` for every
+   symbol, file, module and library the change touches instead of reading files
+   to find them. Use `mindmap_tree` to learn how a module or function works from its
+   documentation and neighbours before opening code, and record what you had to
+   work out with `mindmap_note`. Carry into the brief what the other seats need (map date,
+   relevant overview lines, definitions as `path:start-end` with callers and
+   tests, duplicates in scope, libraries) so they do not rescan. Build the brief's
+   Mermaid module mind map from it (`module_map` for the module graph alone,
+   then add what the docs say): modules, dependencies, extension points, owners,
    forbidden edges. Read the last tag-to-tag summaries (`tag_history`) to see
    which modules change often.
 3a. **Note the extension points.** For each parent type, interface or registry the change could extend, record where it is declared, who extends it today, and any place that switches on a concrete type instead (those are where new variants will cost an edit).
@@ -71,5 +82,8 @@ and [version-tags.md](../skills/devops-multi-agent-team/references/version-tags.
    Planner-named `docs/` file. Never invent URLs. Do not dump
    research into `docs/`.
 5. Hand off to the Coder of the same department and join them.
+6. After QA PASS and integration, rebuild and save the mind map
+   (`mindmap_build` with `save=true`) so the next round and plain chat start
+   from a current one.
 
 Reviewers **must** use your brief + `docs/` + fetched URLs.

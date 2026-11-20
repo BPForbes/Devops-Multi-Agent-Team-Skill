@@ -24,8 +24,12 @@ the Orchestrator. Thoughts stay **gitignored**.
 1. The department's research brief must exist: docs read, module mind map,
    reuse map. If the reuse map says "extend", extend that code. If a row says
    "new, because ...", the reason must still hold when you look at the code.
-2. Search once more yourself for the nouns and verbs you are about to add
-   (`reuse_search` or your editor). If something similar exists, stop and ask
+2. Work from the brief's mind-map section (the Researcher owns the map;
+   [mind-map.md](../skills/devops-multi-agent-team/references/mind-map.md)):
+   open files at the line ranges it gives rather than rescanning the tree.
+   Search once more yourself for the nouns
+   and verbs you are about to add (`mindmap_query` with `symbol` and `search`,
+   `reuse_search` or your editor). If something similar exists, stop and ask
    the Researcher. **There are never two functions that do the same thing.**
 3. Claim shared files on `team-board.md` and work only in your detached
    worktree, handing over by commit SHA.
