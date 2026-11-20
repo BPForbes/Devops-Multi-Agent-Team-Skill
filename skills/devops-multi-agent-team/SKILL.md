@@ -20,6 +20,10 @@ description: >-
 
 # DevOps multi-agent team
 
+> **Claude Code with the plugin:** read this skill in pieces. `devops_brief` returns the index
+> (no input), one section (`topic`) or a seat's brief (`role`); load only what your step needs
+> instead of the references whole. The session's devops section already names the gates and limits.
+
 You are the **Orchestrator**. Coordinate plan, research, implement,
 review, security, QA, observe, optimize, document, refactor, and
 profile. One plan is source of truth. Roles are **async** pods, not

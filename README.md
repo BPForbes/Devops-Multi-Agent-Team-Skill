@@ -262,14 +262,25 @@ The plugin provides the skill, agents, commands, the MCP server and the mod.
 
 ## The mod
 
+The plugin's mod (`hooks/register.ts`, with `hooks/orchestrate.ts` and `hooks/brief.ts`) sets
+Claude Code up for the team and keeps agents from spending tokens to learn the skill.
+
+**Claude-only setup.** With the plugin installed, `/devops setup claude` (typed by you; add
+`--dry-run` to preview, `--share-config` to commit `.devops/`) runs `devops-setup init --plugin`:
+it writes only `.devops/` and the thought folders, kept out of git in `.git/info/exclude`. Nothing
+is copied into `.claude/` or `.cursor/` and no tools kit is needed, because the plugin supplies the
+skill, agents, commands and MCP server. The shell form is
+`node scripts/devops-setup.mjs init --plugin --dest .`.
+
 | Hook | Does |
 |------|------|
 | `tool.call` Bash (lint gate) | On `git commit` it runs `devops-lint check` (comment rules and code rules) on the staged diff (the working tree for `-a`) and adds the findings to the result. `/devops comments strict` refuses a commit with blocking findings; `off` turns it off. |
 | `tool.call` Bash (monitor) | A command that matches a validation command in the language data (for example `cargo test`, `npm run lint`) and fails is recorded in `devops-skill/thoughts/non-final/check-ledger.md`, counted per check, and the result gets a reminder to reproduce, fix the cause and re-run; at the retry cap (default 3, set in `project.md`) it says stop and escalate. A pass clears the count. `/devops monitor off` (typed by you) turns it off. |
-| `session.start` | Runs `devops-setup detect --json`, shows `devops: rust+typescript` in the status line, registers `/devops`. |
-| `command.run` `/devops` | `status`, `languages`, `setup` (anyone); `push-ok`, `push-reset`, `allow-branch NAME`, `gates on|off` (only when **you** type them; an agent that runs the command is refused). |
+| `session.start` | Runs `devops-setup detect --json`, shows `devops: rust+typescript` in the status line, registers `/devops` and the `devops_brief` tool, and reads the project's standards into one line. |
+| `tool.run` `devops_brief` | The model reads the skill in pieces: no input gives the index (about 8 KB instead of 250 KB), `topic` the one best section (usually 1 to 4 KB), `role` a seat's brief. Role files rank below the references for a topic, since `role` serves them. |
+| `command.run` `/devops` | `status`, `languages`, `setup`, `brief [TOPIC \| role NAME]` (anyone); `setup claude`, `push-ok`, `push-reset`, `allow-branch NAME`, `gates on\|off` (only when **you** type them; an agent that runs the command is refused). |
 | `tool.call` Bash | Refuses `git push`, `gh pr create\|merge\|ready\|edit\|close\|reopen`, `gh release create` unless the newest `qa-*.md` under `devops-skill/thoughts/` has `Publish gate: PASS` **and** you ran `/devops push-ok` (consumed by that push). Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>`. Detached worktrees and reads pass. If the check itself fails, it refuses. |
-| `prompt.compose` | Adds a short session section naming the detected languages and pointing at `.devops/project.md`. |
+| `prompt.compose` | Adds one short section (under 1,200 characters): the languages, `devops_brief` instead of reading the skill whole, the profile, the lint gate and config tools, the standards in effect (line lengths, function limits, allowed numbers), the push gate and the lint mode. An agent starts with what it needs and fetches the rest by piece. |
 
 Limits, stated plainly:
 

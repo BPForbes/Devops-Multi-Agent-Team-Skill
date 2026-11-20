@@ -72,6 +72,7 @@ function idList(value, name, { allow = ['auto'] } = {}) {
   if (Array.isArray(value) && value.length <= 64 && value.every(v => typeof v === 'string' && ID.test(v))) return value
   throw new Error(`${name} must be ${allow.map(a => `"${a}"`).join(', ')} or a list of ids`)
 }
+const TARGETS = ['auto', 'cursor', 'claude', 'both', 'none']
 const optionalBool = (args, key, fallback) => (args[key] === undefined ? fallback : args[key] === true)
 
 const text = value => ({ content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }], ...(typeof value === 'object' ? { structuredContent: value } : {}) })
@@ -154,7 +155,12 @@ const TOOLS = [
       type: 'object',
       properties: {
         dest,
-        target: { type: 'string', enum: ['auto', 'cursor', 'claude', 'both'], description: 'Which host folders to install into. Default auto: the ones the project already has, else both.' },
+        target: {
+          type: 'string',
+          enum: ['auto', 'cursor', 'claude', 'both', 'none'],
+          description: 'Host folders to copy into (default auto: those the project has, else both).'
+            + ' none: the Claude Code plugin supplies them; only .devops/ is written.',
+        },
         languages: langs,
         services: svcs,
         sandbox: { type: 'boolean', description: 'Write .devops/sandbox.md (default true).' },
@@ -169,7 +175,8 @@ const TOOLS = [
     run: args => install({
       shareConfig: args.shareConfig === undefined ? undefined : args.shareConfig === true,
       dest: projectDir(args), roots: allowedRoots(),
-      target: ['auto', 'cursor', 'claude', 'both'].includes(args.target) ? args.target : 'auto',
+      target: TARGETS.includes(args.target) ? args.target : 'auto',
+      kit: args.target !== 'none',
       lang: idList(args.languages, 'languages'),
       services: idList(args.services, 'services', { allow: ['auto', 'none'] }),
       sandbox: optionalBool(args, 'sandbox', true), skipRules: idList(args.skipRules ?? [], 'skipRules', { allow: [] }), force: optionalBool(args, 'force', false), dryRun: !optionalBool(args, 'apply', false),

@@ -2,17 +2,25 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Found } from '../types'
 import { branchNameOf, classify, classifySegments, commitInfo, splitArgs, verdictOf } from './guard'
+import { BRIEF_SPEC, BRIEF_TOOL, briefFor, card, readStandards, setupClaude } from './orchestrate'
 
 const PLUGIN = 'devops-multi-agent-team'
 const SCRIPT_TIMEOUT_MS = 20000
 const CONFIG_WRITES = ['set', 'unset', 'add', 'remove', 'rule']
 const THOUGHT_DIRS = ['devops-skill/thoughts/non-final', 'devops-skill/thoughts/final']
+const LANGUAGES_REF = { plugin: 'devops-multi-agent-team', key: 'languages' } as const
+const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
+const LINT_MODE_REF = { plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const
+const STANDARDS_REF = { plugin: 'devops-multi-agent-team', key: 'standards' } as const
 
 
 const HELP = [
   '/devops              status: languages, gates, QA verdict',
   '/devops languages    what was detected and in which layer',
   '/devops setup        how to install the skill and profile in this project',
+  '/devops setup claude [--dry-run] [--share-config] (you) set this project up for Claude Code:',
+  '                     only .devops/ and the thought folders; the plugin supplies the rest',
+  '/devops brief [TOPIC | role NAME]  one section of the skill, or a seat\'s brief',
   '/devops push-ok      (you) allow ONE push once QA has recorded PASS',
   '/devops push-reset   (you) withdraw that permission',
   '/devops allow-branch NAME   (you) allow creating that git branch',
@@ -152,9 +160,12 @@ export const register: Register = on => {
     await $.command.register({
       name: 'devops',
       description: 'DevOps multi-agent team: languages, gates, QA verdict',
-      argumentHint: '[languages|setup|push-ok|push-reset|allow-branch NAME|gates on|off|' +
-        'monitor on|off|comments warn|strict|off|config ...]',
+      argumentHint: '[languages|setup [claude]|brief [TOPIC|role NAME]|push-ok|push-reset|' +
+        'allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off|config ...]',
     })
+    await $.tool.register(BRIEF_SPEC).catch(() => undefined)
+    const standards = await readStandards($, await $.session.root())
+    await $.state.set(STANDARDS_REF, standards ?? '')
     const found = await detect($)
     await $.state.set({ plugin: 'devops-multi-agent-team', key: 'languages' } as const, found.map(f => f.id))
     $.ui.status(found.length === 0 ? undefined : `devops: ${found.slice(0, 4).map(f => f.id).join('+')}`)
@@ -193,9 +204,21 @@ export const register: Register = on => {
           : found.map(f => `${f.id.padEnd(14)} ${f.layers.join(',').padEnd(18)} ${f.evidence.join('; ')}`).join('\n'),
       }
     }
+    if (word === 'setup' && rest.split(/\s+/)[0] === 'claude') {
+      const refused = personOnly()
+      if (refused) return refused
+      return { text: await setupClaude($, rest.split(/\s+/).slice(1)) }
+    }
+    if (word === 'brief') {
+      const [first, ...others] = rest.split(/\s+/).filter(Boolean)
+      const input = first === 'role' ? { role: others.join(' ') } : { topic: rest }
+      return { text: await briefFor($, input) }
+    }
     if (word === 'setup') {
       return {
         text: [
+          'Claude Code with this plugin: /devops setup claude (add --dry-run to preview,' +
+            ' --share-config to commit .devops/). It writes only .devops/ and the thought folders.',
           'Easiest: ask me "set up the DevOps team in this project" (MCP server devops-multi-agent-team; I plan first and write only after you agree).',
           'Or one command from a shell (installs and connects the MCP server):',
           `  node ${$.plugin.root}/scripts/devops-setup.mjs init --dest .`,
@@ -327,21 +350,25 @@ export const register: Register = on => {
     next.called ? next(e) : { deny: `${PLUGIN}: its gate failed to evaluate, so ${e.command.slice(0, 60)} is refused.` },
   )
 
+  on('tool.run', { tool: `mcp__${PLUGIN}__${BRIEF_TOOL}` }, async ($, e) => {
+    const input = e as unknown as { topic?: unknown; role?: unknown }
+    return { result: await briefFor($, input) }
+  })
+
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
-    const languages = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'languages' } as const)).value ?? []
-    const hasProfile = await $.fs.exists(`${await $.session.root()}/.devops/project.md`).catch(() => false)
-    if (languages.length === 0 && !hasProfile) return composed
-
-    const text = [
-      'The devops-multi-agent-team skill is available in this project.',
-      languages.length > 0 ? `Detected languages: ${languages.join(', ')}.` : undefined,
-      hasProfile
-        ? 'Read .devops/project.md before planning: it lists the validation and security commands per language.'
-        : 'No .devops/project.md yet: /devops setup shows how to create it.',
-      'Only QA may give the OK to push; git push, gh pr create|merge and creating a git branch are refused until QA records "Publish gate: PASS" and the person runs /devops push-ok.',
-    ].filter(Boolean).join(' ')
-
+    const languages = await $.state.get(LANGUAGES_REF)
+    const gates = await $.state.get(GATES_REF)
+    const lint = await $.state.get(LINT_MODE_REF)
+    const standards = await $.state.get(STANDARDS_REF)
+    const root = await $.session.root()
+    const text = card({
+      languages: languages.value ?? [],
+      hasProfile: await $.fs.exists(`${root}/.devops/project.md`).catch(() => false),
+      gates: gates.value ?? true,
+      lintMode: lint.value ?? 'warn',
+      standards: standards.value || undefined,
+    })
     return { sections: [...composed.sections, { id: `${PLUGIN}:context`, text, scope: 'session' as const }] }
   })
 }

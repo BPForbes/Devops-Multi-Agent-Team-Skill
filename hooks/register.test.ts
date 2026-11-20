@@ -18,6 +18,7 @@ function engine(on: any, note: string | undefined) {
   on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: '/work' }))
   on('command.register', () => ({ value: { command: 'devops' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__devops-multi-agent-team__devops_brief' } }))
   on('ui.status', () => ({ value: undefined }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify([{ id: 'rust', name: 'Rust', layers: ['systems'], evidence: ['Cargo.toml'] }]), stderr: '' } }))
   on('fs.list', (_: unknown, e: { path?: string }) => ({

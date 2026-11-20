@@ -787,6 +787,7 @@ function makeThoughtDirs(dest, { opts, report }) {
 export function install(options) {
   const { dest: destInput, roots, target = 'auto', lang = 'auto', services = 'auto' } = options
   const { sandbox = true, skipRules = [], force = false, dryRun = false, shareConfig } = options
+  const { kit = true } = options
   const dest = resolveDest(destInput, roots)
   const report = {
     dest, created: [], replaced: [], skipped: [], same: [], warnings: [], commands: [],
@@ -802,10 +803,10 @@ export function install(options) {
   report.languages = selected.map(l => l.id)
   report.services = chosen.map(s => s.id)
   const hosts = hostFolders(dest, target)
-  if (!hosts) throw new Error(`--target must be auto, cursor, claude or both (got ${target})`)
+  if (!hosts) throw new Error(`--target must be auto, cursor, claude, both or none (got ${target})`)
   const io = { opts, report }
   copyToHosts(dest, hosts, { ...io, skipRules })
-  report.kit = kitSummary(installKit(dest, opts))
+  if (kit) report.kit = kitSummary(installKit(dest, opts))
   writeProjectData(dest, { config, selected, servicesConfig, services: chosen, sandbox }, io)
   makeThoughtDirs(dest, io)
   ensureGitignore(dest, { ...opts, shareConfig }, report)
@@ -818,7 +819,9 @@ export function hostFolders(dest, target) {
     const has = ['.cursor', '.claude'].filter(host => lexists(path.join(dest, host)))
     return has.length > 0 ? has : ['.cursor', '.claude']
   }
-  return { cursor: ['.cursor'], claude: ['.claude'], both: ['.cursor', '.claude'] }[target]
+  const both = ['.cursor', '.claude']
+  const choices = { cursor: ['.cursor'], claude: ['.claude'], both, none: [] }
+  return choices[target]
 }
 
 const SERVER_NAME = 'devops-multi-agent-team'
@@ -902,10 +905,19 @@ export function connectClients({ dest: destInput, clients = 'auto', npx = false,
 }
 
 /** One step: install the skill (host folders auto-detected) and connect the MCP server. */
+/**
+ * One step: install and connect. With `plugin` (the editor has this plugin installed) the plugin
+ * already supplies the skill, agents, commands and MCP server, so only the project's own files are
+ * written: .devops/, the thought folders and the local ignore block.
+ */
 export function initProject(options) {
+  if (options.plugin) {
+    const installed = install({ ...options, target: 'none', kit: false })
+    return { installed, connected: { skipped: ['the Claude Code plugin provides the MCP server'] } }
+  }
   const installed = install({ ...options, target: options.target ?? 'auto' })
-  const connected = connectClients({ dest: options.dest, clients: options.clients ?? 'auto', npx: options.npx, dryRun: options.dryRun })
-  return { installed, connected }
+  const { dest, clients = 'auto', npx, dryRun } = options
+  return { installed, connected: connectClients({ dest, clients, npx, dryRun }) }
 }
 
 export function status(destInput, roots) {
@@ -942,6 +954,7 @@ function parseArgs(argv) {
     else if (a === '--client') args.clients = own[++i]
     else if (a === '--npx') args.npx = true
     else if (a === '--share-config') args.shareConfig = true
+    else if (a === '--plugin') args.plugin = true
     else if (a === '--skip-rules') args.skipRules = own[++i].split(',').filter(Boolean)
     else if (a === '--no-sandbox') args.sandbox = false
     else if (a === '--force') args.force = true
@@ -974,6 +987,7 @@ options: --dest DIR (default: cwd)  --target auto|cursor|claude|both (default au
          --skip-rules name,name (do not install those rule files; use when the project already has an equivalent)
          --share-config (commit .devops/ so the team shares the profile and standards;
                          default: nothing the install writes is committed)
+         --plugin (Claude Code with the plugin installed: write only .devops/ and the ignore block)
          --no-sandbox  --force  --dry-run  --json
 `
 
