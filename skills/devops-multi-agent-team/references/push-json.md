@@ -12,8 +12,8 @@ alone.
 
 | File | Who | When |
 |------|-----|------|
-| `push-<seat-id>.json` | the Coder seat | Latest mock (`push-<seat-id>-<topic>.json` when the seat works several items). Overwrite in place. Either side may update it; `seat` names who last did. |
-| `push-<seat-id>-r<N>.json` | optional | Keep a round if bounce needs history. |
+| `push-agent-<hex>.json` | the Coder agent | Latest mock (`push-agent-<hex>-<topic>.json` when the seat works several items). Overwrite in place. Either side may update it; `seat` names who last did. Register an `item-…` hash + notes. |
+| `push-agent-<hex>-r<N>.json` | optional | Keep a round if bounce needs history. |
 
 ## First handoff (required)
 
@@ -31,8 +31,9 @@ Same ids in the thread `## Q&A` table and the JSON `qa` array.
 `status` is `open`, `answered`, or `withdrawn`. A Q&A-only bounce
 may set `"files": {}`. Do not invent a commit to record an answer.
 Each `qa` row: `id`, `from`, `to`, `ask`, `answer`, `status`;
-`from` and `to` are seat ids ([role-identity.md](role-identity.md),
-Seat ids), or a role when the addressee is not chosen yet.
+`from` and `to` are agent hashes
+([role-identity.md](role-identity.md), Identity hashes), or a job
+when the addressee is not chosen yet.
 
 ## Shape
 
@@ -42,10 +43,13 @@ Valid JSON. File paths are object keys. Hunks are
 `lines` is a single line or `start-end`. Index the side-branch
 tree vs `<integration-base>`, not `git show HEAD` alone.
 
-Top-level keys: `topic`, `round`, `seat` (id of the seat that
-wrote this version), `authors` (seat ids of everyone who wrote
-the change), `to` (seat id or role), `notifies` (seat ids or
-roles), `closes`, `qa`, `comments`, `docs`, `lint`, `formal`, `files`.
+Top-level keys: `topic`, `round`, `item` (shared item hash),
+`notes` (one line on what this Push JSON is for), `seat` (agent
+hash that wrote this version), `team` (that agent's team hash),
+`authors` (agent hashes of everyone who wrote the change), `teams`
+(team hashes of those authors), `to` (agent hash or job),
+`notifies` (agent hashes or jobs), `closes`, `qa`, `comments`,
+`docs`, `lint`, `formal`, `files`.
 
 `lint` records the lint gate ([lint-rules.md](lint-rules.md)):
 `{ "builtIn": { "verdict": "PASS", "blocking": 0 }, "tools": [{ "command": "ruff check .", "exit": 0 }] }`.
@@ -76,10 +80,13 @@ shared knowledge rather than a comment ([comment-standards.md](comment-standards
 documents; existing docs are updated instead. `[]` is the default.
 `comment_audit` with `docs` blocks a doc file the change touches that no row
 lists, and always blocks a new doc file without `new`. Example head:
-`"seat": "coder-0a0a0a", "authors": ["coder-0a0a0a"],
-"to": "reviewer-0b0b0b"`. Reviewers use `authors`, unioned with the Handoff `Authors:`
-line ([role-identity.md](role-identity.md), Seat ids), for the
-independence check. `seat` replaces the old `from`. Hunks index the side-branch
+`"seat": "agent-0a0a0a", "team": "team-1a2b3c",
+"authors": ["agent-0a0a0a"], "teams": ["team-1a2b3c"],
+"to": "agent-0b0b0b"`. Reviewers use `authors` / `teams`, unioned
+with the Handoff `Authors:` / `Teams:` lines
+([role-identity.md](role-identity.md), Identity hashes), for the
+independence check (own agent and own pod both refused). `seat`
+replaces the old `from`. Hunks index the side-branch
 working tree vs `<integration-base>` when there is no shared
 commit yet ([side-work.md](side-work.md)). Example hunk:
 `{ "op": "+", "lines": "12-20", "why": "…" }` then `"delta": "+9/-2"`.

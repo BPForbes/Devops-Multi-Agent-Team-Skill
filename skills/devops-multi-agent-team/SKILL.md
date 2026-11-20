@@ -74,30 +74,35 @@ Prefer **MCP** for live CI/quality/security/ticket data; prefer
 [references/agent-commands.md](references/agent-commands.md).
 
 Spawn `/create-subagent` (the host's subagent tool: Cursor `Task`,
-Claude Code `Agent`; prompts in `agents/`), naming the seat id in the
-spawn description. Frontmatter `is_background: true`; every spawn
+Claude Code `Agent`; prompts in `agents/`), naming the **agent hash**,
+**team hash**, **initial job** and **current job** in the spawn
+description. Frontmatter `is_background: true`; every spawn
 `run_in_background: true`.
 
 **Teams work in parallel and review across teams.** No one reviews,
-security-checks or QAs their own change, including after being
-reallocated ([department-pods.md](references/department-pods.md),
-Multiple teams).
+security-checks or QAs their own change **or their pod's change**,
+including after being reallocated
+([department-pods.md](references/department-pods.md), Multiple teams).
 
 **Team sizing and rotation.** One team per work item, 2 to 3 seats of
 each of Researcher, Coder, Reviewer, QA and Security (10 to 15 per
 team, a ceiling not a quota; cost and conflicts decide). A seat that
-finished its role may take another role on a *different* item, keeping
-its id; it never judges what it wrote, fixed or briefed (the
-Orchestrator judges "briefed" from the registry). If no independent
-seat is left it mints a new seat id (independence outranks the
-3-per-function ceiling) or asks the human, never reusing an author.
-Teams talk through the append-only `team-board.md` (informational, it
-never authorizes anything).
+finished its role may take another job on a *different* item, keeping
+its agent hash; it never judges what it wrote, fixed, briefed, or what
+its **pod** authored (the Orchestrator judges "briefed" from the
+registry). If no independent seat is left it mints a new agent on a
+new team hash (independence outranks the 3-per-function ceiling) or
+asks the human, never reusing an author or authoring pod. Teams talk
+through the append-only `team-board.md` (informational, it never
+authorizes anything). Allocate by comparing `initial_job` and free
+(`current_job: idle`) agents to who is already on a job.
 
-**Seats have hash ids.** Every subagent seat is told apart by a seat
-id, `<role>-<6 hex>` (for example `coder-0a0a0a`), minted by the
-Orchestrator at spawn, never a capital letter
-([role-identity.md](references/role-identity.md), Seat ids).
+**Hashes and jobs.** Each pod has a shared **team hash**
+(`team-<6 hex>`); each agent has a unique **agent hash**
+(`agent-<6 hex>`), an **initial job** and a **current job**. Shared
+artifacts get an **item hash** plus notes. Mint/check with
+`scripts/devops-ids.mjs`
+([role-identity.md](references/role-identity.md), Identity hashes).
 
 **Teams work dynamically.** Departments are named by function (from
 the profile), not by seat. A department's brief done → its Coder
@@ -263,7 +268,9 @@ ticket comment.
 
 ## Team roles
 
-Label every substantive reply with the active role, e.g. `[Planner]`; a spawned seat adds its id, e.g. `[Coder coder-0a0a0a]`.
+Label every substantive reply with the active job and agent hash,
+e.g. `[Planner]`; a spawned seat adds both, e.g.
+`[Coder agent-0a0a0a]`.
 
 - **Planner** — `/goal` when the human named X. Plans in
   `devops-skill/thoughts/non-final/`; durable docs in `docs/`.

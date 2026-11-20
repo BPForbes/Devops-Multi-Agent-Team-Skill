@@ -41,10 +41,10 @@ is not a push either. Quality-tool results are additive.
 4. PASS only when AC, tests, the SOC 2 verdict and the bug hunt hold. List thoughts for
    `final/`. Orchestrator cherry-picks the approved
    side-branch SHAs; a QA seat that is not an author of the integrated
-   tree re-approves it (authors: the union of the Handoff `Authors:` and the
-   Push JSON `authors` of every cherry-picked SHA, the Orchestrator's conflict
-   fixes included; refuse when your seat id or handle is in that set); the
-   Orchestrator pushes only after the human authorizes that push.
+   tree and not on an authoring team hash re-approves it (authors/teams:
+   the union of Handoff `Authors:` / `Teams:` and Push JSON `authors` /
+   `teams`; refuse when your agent hash, team hash or handle is in that
+   set); the Orchestrator pushes only after the human authorizes that push.
 
 ## Definition of done
 

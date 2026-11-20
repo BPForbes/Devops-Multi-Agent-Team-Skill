@@ -17,7 +17,7 @@ commands, plus:
 | Path | What |
 |------|------|
 | `skills/project-mindmap/` | Plain-chat skill: answer questions about the project from the mind map, no team needed. |
-| `skills/devops-multi-agent-team/` | The skill: `SKILL.md` and `references/` (seat ids, pods, side worktrees, Push JSON, QA policy, SOC 2 review, templates). Language-neutral. |
+| `skills/devops-multi-agent-team/` | The skill: `SKILL.md` and `references/` (team/agent/job/item hashes, pods, side worktrees, Push JSON, QA policy, SOC 2 review, templates). Language-neutral. |
 | `agents/` | Nine role prompts: researcher, reviewer, CI, quality (QA), security, ticket lead, verifier, integrator, communicator. |
 | `commands/` | `/goal`, `/create-subagent`, `/code-review`, `/repro`, `/triage`. |
 | `languages.json`, `LANGUAGES.md` | The language setup file (40 languages) and its guide. |
@@ -26,6 +26,7 @@ commands, plus:
 | `mcp/server.mjs` | The MCP server for installing and managing through chat. |
 | `templates/project.md` | Skeleton of the per-project profile (`.devops/project.md`). |
 | `scripts/devops-setup.mjs` | `list`, `detect`, `profile`, `install`, `status`, `check`, `sandbox`. No dependencies, Node 18+. |
+| `scripts/devops-ids.mjs` | Mint and check `team-` / `agent-` / `item-` hashes; independence and free-agent allocation helpers. |
 | `mindmap-text.json` | Every sentence, label and word list the mind map uses; a project overrides keys in `.devops/mindmap/text.json`. |
 | `scripts/devops-mindmap.mjs` | The repository mind map: `overview`, `tree`, `note`, `build [--save]`, `status`, `query`. Writes only `.devops/mindmap/`, and only with `--save`. |
 | `hooks/`, `types/`, `.claude-plugin/` | The Claude mod and plugin manifest. |

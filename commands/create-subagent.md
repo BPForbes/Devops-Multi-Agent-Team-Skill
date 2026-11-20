@@ -19,9 +19,11 @@ Spawn specialized roles. They run **asynchronously in pods**, not a linear queue
    that review does not authorize a push. DO NOT PUSH, PUBLISH, OPEN OR UPDATE A PULL REQUEST,
    MERGE, OR OTHERWISE SUBMIT CODE UNTIL QA MARKS THE PUBLISH GATE PASS.
 5. Subagents accept any `/` command or the same words (`/goal`, `/code-review`, `/repro`, `/buildkite-*`, `/sonar-*`, and so on).
-6. Give every spawned seat a seat id (`<role>-<6 hex>`, minted by the
-   Orchestrator, see `role-identity.md` Seat ids) and put it in the
-   spawn description. Resume standing seats; do not mint a new id.
+6. Give every spawned seat a **team hash**, **agent hash**, **initial
+   job** and **current job** (minted by the Orchestrator, see
+   `role-identity.md` Identity hashes; `node scripts/devops-ids.mjs
+   mint team|agent`) and put all four in the spawn description.
+   Resume standing seats; do not mint a new agent hash for them.
 7. Working Markdown goes in `devops-skill/thoughts/non-final/` while open.
    Agent files set `is_background: true`. Always spawn with
    `run_in_background: true`.

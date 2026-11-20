@@ -18,17 +18,21 @@ alone. Check with `git check-ignore -v <path>`. Never `git add` anything under
 `devops-skill/thoughts/`. Push JSON lives in `non-final/`
 ([push-json.md](push-json.md)).
 
-**non-final:** a seat's files are named `<kind>-<seat-id>.md`
-(`.json` for Push JSON), with its own id from
-[role-identity.md](role-identity.md) (Seat ids): `handoff-`,
+**non-final:** an agent's files are named `<kind>-agent-<hex>.md`
+(`.json` for Push JSON), with its agent hash from
+[role-identity.md](role-identity.md) (Identity hashes): `handoff-`,
 `review-` (the thread, named for the Reviewer who opens it),
 `security-`, `qa-`, `triage-` (named for the QA seat that opens it;
-add `-<n>` for a second), `goal-`, `research-`, `push-` (add `-<topic>` to any of them when a seat works
-several items). Also
-`formal-<seat-id>/` (a folder: the Lean files and write-ups, [formal-check.md](formal-check.md); `.lake/` stays out), `repro-<topic>.md`, `side-<dept>.md`, `cr-<topic>.md`, and the
-Orchestrator's fixed-name `seat-registry.md`, `feedback-ledger.md`
-and `team-board.md` (append-only: seat | item | worktree | files and
-build-file sections touched | status)
+add `-<n>` for a second), `goal-`, `research-`, `push-` (add
+`-<topic>` when a seat works several items). Each shared file also
+carries an `Item: item-<hex>` header and a notes line, recorded in
+`item-registry.md`. Also `formal-agent-<hex>/` (Lean files and
+write-ups, [formal-check.md](formal-check.md); `.lake/` stays out),
+`repro-<topic>.md`, `side-<dept>.md`, `cr-<topic>.md`, and the
+Orchestrator's fixed-name `seat-registry.md`, `item-registry.md`,
+`feedback-ledger.md` and `team-board.md` (append-only:
+agent | team | item | worktree | files and build-file sections
+touched | status)
 ([triage-template.md](triage-template.md),
 [side-work.md](side-work.md)). **final** after QA PASS: move
 matching files locally; do not `git add`.

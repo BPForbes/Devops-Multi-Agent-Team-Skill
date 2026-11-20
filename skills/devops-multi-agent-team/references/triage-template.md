@@ -1,9 +1,9 @@
 # QA triage item
 
-Copy to `devops-skill/thoughts/non-final/triage-<seat-id>.md`. Same
-Handoff + **Q&A** as the review thread. Copy ids into Push JSON
-`qa`. `"files"` may be `{}`. Do not `git add`. After QA PASS,
-move to `final/`.
+Copy to `devops-skill/thoughts/non-final/triage-agent-<hex>.md`. Same
+Handoff + **Q&A** as the review thread. Copy agent hashes into Push
+JSON `qa`. Register an `item-…` hash + notes. `"files"` may be `{}`.
+Do not `git add`. After QA PASS, move to `final/`.
 
 When QA is **blocked**, **sends back**, or is **not pleased**, QA
 opens this file. The department's Researcher **joins the Coder
@@ -12,13 +12,14 @@ who picks the item up** and stays until Reviewers take the rewrite
 research-then-coder queue.
 
 ```markdown
-# Triage: <qa-seat-id>[-<n>]
+# Triage: agent-<hex>[-<n>]
 
+**Item:** item-<6 hex> · **Notes:** <one line>
 **State:** active | closed
-**Opened by:** <qa-seat-id>
+**Opened by:** agent-<hex> (job qa)
 **Discovered during:** <command, `/repro`, VM, SOC 2 review, CI>
 **Branch:** <current checkout>
-**Review thread:** `devops-skill/thoughts/non-final/review-<seat-id>.md`
+**Review thread:** `devops-skill/thoughts/non-final/review-agent-<hex>.md`
 
 ## What went wrong / Expected / Actual
 - …
@@ -27,7 +28,7 @@ research-then-coder queue.
 - VM / host; commands; exit code
 
 ## Active loop
-- [ ] Researcher (<researcher-id>) joins Coder (<coder-id>) who picked this up (paired, not serial)
+- [ ] Researcher (agent-<hex>) joins Coder (agent-<hex>) who picked this up (paired, not serial)
 - [ ] Coder rewrite + Push JSON
 - [ ] Reviewers compared JSON to the side-branch vs `<integration-base>`
 - [ ] Security (after Satisfied)
