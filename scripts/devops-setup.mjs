@@ -956,7 +956,9 @@ export function connectClients({ dest: destInput, clients = 'auto', npx = false,
   const hosts = hostFolders(dest, 'auto').map(h => (h === '.cursor' ? 'cursor' : 'claude'))
   const wanted = clients === 'auto' ? hosts : clients.split(',').map(c => c.trim()).filter(Boolean)
   const unknown = wanted.filter(c => !MCP_FILES[c])
-  if (unknown.length > 0) throw new Error(`unknown client(s): ${unknown.join(', ')} (claude, cursor, vscode)`)
+  if (unknown.length > 0) {
+    throw new Error(`unknown client(s): ${unknown.join(', ')} (claude, cursor, vscode)`)
+  }
   const report = { dest, written: [], kept: [], skipped: [], commands: [], warnings: [], same: [] }
   const opts = { dryRun, root: dest }
   if (!npx) report.kit = kitSummary(installKit(dest, opts))
