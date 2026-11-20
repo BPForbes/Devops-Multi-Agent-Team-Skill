@@ -5,9 +5,12 @@ description: Clean up code from a plain-English statement - reduce comments, rep
 
 # /cleanup `<what to clean and how, in plain English>`
 
-Also: `clean up`, `tidy`, `reduce comments`, `remove duplicate code`, `split big functions`.
+Also: `/devops clean [--mode brief|scan|plan|run]`, `clean up`, `tidy`,
+`reduce comments`, `remove duplicate code`, `split big functions`.
 
 The method: `../skills/devops-cleanup/SKILL.md` and `../skills/devops-cleanup/references/cleanup-rules.md`.
+Prefer `/devops clean` so the orchestration card names `cleanup_brief` /
+`cleanup_scan` instead of re-stating the request as plain text.
 
 1. Turn the statement into a brief: `cleanup_brief` (goals, scope, thresholds, constraints, anything not understood).
    Show it and ask about the unclear parts.

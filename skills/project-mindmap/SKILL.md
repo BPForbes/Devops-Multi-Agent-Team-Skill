@@ -9,7 +9,7 @@ description: >-
   "explain the structure", "where is X defined", "who uses X", "what does this
   module do", "which libraries do we use", "how does X work", "map this
   project", "refresh the map", "note how X works", onboarding and orientation
-  questions. No command is needed: the person asks in plain words.
+  questions. Also /devops question and /devops mind-map (with --mode).
 ---
 
 # Project mind map (plain chat)
@@ -20,8 +20,10 @@ functions with line ranges, call links, libraries and possible duplicates
 In plain chat it replaces reading the tree: no team, no roles, no thought files,
 no gates. You answer the person directly.
 
-The person never needs a command. Read what they ask in plain words and pick
-the step:
+Plain words still work. Prefer `/devops question --mode …` or
+`/devops mind-map --mode …` when a slash command is handy: those return an
+orchestration card that names `mindmap_*` tools so answers come from the map,
+not a prose dump of the tree. Read what they ask and pick the step:
 
 | They say something like | Do |
 |-------------------------|----|

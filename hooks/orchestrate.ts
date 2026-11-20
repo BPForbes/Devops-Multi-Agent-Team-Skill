@@ -119,7 +119,8 @@ export function card(state: CardState): string {
     : 'This project is not set up yet; the person can run /devops setup claude.'
   const gate = state.gates
     ? 'Push gate on: human must authorize (chat "push" = /devops push-ok). Human wording is'
-      + ' final; /devops is free-form — parse and do it, do not stop development. New branch:'
+      + ' final. Prefer /devops skill modes (question, mind-map, clean, goal, …) with --mode so'
+      + ' MCP tools run instead of plain-text dumps; do not stop development. New branch:'
       + ' /devops allow-branch NAME.'
     : 'Push gate is off.'
   return [

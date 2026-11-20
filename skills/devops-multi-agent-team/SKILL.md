@@ -132,8 +132,15 @@ not authorize a push either.
 
 - **Parse freely.** `/devops` with any wording is a human directive:
   parse the intent with no restricted vocabulary and do it. Known
-  forms (`status`, `push-ok`, `allow-branch`, …) and free-form chat
-  ("push", "go", "cut a branch X") are the same class of order.
+  forms (`status`, `push-ok`, `allow-branch`, …), **skill modes**
+  (`question`, `mind-map`, `clean`, `goal`, … with `--mode`), and
+  free-form chat ("push", "how does X work", "clean up src") are the
+  same class of order.
+- **Use the system, not a prose dump.** Skill modes return an
+  orchestration card that names MCP tools (`mindmap_*`, `cleanup_*`,
+  `story_*`, …) and how seats should behave. Prefer those tools over
+  pasting large file bodies into chat.
+  [agent-commands.md](references/agent-commands.md).
 - **Do not stop development.** A `/devops` command or chat alias never
   pauses or cancels the current goal loop; apply it and keep working.
 - **Chat equals slash.** Saying `push` in chat is the same as

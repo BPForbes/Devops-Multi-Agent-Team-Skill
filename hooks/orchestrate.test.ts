@@ -57,7 +57,7 @@ test('the card is short and names the tool, the gate, the profile and the standa
     'code ≤ 100 columns', 'functions ≤ 30 lines', 'Lint on git commit: warn']) {
     expect(text).toContain(part)
   }
-  expect(text.length).toBeLessThan(1200)
+  expect(text.length).toBeLessThan(1400)
   const fresh = card({ languages: [], hasProfile: false, gates: true, lintMode: 'warn' })
   expect(fresh).toContain('/devops setup claude')
 })
@@ -126,4 +126,28 @@ test('/devops brief and gates run from any origin; push aliases work', async ($,
   const push = await run('push')
   expect(push.text).toContain('One push is allowed')
   expect(state.get('pushAuthorized')).toBe(true)
+})
+
+test('/devops skill modes return orchestration cards with tools', async ($, on) => {
+  engine(on)
+  on('process.run', (_: unknown, e: { command: string[] }) => {
+    const joined = e.command.join(' ')
+    if (joined.includes('devops-mindmap.mjs')) {
+      return { value: { exitCode: 0, stdout: 'overview ok', stderr: '' } }
+    }
+    return { value: { exitCode: 0, stdout: '[]', stderr: '' } }
+  })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const run = (args: string) => $.command.run({
+    command: 'devops', args, origin: { kind: 'peer' } as never,
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  const ask = await run('question --mode symbol total')
+  expect(ask.text).toContain('## /devops question')
+  expect(ask.text).toContain('mindmap_query')
+  expect(ask.text).toContain('overview ok')
+  const clean = await run('clean --mode plan split helpers in src')
+  expect(clean.text).toContain('## /devops clean')
+  expect(clean.text).toContain('cleanup_brief')
+  expect(clean.text).toContain('mode: plan')
 })

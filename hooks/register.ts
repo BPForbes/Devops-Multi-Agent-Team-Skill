@@ -5,6 +5,10 @@ import {
   branchNameOf, classify, classifySegments, commitInfo, interpretDevopsIntent, shellWords,
   splitArgs, verdictOf,
 } from './guard'
+import {
+  interpretSkillIntent, isGateWord, isSkillWord, orchestrationCard, parseSkillMode,
+  scriptArgsFor, scriptNameFor, skillWords, type SkillMode,
+} from './modes'
 import { BRIEF_SPEC, BRIEF_TOOL, briefFor, card, readStandards, setupClaude } from './orchestrate'
 
 const PLUGIN = 'devops-multi-agent-team'
@@ -53,8 +57,16 @@ const HELP = [
   '/devops config [show|get PATH] read the project standards (line length, limits, lint rules)',
   '/devops config set|unset|add|remove PATH [VALUE] | rule RULE error|off   change ' +
     '.devops/standards.json; checked before it is written',
-  'Any other /devops wording is free-form: the agent parses the human\'s intent with no',
-  'restricted vocabulary, does it, and does not stop the current development loop.',
+  '/devops question [--mode overview|tree|symbol|search|…] QUERY',
+  '                     answer from mindmap_* (project-mindmap); no team',
+  '/devops mind-map [--mode overview|build|status|tree|query|note] …',
+  '                     repository mind map via mindmap_* / devops-mindmap.mjs',
+  '/devops clean [--mode brief|scan|plan|run] STATEMENT',
+  '                     cleanup_brief / cleanup_scan + devops-cleanup skill',
+  '/devops goal|story|repro|triage|review|reuse|tags [--mode …] …',
+  '                     skill modes: structured tools + orchestration card',
+  'Chat aliases and free-form phrases map onto these modes. Do not dump the',
+  'request as plain text — use the named tools. Keep development running.',
 ].join('\n')
 
 async function mindmapText($: EngineInterface, root: string): Promise<Record<string, string>> {
@@ -193,13 +205,43 @@ function auditContext(audit: AuditSummary): string {
   return `${PLUGIN} lint: ${counts}. ${advice} ${first}`
 }
 
+function resolveSkill(word: string, rest: string, raw: string): SkillMode | undefined {
+  if (isSkillWord(word)) return parseSkillMode(word, rest)
+  if (isGateWord(word) || interpretDevopsIntent(raw) !== undefined) return undefined
+  return interpretSkillIntent(raw)
+}
+
+async function runPluginScript(
+  $: EngineInterface,
+  script: string,
+  args: string[],
+): Promise<string | undefined> {
+  const root = await $.session.root()
+  const command = ['node', `${$.plugin.root}/scripts/${script}`, ...args, '--dest', root]
+  const ran = await $.process
+    .run(command, { timeoutMs: SCRIPT_TIMEOUT_MS })
+    .catch(() => undefined)
+  if (ran === undefined) return undefined
+  const out = `${ran.stdout}${ran.stderr}`.trim()
+  return out === '' ? undefined : out
+}
+
+async function runSkillMode($: EngineInterface, skill: SkillMode): Promise<string> {
+  const cardText = orchestrationCard(skill)
+  const script = scriptNameFor(skill)
+  const args = scriptArgsFor(skill)
+  if (script === undefined || args === undefined) return cardText
+  const out = await runPluginScript($, script, args)
+  if (out === undefined) return cardText
+  return `${cardText}\n\n--- tool output ---\n${out}`
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'devops',
-      description: 'DevOps multi-agent team: languages, gates, QA verdict',
-      argumentHint: '[languages|setup [claude]|brief [TOPIC|role NAME]|push-ok|push-reset|' +
-        'allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off|config ...]',
+      description: 'DevOps multi-agent team: gates, skill modes (question, mind-map, clean, …)',
+      argumentHint: '[status|question|mind-map|clean|goal|story|…|--mode MODE|push-ok|config …]',
     })
     await $.tool.register(BRIEF_SPEC).catch(() => undefined)
     await currentStandards($, await $.session.root())
@@ -212,12 +254,15 @@ export const register: Register = on => {
 
   on('command.run', { command: 'devops' }, async ($, e) => {
     const split = splitArgs(e.args)
-    const mapped = ['', 'status', 'languages', 'setup', 'brief', 'push-ok', 'push-reset',
-      'allow-branch', 'comments', 'config', 'monitor', 'gates'].includes(split.word)
+    const skill = resolveSkill(split.word, split.rest, e.args)
+    if (skill !== undefined) return { text: await runSkillMode($, skill) }
+
+    const mapped = isGateWord(split.word)
       ? split
       : (interpretDevopsIntent(e.args) ?? split)
     const { word, rest } = mapped
 
+    if (word === 'help') return { text: HELP }
     if (word === '' || word === 'status') {
       const gates = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true
       const authorized = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const)).value ?? false
@@ -310,13 +355,16 @@ export const register: Register = on => {
       await $.state.set({ plugin: 'devops-multi-agent-team', key: 'gates' } as const, rest === 'on')
       return { text: `Gates ${rest}.` }
     }
+    const fallback = interpretSkillIntent(e.args)
+    if (fallback !== undefined) return { text: await runSkillMode($, fallback) }
     return {
       text: [
-        `Free-form /devops directive: ${e.args.trim() || '(empty)'}`,
-        'Parse the human\'s intent with no restrictions, do what they asked,',
-        'and do not stop development.',
-        'Chat aliases match slash forms (e.g. saying "push" = /devops push-ok).',
-        'Human wording is final.',
+        'Unrecognized /devops wording. Prefer a skill mode so tools run instead of plain text:',
+        `  ${skillWords().join(', ')}`,
+        'Example: /devops question --mode symbol total',
+        '          /devops mind-map --mode build',
+        '          /devops clean --mode brief "split functions over 40 lines in src"',
+        'Human wording is still final: parse the intent, map it to a mode, and keep working.',
         HELP,
       ].join('\n'),
     }

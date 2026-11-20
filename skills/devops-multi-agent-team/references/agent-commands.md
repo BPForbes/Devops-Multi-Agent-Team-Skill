@@ -11,14 +11,39 @@ templates do not override this. Spawn with **team hash**, **agent
 hash**, **initial job** and **current job**
 ([role-identity.md](role-identity.md)).
 
-**`/devops` is free-form.** Parse what the human wants with no
-restricted vocabulary; chat aliases match slash forms (saying `push`
-= `/devops push-ok`). Do not stop development when `/devops` is given.
-Anything the human says is final and must be done. Default publish
-path still prefers QA PASS, but a human push authorization overrides
-and must be executed (except review-bot feedback fixes outside the
-exceptions: references/qa-publish-policy.md). After PASS: one
-compressed push that keeps approved Coder commits.
+**`/devops` is free-form**, but prefer **skill modes** so the agent
+uses MCP tools and skills instead of dumping the request as plain
+text. Chat aliases match slash forms (saying `push` = `/devops
+push-ok`). Do not stop development when `/devops` is given. Anything
+the human says is final and must be done. Default publish path still
+prefers QA PASS, but a human push authorization overrides and must be
+executed (except review-bot feedback fixes outside the exceptions:
+references/qa-publish-policy.md). After PASS: one compressed push that
+keeps approved Coder commits.
+
+## `/devops` skill modes
+
+Each mode returns an **orchestration card** (skill, tools, behavior,
+`--mode`) and, when it can, runs the matching script so results are
+not retyped into chat.
+
+| Command | Modes (`--mode`) | Tools / skill |
+|---------|------------------|---------------|
+| `/devops question` (`ask`, `q`) | `overview`, `tree`, `symbol`, `search`, `file`, `module`, `library` | `mindmap_*`, `project-mindmap` |
+| `/devops mind-map` (`map`) | `overview`, `build`, `status`, `tree`, `query`, `note` | `mindmap_*` |
+| `/devops clean` (`cleanup`, `tidy`) | `brief`, `scan`, `plan`, `run` | `cleanup_*`, `devops-cleanup` |
+| `/devops goal` | `loop`, `status` | team loop + `/goal` |
+| `/devops story` | `research`, `create`, `check`, `graph` | `story_*` |
+| `/devops repro` | `run` | `/repro` |
+| `/devops triage` | `open` | `/triage` |
+| `/devops review` | `inspect` | `/code-review` |
+| `/devops reuse` | `search` | `reuse_search`, `module_map` |
+| `/devops tags` | `history`, `plan`, `create` | `tag_*` |
+
+Gate commands stay as they were (`status`, `push-ok`, `allow-branch`,
+`gates`, `monitor`, `comments`, `config`, `setup`, `brief`,
+`languages`). Free-form phrases such as "how does X work" or "clean
+up src" map onto the matching skill mode.
 
 ## `/goal`
 
