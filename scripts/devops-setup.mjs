@@ -741,6 +741,7 @@ export function ensureGitignore(root, opts, report) {
   const current = lexists(where.file) ? fs.readFileSync(where.file, 'utf8') : ''
   const shareConfig = opts.shareConfig ?? modeOf(current, where.prefix)
     ?? (where.local ? modeOf(oldGitignore(root), '', { any: true }) : undefined) ?? false
+  report.shareConfig = shareConfig
   const owned = ownedPaths(root, { shareConfig })
   const block = managedBlock(owned, { prefix: where.prefix, shareConfig })
   const base = withoutBlock(current, where.prefix)

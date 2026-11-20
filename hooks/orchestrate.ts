@@ -27,6 +27,7 @@ export const BRIEF_SPEC = {
     type: 'object',
     properties: {
       topic: { type: 'string', description: 'Words naming the section you need.' },
+      part: { type: 'number', description: 'Which part of a long section (1 for the first).' },
       role: { type: 'string', description: 'A seat: reviewer, coder, researcher, cleaner, ...' },
     },
     additionalProperties: false,
@@ -62,11 +63,12 @@ const text = (value: unknown): string => (typeof value === 'string' ? value.trim
 /** The answer to devops_brief: a role's brief, one section, or the index. */
 export async function briefFor(
   $: EngineInterface,
-  input: { topic?: unknown; role?: unknown },
+  input: { topic?: unknown; role?: unknown; part?: unknown },
 ): Promise<string> {
   const docs = await skillDocs($)
   if (text(input.role) !== '') return roleBrief(docs, text(input.role))
-  if (text(input.topic) !== '') return findSection(docs, text(input.topic))
+  const part = typeof input.part === 'number' ? input.part : 1
+  if (text(input.topic) !== '') return findSection(docs, text(input.topic), part)
   return indexOf(docs)
 }
 
@@ -138,12 +140,13 @@ type SetupReport = {
     warnings: string[]
     commands: string[]
     dryRun: boolean
+    shareConfig: boolean
   }
 }
 
-function describeSetup(report: SetupReport, sharing: 'shared' | 'local'): string {
-  const { created, languages, warnings, commands, dryRun } = report.installed
-  const kept = sharing === 'shared'
+function describeSetup(report: SetupReport): string {
+  const { created, languages, warnings, commands, dryRun, shareConfig } = report.installed
+  const kept = shareConfig
     ? 'devops-skill/ is in .git/info/exclude; .devops/ is shared, so commit it.'
     : 'Nothing is committed: both are in .git/info/exclude.'
   return [
@@ -168,8 +171,7 @@ export async function setupClaude($: EngineInterface, flags: string[]): Promise<
   const ran = await $.process.run(command, { timeoutMs: TIMEOUT }).catch(() => undefined)
   if (ran === undefined) return 'The setup script could not run.'
   try {
-    const sharing = wanted.includes('--share-config') ? 'shared' : 'local'
-    return describeSetup(JSON.parse(ran.stdout) as SetupReport, sharing)
+    return describeSetup(JSON.parse(ran.stdout) as SetupReport)
   } catch {
     return `${ran.stdout}${ran.stderr}`.trim() || 'The setup script printed nothing.'
   }

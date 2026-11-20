@@ -29,7 +29,14 @@ test('a topic returns the one best section and names the next ones', () => {
   expect(answer).not.toContain('Coders and reviewers')
   expect(findSection(docs, 'zzz nothing')).toContain('Nothing in the skill matches')
   const long = [{ file: 'big.md', text: `## Huge\n\n${'word '.repeat(MAX_SECTION_CHARS)}` }]
-  expect(findSection(long, 'huge')).toContain('[cut at 6000 characters: read the rest of')
+  const first = findSection(long, 'huge')
+  const count = Number(/\(part 1 of (\d+)\)/.exec(first)?.[1])
+  expect(count).toBeGreaterThan(1)
+  expect(first).toContain(`call devops_brief with topic "huge" and part 2 for the rest`)
+  const last = findSection(long, 'huge', count)
+  expect(last).toContain(`(part ${count} of ${count})`)
+  expect(last).not.toContain('call devops_brief')
+  expect(findSection(long, 'huge', 999)).toContain(`(part ${count} of ${count})`)
 })
 
 test('a role returns that seat\'s brief, and an unknown one lists the roles', () => {

@@ -66,8 +66,11 @@ function score(section: Section, query: string[]): number {
 
 const title = (s: Section): string => `${s.file} › ${s.heading}`
 
-/** The section that best matches `topic`, cut to MAX_SECTION_CHARS, with the next best named after it. */
-export function findSection(docs: Doc[], topic: string): string {
+/**
+ * The section that best matches `topic`, read in parts of at most MAX_SECTION_CHARS. `part` (1-based)
+ * picks the part; when more parts follow, the notice names the call that returns the next one.
+ */
+export function findSection(docs: Doc[], topic: string, part = 1): string {
   const query = words(topic)
   if (query.length === 0) return indexOf(docs)
   const ranked = docs.flatMap(sectionsOf)
@@ -76,14 +79,32 @@ export function findSection(docs: Doc[], topic: string): string {
     .sort((a, b) => b.points - a.points)
   const best = ranked[0]?.section
   if (!best) return `Nothing in the skill matches "${topic}".\n\n${indexOf(docs)}`
-  const cut = best.body.length > MAX_SECTION_CHARS
-  const rest = `read the rest of "${best.heading}" in ${best.file}`
-  const note = `[cut at ${MAX_SECTION_CHARS} characters: ${rest}]`
-  const shortened = `${best.body.slice(0, MAX_SECTION_CHARS)}\n${note}`
-  const body = cut ? shortened : best.body
+  const parts = partsOf(best.body)
+  const wanted = Math.min(Math.max(1, Math.floor(part) || 1), parts.length)
+  const nextCall = `call devops_brief with topic "${topic}" and part ${wanted + 1} for the rest`
+  const next = wanted < parts.length ? [`[part ${wanted} of ${parts.length}: ${nextCall}]`] : []
+  const numbered = parts.length > 1 ? ` (part ${wanted} of ${parts.length})` : ''
   const more = ranked.slice(1, 1 + SEE_ALSO).map(r => `- ${title(r.section)}`)
   const also = more.length > 0 ? ['', 'Also matching:', ...more] : []
-  return [`From ${title(best)}:`, '', body.trim(), ...also].join('\n')
+  const body = parts[wanted - 1].trim()
+  return [`From ${title(best)}${numbered}:`, '', body, ...next, ...also].join('\n')
+}
+
+/**
+ * The body cut into parts of at most MAX_SECTION_CHARS. A cut goes at the last line break in the
+ * second half of the window, so a part keeps whole lines; otherwise it goes at the limit.
+ */
+function partsOf(body: string): string[] {
+  const parts: string[] = []
+  let rest = body
+  while (rest.length > MAX_SECTION_CHARS) {
+    const line = rest.lastIndexOf('\n', MAX_SECTION_CHARS)
+    const cut = line >= MAX_SECTION_CHARS / 2 ? line : MAX_SECTION_CHARS
+    parts.push(rest.slice(0, cut))
+    rest = rest.slice(cut).replace(/^\n/, '')
+  }
+  parts.push(rest)
+  return parts
 }
 
 /** The seat file for a role (`coder`, `cleaner`, ...): what that seat does, read once. */

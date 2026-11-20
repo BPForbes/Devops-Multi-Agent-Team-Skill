@@ -330,3 +330,12 @@ test('a root install leaves an older unnamed block that belongs to a subproject'
   assert.ok(ignored(repo, 'api/devops-skill/kit/x.mjs'), 'the /api block is kept')
   assert.ok(ignored(repo, 'devops-skill/kit/x.mjs'))
 })
+
+test('the install report states the sharing mode applied, also when it is remembered', () => {
+  const dir = gitProject({ 'a.py': '' })
+  assert.equal(install({ dest: dir, target: 'claude', shareConfig: true }).shareConfig, true)
+  const remembered = install({ dest: dir, target: 'claude' })
+  assert.equal(remembered.shareConfig, true, 'the shared mode is remembered')
+  const local = gitProject({ 'b.py': '' })
+  assert.equal(install({ dest: local, target: 'claude' }).shareConfig, false)
+})
