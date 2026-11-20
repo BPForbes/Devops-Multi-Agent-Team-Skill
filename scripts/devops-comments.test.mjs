@@ -327,3 +327,14 @@ test('a /* inside a string or after a line comment does not open a block', () =>
   const text = 'func f(out *int) {\n\tprintln("/*")\n\t// see /* here\n\t* out++\n}\n'
   assert.equal(blockInterior(text, syntax).has(4), false)
 })
+
+test('a line comment inside a block comment does not hide its closer', () => {
+  const root = path.join(path.dirname(new URL(import.meta.url).pathname), '..')
+  const syntax = syntaxTable(root)('x.go')
+  const text = 'func f(out *int) {\n\t/* see // for the protocol */\n\t*out++\n}\n'
+  assert.equal(blockInterior(text, syntax).has(3), false)
+  const long = `\t*out++ // ${'word '.repeat(20)}`
+  const head = 'package e\n\nfunc f(out *int) {\n\t/* see // for the protocol */\n'
+  const dir = repo({ 'e.go': `${head}${long}\n}\n` })
+  assert.ok(rules(commentAudit(dir, { staged: true })).includes('long-code-line'))
+})

@@ -511,33 +511,49 @@ const interiorFor = (file, syntax, readFile) => (readFile
 
 /**
  * The 1-based lines of `text` inside a block comment: the lines after an opener, through its closer.
- * The opener's own line is not included.
+ * The opener's own line is not included. Markers are read left to right, so a `//` inside a block
+ * comment does not hide its closer, and a `/*` inside a string or after `//` does not open one.
  */
 export function blockInterior(text, syntax) {
   const inside = new Set()
   let close = null
   text.split('\n').forEach((line, index) => {
-    if (close !== null) {
-      inside.add(index + 1)
-      if (line.includes(close)) close = null
-      return
+    if (close !== null) inside.add(index + 1)
+    let at = 0
+    while (at < line.length) {
+      if (close !== null) {
+        const found = line.indexOf(close, at)
+        if (found === -1) break
+        at = found + close.length
+        close = null
+        continue
+      }
+      const token = nextToken(line.slice(at), syntax)
+      if (token === null || token.kind === 'line') break
+      at += token.index + token.len
+      if (token.kind === 'open') close = token.end
     }
-    const code = codeOnly(line, syntax)
-    const opening = syntax.block.find(([open]) => code.includes(open))
-    if (!opening) return
-    const [open, end] = opening
-    if (!code.slice(code.indexOf(open) + open.length).includes(end)) close = end
   })
   return inside
 }
 
-const STRING_LITERAL = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`/g
+const STRING_START = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`/
 
-/** A line without its string literals and without anything after a line-comment marker. */
-function codeOnly(line, syntax) {
-  const bare = line.replace(STRING_LITERAL, '""')
-  const ends = syntax.line.map(marker => bare.indexOf(marker)).filter(at => at !== -1)
-  return ends.length > 0 ? bare.slice(0, Math.min(...ends)) : bare
+/** The first marker in `rest`: a string, a line-comment marker, or a block opener. */
+function nextToken(rest, syntax) {
+  let best = null
+  const consider = (index, token) => {
+    if (index !== -1 && (best === null || index < best.index)) best = { ...token, index }
+  }
+  const string = rest.match(STRING_START)
+  if (string) consider(string.index, { kind: 'string', len: string[0].length })
+  for (const marker of syntax.line) {
+    consider(rest.indexOf(marker), { kind: 'line', len: marker.length })
+  }
+  for (const [open, end] of syntax.block) {
+    consider(rest.indexOf(open), { kind: 'open', len: open.length, end })
+  }
+  return best
 }
 
 /**
