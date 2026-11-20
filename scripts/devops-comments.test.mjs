@@ -297,10 +297,15 @@ test('a staged audit reads the staged file, not an unstaged edit', () => {
   assert.ok(rules(commentAudit(dir, { staged: true })).some(r => /safety/i.test(r)))
 })
 
-test('a Go `*` statement is code; a long line inside a block comment is not', () => {
-  const statement = `\t* out++ + ${'value + '.repeat(12)}1`
-  const code = repo({ 'a.go': `package a\n\nfunc f(out *int, value int) {\n${statement}\n}\n` })
+test('a valid Go `*out++` is code, also after a /* inside a line comment', () => {
+  const statement = `\t*out++ // ${'word '.repeat(20)}`
+  const head = 'package a\n\nfunc f(out *int) {\n\t// the token /* is not an opener\n'
+  const text = `${head}${statement}\n}\n`
+  const code = repo({ 'a.go': text })
   assert.ok(rules(commentAudit(code, { staged: true })).includes('long-code-line'))
+})
+
+test('a long line inside a block comment is not code', () => {
   const prose = ` * ${'word '.repeat(30)}`
   const block = repo({ 'b.go': `package b\n\n/*\n${prose}\n*/\nfunc g() {}\n` })
   assert.ok(!rules(commentAudit(block, { staged: true })).includes('long-code-line'))
