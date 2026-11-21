@@ -51,6 +51,26 @@ hash that wrote this version), `team` (that agent's team hash),
 `notifies` (agent hashes or jobs), `closes`, `qa`, `comments`,
 `docs`, `lint`, `formal`, `files`.
 
+Every virtual push header carries these six facts, so a reviewer
+can tell who wrote it, for which pod and goal, what it does and how big
+it is, without reading the hunks:
+
+| Key | Type | Meaning |
+|-----|------|---------|
+| `seat` | agent hash | the subagent that made this push |
+| `team` | team hash | that subagent's pod |
+| `goal` | goal hash | the goal this push works on ([goal-hashes.md](goal-hashes.md)); `goals` lists several when one commit serves more |
+| `changes` | one line | what the change does, in plain words |
+| `directories` | object | each top-level directory touched, with its `{ "files", "added", "removed" }` counts |
+| `lines` | object | totals `{ "files", "added", "removed" }` over all `files` |
+
+`directories` and `lines` are derived from `files` (each file's `delta`).
+They are a summary for readers. A reviewer checks that they add up to the
+hunks and `delta` values in `files`; a mismatch is a finding. No automated
+check enforces this yet. `goal` must
+be a goal hash that is in the goal memory file and assigned to a pod other
+than the `team` of `authors` (independence, [goal-hashes.md](goal-hashes.md)).
+
 `lint` records the lint gate ([lint-rules.md](lint-rules.md)):
 `{ "builtIn": { "verdict": "PASS", "blocking": 0 }, "tools": [{ "command": "ruff check .", "exit": 0 }] }`.
 `tools` has one row per command from `lint_commands`, run in the sandbox, with the
