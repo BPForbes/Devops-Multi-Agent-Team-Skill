@@ -43,7 +43,6 @@ function isEmptyOr(value, check) {
   return value === '' || check(value)
 }
 
-/** Returns { ok, errors } for a payload. An empty `to.agent` is allowed. */
 export function validateHandoff(payload) {
   const errors = []
   const rule = HANDOFF_KINDS[payload?.kind]
