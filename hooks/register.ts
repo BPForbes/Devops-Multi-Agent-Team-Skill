@@ -27,6 +27,7 @@ const LINT_MODE_REF = { plugin: 'devops-multi-agent-team', key: 'commentAudit' }
 const BRIEFED_REF = { plugin: 'devops-multi-agent-team', key: 'briefed' } as const
 const STANDARDS_REF = { plugin: 'devops-multi-agent-team', key: 'standards' } as const
 const STANDARDS_FILE_REF = { plugin: 'devops-multi-agent-team', key: 'standardsFile' } as const
+const PUSH_AUTHORIZED_REF = { plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const
 
 /** The standards summary, read again only when .devops/standards.json changed since the last read. */
 async function currentStandards($: EngineInterface, root: string): Promise<string> {
@@ -271,7 +272,7 @@ export const register: Register = on => {
     await $.tool.register(BRIEF_SPEC).catch(() => undefined)
     await currentStandards($, await $.session.root())
     const found = await detect($)
-    await $.state.set({ plugin: 'devops-multi-agent-team', key: 'languages' } as const, found.map(f => f.id))
+    await $.state.set(LANGUAGES_REF, found.map(f => f.id))
     $.ui.status(found.length === 0 ? undefined : `devops: ${found.slice(0, 4).map(f => f.id).join('+')}`)
 
     return next(e)
@@ -291,10 +292,10 @@ export const register: Register = on => {
     }
 
     if (word === '' || word === 'status') {
-      const gates = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true
-      const authorized = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const)).value ?? false
+      const gates = (await $.state.get(GATES_REF)).value ?? true
+      const authorized = (await $.state.get(PUSH_AUTHORIZED_REF)).value ?? false
       const branches = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'allowedBranches' } as const)).value ?? []
-      const languages = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'languages' } as const)).value ?? []
+      const languages = (await $.state.get(LANGUAGES_REF)).value ?? []
       const qa = await latestQaVerdict($)
       return {
         text: [
@@ -339,14 +340,14 @@ export const register: Register = on => {
       }
     }
     if (word === 'push-ok') {
-      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const, true)
+      await $.state.set(PUSH_AUTHORIZED_REF, true)
       return {
         text: 'One push is allowed now (human word is final; same as saying "push" in chat). '
           + 'It is consumed by that push. Keep development running.',
       }
     }
     if (word === 'push-reset') {
-      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const, false)
+      await $.state.set(PUSH_AUTHORIZED_REF, false)
       return { text: 'Push permission withdrawn.' }
     }
     if (word === 'allow-branch') {
@@ -358,7 +359,7 @@ export const register: Register = on => {
     }
     if (word === 'comments') {
       if (rest !== 'warn' && rest !== 'strict' && rest !== 'off') return { text: 'Usage: /devops comments warn|strict|off' }
-      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const, rest)
+      await $.state.set(LINT_MODE_REF, rest)
       return { text: `Comment audit on commit: ${rest}.` }
     }
     if (word === 'config') {
@@ -379,7 +380,7 @@ export const register: Register = on => {
     }
     if (word === 'gates') {
       if (rest !== 'on' && rest !== 'off') return { text: 'Usage: /devops gates on|off' }
-      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'gates' } as const, rest === 'on')
+      await $.state.set(GATES_REF, rest === 'on')
       return { text: `Gates ${rest}.` }
     }
     const fallback = interpretSkillIntent(e.args)
@@ -398,7 +399,7 @@ export const register: Register = on => {
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    const gatesOn = ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true) !== false
+    const gatesOn = ((await $.state.get(GATES_REF)).value ?? true) !== false
     const actions = gatesOn ? classify(e.command) : []
     let consumeAuthorization = false
 
@@ -414,8 +415,7 @@ export const register: Register = on => {
     if (actions.some(action => action.kind === 'publish')) {
       // Rule 1: only the person's typed /devops push-ok authorizes a push.
       const what = actions.find(a => a.kind === 'publish')?.what
-      const pushKey = { plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const
-      if (!((await $.state.get(pushKey)).value ?? false)) {
+      if (!((await $.state.get(PUSH_AUTHORIZED_REF)).value ?? false)) {
         return { deny: `${PLUGIN}: ${what} is refused until the person types /devops push-ok.` }
       }
       // A human push-ok overrides QA PASS (qa-publish-policy). A missing PASS
@@ -436,7 +436,7 @@ export const register: Register = on => {
     }
 
     const commit = commitInfo(e.command)
-    const auditMode = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const)).value ?? 'warn'
+    const auditMode = (await $.state.get(LINT_MODE_REF)).value ?? 'warn'
     const audit = commit.isCommit && auditMode !== 'off' ? await auditCommit($, commit.stagesAll) : undefined
     if (audit !== undefined && auditMode === 'strict' && audit.blocking > 0) return { deny: auditContext(audit) }
 
@@ -444,8 +444,13 @@ export const register: Register = on => {
     if (audit !== undefined && ran.deny === undefined && audit.blocking + audit.nonBlocking > 0) {
       return { ...ran, context: [...(ran.context ?? []), auditContext(audit)] }
     }
-    if (consumeAuthorization && ran.deny === undefined) await $.state.set({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const, false)
-    if (ran.deny !== undefined || ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) === false) return ran
+    if (consumeAuthorization && ran.deny === undefined) {
+      await $.state.set(PUSH_AUTHORIZED_REF, false)
+    }
+    if (ran.deny !== undefined) return ran
+    const monitorRef = { plugin: 'devops-multi-agent-team', key: 'monitor' } as const
+    const monitor = (await $.state.get(monitorRef)).value ?? true
+    if (monitor === false) return ran
 
     const check = await checkRunBy($, e.command)
     if (check === undefined) return ran

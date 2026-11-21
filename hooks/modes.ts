@@ -1,4 +1,4 @@
-import { shellWords } from './guard'
+import { shellWords, splitArgs } from './guard'
 
 /** A /devops skill mode with an optional --mode and trailing input. */
 export type SkillMode = {
@@ -301,16 +301,8 @@ export function interpretSkillIntent(args: string): SkillMode | undefined {
     const mode = which.startsWith('agent') ? 'agent' : which.startsWith('job') ? 'job' : 'pod'
     return parseSkillMode('allocate', `--mode ${mode} ${trimmed}`)
   }
-  const first = splitFirst(trimmed)
+  const first = splitArgs(trimmed)
   return parseSkillMode(first.word, first.rest)
-}
-
-function splitFirst(args: string): { word: string; rest: string } {
-  const trimmed = args.trim()
-  const space = trimmed.search(/\s/)
-  return space === -1
-    ? { word: trimmed, rest: '' }
-    : { word: trimmed.slice(0, space), rest: trimmed.slice(space).trim() }
 }
 
 /** Catalog text for /devops help [--mode all|gates|skills|stage]. */
