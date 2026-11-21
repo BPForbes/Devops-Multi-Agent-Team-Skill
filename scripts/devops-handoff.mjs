@@ -10,7 +10,9 @@ export const HANDOFF_KINDS = Object.freeze({
   'coder-to-review': { from: 'coder', to: 'reviewer', mustDiffer: true, needsReason: false },
   'review-to-qa': { from: 'reviewer', to: 'qa', mustDiffer: true, needsReason: false },
   'qa-to-security': { from: 'qa', to: 'security', mustDiffer: true, needsReason: false },
-  'security-signoff': { from: 'security', to: 'orchestrator', mustDiffer: false, needsReason: false },
+  'security-signoff': {
+    from: 'security', to: 'orchestrator', mustDiffer: false, needsReason: false,
+  },
 })
 
 const SIGN_OFFS = Object.freeze(['clear', 'blocked'])
@@ -41,7 +43,7 @@ function isEmptyOr(value, check) {
   return value === '' || check(value)
 }
 
-/** Returns { ok, errors }. An empty `to.agent` is allowed: the coder is not chosen yet. */
+/** Returns { ok, errors }. `to.agent` may be empty until a seat is chosen. */
 export function validateHandoff(payload) {
   const errors = []
   const rule = HANDOFF_KINDS[payload?.kind]
