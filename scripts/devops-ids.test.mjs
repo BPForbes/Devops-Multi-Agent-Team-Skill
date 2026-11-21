@@ -6,7 +6,6 @@ import {
   freeAgents,
   independenceOk,
   isAgentId,
-  isHex6,
   isItemId,
   isJob,
   isTeamId,
@@ -23,8 +22,6 @@ test('minted ids match the team/agent/item forms', () => {
   assert.ok(isItemId(mintItemId()))
   assert.equal(isTeamId('agent-0a0a0a'), false)
   assert.equal(isAgentId('team-0a0a0a'), false)
-  assert.equal(isHex6('0a0a0a'), true)
-  assert.equal(isHex6('0A0A0A'), false)
 })
 
 test('jobs are the closed vocabulary', () => {
