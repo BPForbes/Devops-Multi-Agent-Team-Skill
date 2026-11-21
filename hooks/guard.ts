@@ -1,4 +1,4 @@
-export type Action =
+type Action =
   | { kind: 'publish'; what: string }
   | { kind: 'branch'; name: string | undefined; what: string }
 
@@ -9,6 +9,16 @@ const blankQuotes = (command: string): string =>
   command.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''")
 
 const isAssignment = (word: string): boolean => /^[A-Za-z_][A-Za-z0-9_]*=/.test(word)
+
+/**
+ * The command's simple commands: quotes blanked, split at the shell operators,
+ * each trimmed, empties dropped.
+ */
+const commandSegments = (command: string): string[] =>
+  blankQuotes(command)
+    .split(/&&|\|\||;|\||\n|\(|\)|`|\$\(/)
+    .map(part => part.trim())
+    .filter(part => part !== '')
 
 function gitSubcommand(words: string[]): { sub: string | undefined; rest: string[] } {
   let i = 1
@@ -40,8 +50,7 @@ function classifySegment(segment: string): Action | undefined {
 }
 
 export function classify(command: string): Action[] {
-  return blankQuotes(command)
-    .split(/&&|\|\||;|\||\n|\(|\)|`|\$\(/)
+  return commandSegments(command)
     .map(classifySegment)
     .filter((action): action is Action => action !== undefined)
 }
@@ -100,7 +109,7 @@ export function branchNameOf(text: string): string | undefined {
 }
 
 export function classifySegments(command: string): string[] {
-  return blankQuotes(command).split(/&&|\|\||;|\||\n|\(|\)|`|\$\(/).map(part => part.trim()).filter(part => part !== '')
+  return commandSegments(command)
 }
 
 export function commitInfo(command: string): { isCommit: boolean; stagesAll: boolean } {
