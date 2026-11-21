@@ -231,7 +231,7 @@ function runFree(rest) {
       initial = rest[++i]
     }
   }
-  console.log(JSON.stringify(freeAgents(registry, { want, initial })))
+  console.log(JSON.stringify(freeAgents(registry, { want, initial, freeOnly: want === undefined })))
   return 0
 }
 

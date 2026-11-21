@@ -1,5 +1,7 @@
+import { execFileSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import {
   agentsOnJob,
@@ -102,6 +104,18 @@ test('freeAgents and agentsOnJob support allocation', () => {
     agentsOnJob(registry, 'coder').map(r => r.agent),
     ['agent-bbbbbb'],
   )
+})
+
+test('free --want returns agents on that job through the CLI', () => {
+  const registry = JSON.stringify([
+    { agent: 'agent-aaaaaa', team: 'team-1', initial_job: 'coder', current_job: 'coder' },
+    { agent: 'agent-bbbbbb', team: 'team-2', initial_job: 'reviewer', current_job: 'reviewer' },
+  ])
+  const script = fileURLToPath(new URL('./devops-ids.mjs', import.meta.url))
+  const out = execFileSync(process.execPath, [
+    script, 'free', '--registry', registry, '--want', 'coder',
+  ], { encoding: 'utf8' })
+  assert.deepEqual(JSON.parse(out).map(r => r.agent), ['agent-aaaaaa'])
 })
 
 test('itemRecord requires notes and a well-formed item id', () => {
