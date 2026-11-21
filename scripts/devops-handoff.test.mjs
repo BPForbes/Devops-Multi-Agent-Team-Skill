@@ -86,11 +86,10 @@ test('a security sign-off records clear or blocked', () => {
     ...BASE, signedBy: 'agent-0d0d0d', fromAgent: 'agent-0d0d0d', fromTeam: 'team-7a8b9c',
     toAgent: '', toTeam: '',
   }
-  assert.equal(validateHandoff(makeHandoff('security-signoff', { ...base, result: 'clear' })).ok, true)
-  assert.match(
-    validateHandoff(makeHandoff('security-signoff', { ...base, result: 'maybe' })).errors.join(' '),
-    /clear or blocked/,
-  )
+  const clear = makeHandoff('security-signoff', { ...base, result: 'clear' })
+  assert.equal(validateHandoff(clear).ok, true)
+  const maybe = makeHandoff('security-signoff', { ...base, result: 'maybe' })
+  assert.match(validateHandoff(maybe).errors.join(' '), /clear or blocked/)
 })
 
 test('an unknown kind is refused', () => {

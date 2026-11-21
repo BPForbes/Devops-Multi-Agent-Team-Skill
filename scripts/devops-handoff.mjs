@@ -56,7 +56,9 @@ export function validateHandoff(payload) {
     errors.push('signed_by must be the sending agent')
   }
   if (payload.to?.job !== rule.to) errors.push(`to.job must be ${rule.to}`)
-  if (!isEmptyOr(payload.to?.agent, isAgentId)) errors.push('to.agent must be an agent hash or empty')
+  if (!isEmptyOr(payload.to?.agent, isAgentId)) {
+    errors.push('to.agent must be an agent hash or empty')
+  }
   if (!isEmptyOr(payload.to?.team, isTeamId)) errors.push('to.team must be a team hash or empty')
   if (rule.needsReason && String(payload.reason ?? '').trim() === '') {
     errors.push('reason is required: say in one line why it was resent')
