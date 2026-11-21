@@ -7,11 +7,10 @@ import {
   emptyMemory,
   findGoalByText,
   goalTrailers,
-  isGoalId,
-  mintGoalId,
   normalizeGoalText,
   supersedeGoal,
 } from './devops-goals.mjs'
+import { isGoalId, mintGoalId } from './devops-ids.mjs'
 
 const T1 = 'team-1a2b3c'
 const T2 = 'team-4d5e6f'

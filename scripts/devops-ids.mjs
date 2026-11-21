@@ -10,55 +10,37 @@ export const JOBS = Object.freeze([
 /** Three random bytes → six hex chars (matches the skill mint width). */
 const HEX_BYTES = 3
 
-const HEX6 = /^[0-9a-f]{6}$/
 const TEAM_RE = /^team-[0-9a-f]{6}$/
 const AGENT_RE = /^agent-[0-9a-f]{6}$/
 const ITEM_RE = /^item-[0-9a-f]{6}$/
 const GOAL_RE = /^goal-[0-9a-f]{6}$/
 
-export function mintHex() {
+function mintHex() {
   return crypto.randomBytes(HEX_BYTES).toString('hex')
 }
 
-export function mintTeamId() {
-  return `team-${mintHex()}`
+/** A minter for `<prefix>-<six hex>` ids. */
+function mintFor(prefix) {
+  return () => `${prefix}-${mintHex()}`
 }
 
-export function mintAgentId() {
-  return `agent-${mintHex()}`
+/** A checker for ids matching `re`; non-strings are never ids. */
+function idCheck(re) {
+  return value => typeof value === 'string' && re.test(value)
 }
 
-export function mintItemId() {
-  return `item-${mintHex()}`
-}
+export const mintTeamId = mintFor('team')
+export const mintAgentId = mintFor('agent')
+export const mintItemId = mintFor('item')
+export const mintGoalId = mintFor('goal')
 
-export function mintGoalId() {
-  return `goal-${mintHex()}`
-}
-
-export function isTeamId(value) {
-  return typeof value === 'string' && TEAM_RE.test(value)
-}
-
-export function isAgentId(value) {
-  return typeof value === 'string' && AGENT_RE.test(value)
-}
-
-export function isItemId(value) {
-  return typeof value === 'string' && ITEM_RE.test(value)
-}
-
-export function isGoalId(value) {
-  return typeof value === 'string' && GOAL_RE.test(value)
-}
+export const isTeamId = idCheck(TEAM_RE)
+export const isAgentId = idCheck(AGENT_RE)
+export const isItemId = idCheck(ITEM_RE)
+export const isGoalId = idCheck(GOAL_RE)
 
 export function isJob(value) {
   return typeof value === 'string' && JOBS.includes(value)
-}
-
-/** True when the hex body alone is well-formed (no prefix). */
-export function isHex6(value) {
-  return typeof value === 'string' && HEX6.test(value)
 }
 
 /** All team hashes on a record: current `team` plus `teams` history. */
@@ -168,29 +150,32 @@ function parseAuthor(spec) {
   }
 }
 
+const MINTERS = new Map([
+  ['team', mintTeamId],
+  ['agent', mintAgentId],
+  ['item', mintItemId],
+])
+
+const CHECKS = new Map([
+  ['team', isTeamId],
+  ['agent', isAgentId],
+  ['item', isItemId],
+  ['job', isJob],
+])
+
 function runMint(kind) {
-  if (kind === 'team') {
-    console.log(mintTeamId())
-    return 0
+  const mint = MINTERS.get(kind)
+  if (mint === undefined) {
+    console.error(usage())
+    return 1
   }
-  if (kind === 'agent') {
-    console.log(mintAgentId())
-    return 0
-  }
-  if (kind === 'item') {
-    console.log(mintItemId())
-    return 0
-  }
-  console.error(usage())
-  return 1
+  console.log(mint())
+  return 0
 }
 
 function checkValue(kind, value) {
-  if (kind === 'team') return isTeamId(value)
-  if (kind === 'agent') return isAgentId(value)
-  if (kind === 'item') return isItemId(value)
-  if (kind === 'job') return isJob(value)
-  return false
+  const check = CHECKS.get(kind)
+  return check === undefined ? false : check(value)
 }
 
 function runCheck(rest) {

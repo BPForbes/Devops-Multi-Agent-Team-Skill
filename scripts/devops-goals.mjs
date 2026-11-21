@@ -2,8 +2,6 @@
 // Pure functions over a plain object: callers read and write the JSON file.
 import { isTeamId, mintGoalId } from './devops-ids.mjs'
 
-export { isGoalId, mintGoalId } from './devops-ids.mjs'
-
 const TRAILER_RE = /^Goal:[ \t]*(goal-[0-9a-f]{6})[ \t]*$/gm
 const MINT_TRIES = 16
 
