@@ -43,7 +43,7 @@ function isEmptyOr(value, check) {
   return value === '' || check(value)
 }
 
-/** Returns { ok, errors }. `to.agent` may be empty until a seat is chosen. */
+/** Returns { ok, errors }. An empty `to.agent` is a valid open receiver slot. */
 export function validateHandoff(payload) {
   const errors = []
   const rule = HANDOFF_KINDS[payload?.kind]
