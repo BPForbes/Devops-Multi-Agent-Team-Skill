@@ -30,7 +30,8 @@ function triage(overrides = {}) {
 
 test('every kind has a sender and a receiver job', () => {
   assert.deepEqual(Object.keys(HANDOFF_KINDS), [
-    'triage', 'research-to-coder', 'coder-to-review', 'review-to-qa', 'qa-to-security', 'security-signoff',
+    'triage', 'research-to-coder', 'coder-to-review',
+    'review-to-qa', 'qa-to-security', 'security-signoff',
   ])
 })
 
