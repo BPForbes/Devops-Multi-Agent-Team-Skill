@@ -14,6 +14,7 @@ const HEX6 = /^[0-9a-f]{6}$/
 const TEAM_RE = /^team-[0-9a-f]{6}$/
 const AGENT_RE = /^agent-[0-9a-f]{6}$/
 const ITEM_RE = /^item-[0-9a-f]{6}$/
+const GOAL_RE = /^goal-[0-9a-f]{6}$/
 
 export function mintHex() {
   return crypto.randomBytes(HEX_BYTES).toString('hex')
@@ -31,6 +32,10 @@ export function mintItemId() {
   return `item-${mintHex()}`
 }
 
+export function mintGoalId() {
+  return `goal-${mintHex()}`
+}
+
 export function isTeamId(value) {
   return typeof value === 'string' && TEAM_RE.test(value)
 }
@@ -41,6 +46,10 @@ export function isAgentId(value) {
 
 export function isItemId(value) {
   return typeof value === 'string' && ITEM_RE.test(value)
+}
+
+export function isGoalId(value) {
+  return typeof value === 'string' && GOAL_RE.test(value)
 }
 
 export function isJob(value) {

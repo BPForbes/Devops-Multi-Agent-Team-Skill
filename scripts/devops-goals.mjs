@@ -1,19 +1,11 @@
 // Goal hashes and the goal memory file (see references/goal-hashes.md).
 // Pure functions over a plain object: callers read and write the JSON file.
-import crypto from 'node:crypto'
-import { isTeamId } from './devops-ids.mjs'
+import { isTeamId, mintGoalId } from './devops-ids.mjs'
 
-const GOAL_RE = /^goal-[0-9a-f]{6}$/
+export { isGoalId, mintGoalId } from './devops-ids.mjs'
+
 const TRAILER_RE = /^Goal:[ \t]*(goal-[0-9a-f]{6})[ \t]*$/gm
 const MINT_TRIES = 16
-
-export function mintGoalId() {
-  return `goal-${crypto.randomBytes(3).toString('hex')}`
-}
-
-export function isGoalId(value) {
-  return typeof value === 'string' && GOAL_RE.test(value)
-}
 
 /** Same goal text: trimmed, whitespace collapsed, case ignored. */
 export function normalizeGoalText(text) {
