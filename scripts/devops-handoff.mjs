@@ -16,9 +16,14 @@ export const HANDOFF_KINDS = Object.freeze({
 
 const SIGN_OFFS = Object.freeze(['clear', 'blocked'])
 
+/** The rule for a kind, or undefined; inherited keys such as `constructor` are not kinds. */
+function ruleFor(kind) {
+  return Object.hasOwn(HANDOFF_KINDS, kind) ? HANDOFF_KINDS[kind] : undefined
+}
+
 /** Shared fields every payload carries, in the order the spec lists them. */
 export function makeHandoff(kind, fields) {
-  const rule = HANDOFF_KINDS[kind]
+  const rule = ruleFor(kind)
   if (rule === undefined) throw new Error(`unknown handoff kind: ${kind}`)
   const payload = {
     kind,
@@ -44,7 +49,7 @@ function isEmptyOr(value, check) {
 
 export function validateHandoff(payload) {
   const errors = []
-  const rule = HANDOFF_KINDS[payload?.kind]
+  const rule = ruleFor(payload?.kind)
   if (rule === undefined) return { ok: false, errors: ['kind is not a handoff kind'] }
   if (!isItemId(payload.item)) errors.push('item must be an item hash')
   if (!isGoalId(payload.goal)) errors.push('goal must be a goal hash')

@@ -97,3 +97,12 @@ test('an unknown kind is refused', () => {
   assert.throws(() => makeHandoff('pizza', BASE), /unknown handoff kind/)
   assert.equal(validateHandoff({ kind: 'pizza' }).ok, false)
 })
+
+test('inherited object keys are not kinds', () => {
+  for (const kind of ['constructor', 'toString', '__proto__']) {
+    assert.throws(() => makeHandoff(kind, BASE), /unknown handoff kind/)
+    assert.deepEqual(validateHandoff({ kind }), {
+      ok: false, errors: ['kind is not a handoff kind'],
+    })
+  }
+})
