@@ -1,7 +1,6 @@
 // Handoff payloads: the JSON bodies Orchestration routes between seats
 // (see references/handoff-payloads.md). Pure functions, no file access.
-import { isAgentId, isItemId, isJob, isTeamId } from './devops-ids.mjs'
-import { isGoalId } from './devops-goals.mjs'
+import { isAgentId, isGoalId, isItemId, isJob, isTeamId } from './devops-ids.mjs'
 
 /** kind → the seat that signs it, the seat it goes to, and whether teams must differ. */
 export const HANDOFF_KINDS = Object.freeze({
