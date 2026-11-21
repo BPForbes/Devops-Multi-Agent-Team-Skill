@@ -26,13 +26,17 @@ test('goal hashes are goal- plus six lowercase hex characters', () => {
 
 test('goal text matches ignoring case and extra spaces', () => {
   assert.equal(normalizeGoalText('  The  Lint\tgate  '), 'the lint gate')
-  const { memory } = addGoal(emptyMemory(), { text: 'Lint gate passes', team: T1, at: AT, mint: () => 'goal-aaaaaa' })
+  const { memory } = addGoal(emptyMemory(), {
+    text: 'Lint gate passes', team: T1, at: AT, mint: () => 'goal-aaaaaa',
+  })
   assert.equal(findGoalByText(memory, 'lint   GATE passes'), 'goal-aaaaaa')
   assert.equal(findGoalByText(memory, ''), undefined)
 })
 
 test('a new goal gets a fresh hash and is assigned to a pod', () => {
-  const added = addGoal(emptyMemory(), { text: 'A', metric: 'm', team: T1, judgedBy: [T2], at: AT, mint: () => 'goal-111111' })
+  const added = addGoal(emptyMemory(), {
+    text: 'A', metric: 'm', team: T1, judgedBy: [T2], at: AT, mint: () => 'goal-111111',
+  })
   assert.equal(added.hash, 'goal-111111')
   assert.equal(added.reused, false)
   assert.deepEqual(added.memory.goals['goal-111111'].judged_by, [T2])
@@ -42,7 +46,9 @@ test('a new goal gets a fresh hash and is assigned to a pod', () => {
 
 test('the same goal text reuses its earlier hash and records the reuse', () => {
   const first = addGoal(emptyMemory(), { text: 'A', team: T1, at: AT, mint: () => 'goal-111111' })
-  const again = addGoal(first.memory, { text: ' a ', team: T2, judgedBy: [T1], at: AT, mint: () => 'goal-222222' })
+  const again = addGoal(first.memory, {
+    text: ' a ', team: T2, judgedBy: [T1], at: AT, mint: () => 'goal-222222',
+  })
   assert.equal(again.hash, 'goal-111111')
   assert.equal(again.reused, true)
   assert.equal(again.memory.goals['goal-111111'].team, T2)
@@ -58,9 +64,14 @@ test('minting skips a hash that is already in memory', () => {
 })
 
 test('a pod cannot judge its own goal, and bad hashes are refused', () => {
-  assert.throws(() => addGoal(emptyMemory(), { text: 'A', team: T1, judgedBy: [T1], at: AT }), /cannot judge/)
-  assert.throws(() => addGoal(emptyMemory(), { text: 'A', team: 'pod-1', at: AT }), /not a team hash/)
-  assert.throws(() => addGoal(emptyMemory(), { text: 'A', team: T1, judgedBy: 'team-4d5e6f', at: AT }), /list/)
+  const self = () => addGoal(emptyMemory(), { text: 'A', team: T1, judgedBy: [T1], at: AT })
+  assert.throws(self, /cannot judge/)
+  const badTeam = () => addGoal(emptyMemory(), { text: 'A', team: 'pod-1', at: AT })
+  assert.throws(badTeam, /not a team hash/)
+  const notList = () => addGoal(emptyMemory(), {
+    text: 'A', team: T1, judgedBy: 'team-4d5e6f', at: AT,
+  })
+  assert.throws(notList, /list/)
 })
 
 test('assigning a goal moves it to another pod and keeps the old history', () => {
@@ -69,13 +80,19 @@ test('assigning a goal moves it to another pod and keeps the old history', () =>
   assert.equal(moved.goals['goal-111111'].team, T2)
   assert.equal(moved.goals['goal-111111'].history.length, 2)
   assert.deepEqual(moved.teams[T1].goals, ['goal-111111'])
-  assert.throws(() => assignGoal(added.memory, { hash: 'goal-999999', team: T2, at: AT }), /unknown goal/)
+  const unknown = () => assignGoal(added.memory, { hash: 'goal-999999', team: T2, at: AT })
+  assert.throws(unknown, /unknown goal/)
 })
 
 test('a changed goal gets a new hash and the old one points at it', () => {
   const added = addGoal(emptyMemory(), { text: 'A', team: T1, at: AT, mint: () => 'goal-111111' })
   const changed = supersedeGoal(added.memory, {
-    hash: 'goal-111111', text: 'A, with the metric', team: T1, judgedBy: [T2], at: AT, mint: () => 'goal-333333',
+    hash: 'goal-111111',
+    text: 'A, with the metric',
+    team: T1,
+    judgedBy: [T2],
+    at: AT,
+    mint: () => 'goal-333333',
   })
   assert.equal(changed.hash, 'goal-333333')
   assert.equal(changed.memory.goals['goal-111111'].status, 'superseded')
