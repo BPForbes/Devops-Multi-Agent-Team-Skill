@@ -47,7 +47,7 @@ const SPECS: ModeSpec[] = [
     aliases: ['ask', 'q'],
     modes: ['overview', 'tree', 'symbol', 'search', 'file', 'module', 'library'],
     defaultMode: 'search',
-    skill: 'project-mindmap (plain chat; no team)',
+    skill: 'mindmap_* tools; project-mindmap (plain chat; no team)',
     tools: ['mindmap_overview', 'mindmap_query', 'mindmap_tree'],
     behavior: [
       'Answer from the mind map; do not spawn seats.',
@@ -60,7 +60,7 @@ const SPECS: ModeSpec[] = [
     aliases: ['mindmap', 'map'],
     modes: ['overview', 'build', 'status', 'tree', 'query', 'note'],
     defaultMode: 'overview',
-    skill: 'project-mindmap; Researcher owns the map in a team run',
+    skill: 'mindmap_* / devops-mindmap.mjs; Researcher owns the map in a team run',
     tools: [
       'mindmap_overview', 'mindmap_build', 'mindmap_status',
       'mindmap_tree', 'mindmap_query', 'mindmap_note',
@@ -76,7 +76,7 @@ const SPECS: ModeSpec[] = [
     aliases: ['cleanup', 'tidy'],
     modes: ['brief', 'scan', 'plan', 'run'],
     defaultMode: 'brief',
-    skill: 'devops-cleanup (+ /cleanup)',
+    skill: 'cleanup_brief / cleanup_scan + devops-cleanup skill (+ /cleanup)',
     tools: ['cleanup_brief', 'cleanup_scan', 'reuse_search'],
     behavior: [
       'Turn the statement into cleanup_brief; ask about unrecognized parts.',
@@ -129,7 +129,7 @@ const SPECS: ModeSpec[] = [
     aliases: ['assign'],
     modes: ['pod', 'agent', 'job', 'board'],
     defaultMode: 'pod',
-    skill: 'orchestrator goal allocation',
+    skill: 'Orchestrator assigns goals to pods and each agent',
     tools: [],
     behavior: [
       'pod: one goal file per team hash (goal-team-<hex>.md) from the parent goal.',
@@ -305,22 +305,40 @@ export function interpretSkillIntent(args: string): SkillMode | undefined {
   return parseSkillMode(first.word, first.rest)
 }
 
-/** Catalog text for /devops help [--mode all|gates|skills|stage]. */
+/** Command lines for /devops help --mode gates and the chat fallback (non-skill commands). */
+const COMMAND_HELP: string[] = [
+  '/devops              status: languages, gates, QA verdict',
+  '/devops languages    what was detected and in which layer',
+  '/devops setup        how to install the skill and profile in this project',
+  '/devops setup claude [--dry-run] [--share-config]  set this project up for Claude Code:',
+  '                     only .devops/ and the thought folders; the plugin supplies the rest',
+  '/devops brief [TOPIC | role NAME]  one section of the skill, or a seat\'s brief',
+  '/devops push-ok | push | go | publish | ship   allow ONE push (human word is final;',
+  '                     same as saying "push" in chat; does not require QA PASS)',
+  '/devops push-reset | withdraw   withdraw that permission',
+  '/devops allow-branch NAME   allow creating that git branch',
+  '/devops gates on|off   turn the push and branch gates on or off',
+  '/devops monitor on|off   turn the failed-check monitor on or off',
+  '/devops comments warn|strict|off   lint gate on git commit (comment and code rules): ' +
+    'warn (default), refuse a commit with blocking findings, or off',
+  '/devops config [show|get PATH] read the project standards (line length, limits, lint rules)',
+  '/devops config set|unset|add|remove PATH [VALUE] | rule RULE error|off   change ' +
+    '.devops/standards.json; checked before it is written',
+]
+
+/** Catalog text for /devops help [--mode all|gates|skills|stage]; also the chat fallback (mode all). */
 export function helpCatalog(mode: string): string {
-  const gates = [
-    'status, languages, setup, setup claude, brief, push-ok, push-reset,',
-    'allow-branch NAME, gates on|off, monitor on|off, comments warn|strict|off, config …',
-  ].join(' ')
-  const skills = SPECS.map(s => {
+  const skills = SPECS.flatMap(s => {
     const alias = s.aliases.length > 0 ? ` (${s.aliases.join(', ')})` : ''
-    return `/devops ${s.word}${alias} --mode ${s.modes.join('|')}  [text]`
+    const line = `/devops ${s.word}${alias} --mode ${s.modes.join('|')}  [text]`
+    return [line, `                     ${s.skill}`]
   })
   const stages = Object.entries(STAGE_ROLES).map(
     ([name, roles]) => `- ${name}: ${roles}`,
   )
   const parts: string[] = ['## /devops help', `mode: ${mode}`]
   if (mode === 'gates' || mode === 'all') {
-    parts.push('### Gates', gates)
+    parts.push('### Gates and commands', ...COMMAND_HELP)
   }
   if (mode === 'skills' || mode === 'all') {
     parts.push('### Skill modes (text after the command is the input)', ...skills)
@@ -332,7 +350,10 @@ export function helpCatalog(mode: string): string {
       'Allocate pod and agent goals before spawning (`/devops allocate` or goal --mode allocate).',
     )
   }
-  parts.push('Keep development running. Human wording is final.')
+  parts.push(
+    'Chat aliases and free-form phrases map onto these modes. Call the named',
+    'tools; keep large file bodies out of chat. Keep development running. Human wording is final.',
+  )
   return parts.join('\n')
 }
 
