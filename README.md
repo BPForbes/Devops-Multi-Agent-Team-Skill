@@ -9,15 +9,18 @@ commands, plus:
    ([`services.json`](services.json)) for Docker, cloud, AI and VMs and a
    sandbox policy, installable through chat with an MCP server.
 2. **A Claude mod** (`hooks/`) that detects the languages in the open project,
-   adds a `/devops` command, and refuses `git push`, `gh pr create|merge` and
-   git-branch creation until QA has recorded a PASS and *you* have said go.
+   adds a free-form `/devops` command with skill modes (`question`, `mind-map`,
+   `clean`, `goal`, …) that drive MCP tools instead of plain-text dumps, and refuses
+   `git push`, `gh pr create|merge` and git-branch creation until *you* authorize
+   (chat `push` = `/devops push-ok`). Human wording is final; `/devops` does not stop
+   development.
 
 ## What is in it
 
 | Path | What |
 |------|------|
 | `skills/project-mindmap/` | Plain-chat skill: answer questions about the project from the mind map, no team needed. |
-| `skills/devops-multi-agent-team/` | The skill: `SKILL.md` and `references/` (seat ids, pods, side worktrees, Push JSON, QA policy, SOC 2 review, templates). Language-neutral. |
+| `skills/devops-multi-agent-team/` | The skill: `SKILL.md` and `references/` (team/agent/job/item hashes, pods, side worktrees, Push JSON, QA policy, SOC 2 review, templates). Language-neutral. |
 | `agents/` | Nine role prompts: researcher, reviewer, CI, quality (QA), security, ticket lead, verifier, integrator, communicator. |
 | `commands/` | `/goal`, `/create-subagent`, `/code-review`, `/repro`, `/triage`. |
 | `languages.json`, `LANGUAGES.md` | The language setup file (40 languages) and its guide. |
@@ -26,6 +29,7 @@ commands, plus:
 | `mcp/server.mjs` | The MCP server for installing and managing through chat. |
 | `templates/project.md` | Skeleton of the per-project profile (`.devops/project.md`). |
 | `scripts/devops-setup.mjs` | `list`, `detect`, `profile`, `install`, `status`, `check`, `sandbox`. No dependencies, Node 18+. |
+| `scripts/devops-ids.mjs` | Mint and check `team-` / `agent-` / `item-` hashes; independence and free-agent allocation helpers. |
 | `mindmap-text.json` | Every sentence, label and word list the mind map uses; a project overrides keys in `.devops/mindmap/text.json`. |
 | `scripts/devops-mindmap.mjs` | The repository mind map: `overview`, `tree`, `note`, `build [--save]`, `status`, `query`. Writes only `.devops/mindmap/`, and only with `--save`. |
 | `hooks/`, `types/`, `.claude-plugin/` | The Claude mod and plugin manifest. |
@@ -223,7 +227,7 @@ changes. A value the validator rejects is refused with the reason.
 |-------|------|--------|
 | Shell | `devops-config show`, `devops-config get defaults.lineLength.code [--language python]` | `devops-config set defaults.lineLength.code 120`, `unset PATH`, `add lint.exclude "vendor/**"`, `remove PATH VALUE`, `rule sec-insecure-url off`; `--dry-run` previews |
 | Chat (MCP) | `config_get` | `config_set` (`op`, `path`, `value`); plans unless `apply=true` |
-| Claude Code mod | `/devops config`, `/devops config get PATH` | `/devops config set PATH VALUE` (and `unset`, `add`, `remove`, `rule`); only you can run these, not an agent |
+| Claude Code mod | `/devops config`, `/devops config get PATH` | `/devops config set PATH VALUE` (and `unset`, `add`, `remove`, `rule`); chat and agent may run these when fulfilling your intent |
 | Slash command | `/config get PATH` | `/config set PATH VALUE`; the agent shows the change and applies it after you agree |
 
 Paths are dotted; write `\.` for a dot inside a key
@@ -237,7 +241,7 @@ in this repository.
 |------|-------|-------------|
 | **Lint gate (hard deny)**: comment rules, line length, function size, unused symbols, security, outdated APIs and debug leftovers on added lines, plus the open-source linters run in the sandbox; every finding carries its fix | `lint-rules.md`, `standards.json` `lint` and `linters` | Reviewers DENY on any blocking finding and send the whole list back; the mod runs it on `git commit` |
 | **Documentation first** (Markdown, LaTeX, code comments, then code, then the web) | `research-and-reuse.md`, researcher agent | Reviewers reject a brief without it |
-| **Repository mind map**, with or without the team: plain chat answers from its overview; in a team run the Researcher refreshes and queries it and carries it into the brief, so other seats read files only at the line ranges given; fewer tokens and no second copy of a function | [`mind-map.md`](skills/devops-multi-agent-team/references/mind-map.md), `project-mindmap` skill, `mindmap_*` tools; no command, ask in plain words | Researcher: map date, definitions and duplicates in scope in the brief; Reviewers: a name it shows defined elsewhere is a re-implementation finding; QA checks the brief carries it |
+| **Repository mind map**, with or without the team: plain chat answers from its overview; in a team run the Researcher refreshes and queries it and carries it into the brief, so other seats read files only at the line ranges given; fewer tokens and no second copy of a function | [`mind-map.md`](skills/devops-multi-agent-team/references/mind-map.md), `project-mindmap` skill, `mindmap_*` tools; `/devops question` / `/devops mind-map --mode …` or plain words | Researcher: map date, definitions and duplicates in scope in the brief; Reviewers: a name it shows defined elsewhere is a re-implementation finding; QA checks the brief carries it |
 | **Module mind map + reuse map** before any Coder starts; "new, because ..." must hold up | `research-and-reuse.md`, `module_map`, `reuse_search` | Reviewers: re-implementation is a blocking finding; QA checks the brief |
 | **Clean code** (intention-revealing names, small single-purpose functions, DRY with care, no magic numbers, simplicity over cleverness, SOLID where it fits) | `clean-code.md`, `rules/clean-code.md` | Coders write to it; Reviewers label violations; `cleanup_scan` finds magic numbers, vague names, flag arguments, long or deep functions and duplicates |
 | **Formal check with Lean 4** (`formal-check.md`; optional, asked per goal) | `formal-check.md`, `proof-writeup-template.md`, `scripts/devops-formal.mjs` | When on: Researchers pick formal targets, Coders write Lean and a write-up for advanced logic, Reviewers check statement and trace, QA runs the Lean gate |
@@ -303,7 +307,7 @@ The plugin provides the skill, agents, commands, the MCP server and the mod.
 The plugin's mod (`hooks/register.ts`, with `hooks/orchestrate.ts` and `hooks/brief.ts`) sets
 Claude Code up for the team and keeps agents from spending tokens to learn the skill.
 
-**Claude-only setup.** With the plugin installed, `/devops setup claude` (typed by you; add
+**Claude-only setup.** With the plugin installed, `/devops setup claude` (add
 `--dry-run` to preview, `--share-config` to commit `.devops/`) runs `devops-setup init --plugin`:
 it writes only `.devops/` and the thought folders, kept out of git in `.git/info/exclude`. Nothing
 is copied into `.claude/` or `.cursor/` and no tools kit is needed, because the plugin supplies the
@@ -313,12 +317,12 @@ skill, agents, commands and MCP server. The shell form is
 | Hook | Does |
 |------|------|
 | `tool.call` Bash (lint gate) | On `git commit` it runs `devops-lint check` (comment rules and code rules) on the staged diff (the working tree for `-a`) and adds the findings to the result. `/devops comments strict` refuses a commit with blocking findings; `off` turns it off. |
-| `tool.call` Bash (monitor) | A command that matches a validation command in the language data (for example `cargo test`, `npm run lint`) and fails is recorded in `devops-skill/thoughts/non-final/check-ledger.md`, counted per check, and the result gets a reminder to reproduce, fix the cause and re-run; at the retry cap (default 3, set in `project.md`) it says stop and escalate. A pass clears the count. `/devops monitor off` (typed by you) turns it off. |
+| `tool.call` Bash (monitor) | A command that matches a validation command in the language data (for example `cargo test`, `npm run lint`) and fails is recorded in `devops-skill/thoughts/non-final/check-ledger.md`, counted per check, and the result gets a reminder to reproduce, fix the cause and re-run; at the retry cap (default 3, set in `project.md`) it says stop and escalate. A pass clears the count. `/devops monitor off` turns it off. |
 | `prompt.compose` (mind map) | When `.devops/mindmap/OVERVIEW.md` exists, adds it to the session prompt, so plain chat knows the project at a glance with no tool call, with or without a DevOps profile. |
 | `session.start` | Runs `devops-setup detect --json`, shows `devops: rust+typescript` in the status line, registers `/devops` and the `devops_brief` tool, and reads the project's standards into one line. |
 | `tool.run` `devops_brief` | The model reads the skill in pieces: no input gives the index (about 8 KB instead of 250 KB), `topic` the one best section (usually 1 to 4 KB), `role` a seat's brief. Role files rank below the references for a topic, since `role` serves them. |
-| `command.run` `/devops` | `status`, `languages`, `setup`, `brief [TOPIC \| role NAME]` (anyone); `setup claude`, `push-ok`, `push-reset`, `allow-branch NAME`, `gates on\|off` (only when **you** type them; an agent that runs the command is refused). |
-| `tool.call` Bash | Refuses `git push`, `gh pr create\|merge\|ready\|edit\|close\|reopen`, `gh release create` unless the newest `qa-*.md` under `devops-skill/thoughts/` has `Publish gate: PASS` **and** you ran `/devops push-ok` (consumed by that push). Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>`. Detached worktrees and reads pass. If the check itself fails, it refuses. |
+| `command.run` `/devops` | Gates (`status`, `push-ok`, `allow-branch`, …) plus **skill modes** (`help`, `question`, `mind-map`, `clean`, `stage`/`ci`, `allocate`, `goal`, `story`, …) with `--mode` orchestration cards that name MCP tools. Trigger one CI/CD pod (`stage --mode research`) or allocate pod/agent goals. Seats use the same modes. Chat aliases (`push` → `push-ok`; "run research" → `stage`). Does not stop development. |
+| `tool.call` Bash | Refuses `git push`, `gh pr create\|merge\|ready\|edit\|close\|reopen`, `gh release create` unless you authorized a push (`/devops push-ok` or chat "push"; consumed by that push; human word is final and does not require QA PASS). Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>`. Detached worktrees and reads pass. If the check itself fails, it refuses. |
 | `prompt.compose` | Adds one short section (under 1,200 characters): the languages, `devops_brief` instead of reading the skill whole, the profile, the lint gate and config tools, the standards in effect (line lengths, function limits, allowed numbers), the push gate and the lint mode. An agent starts with what it needs and fetches the rest by piece. |
 
 Limits, stated plainly:
@@ -326,8 +330,8 @@ Limits, stated plainly:
 - It guards the **Bash tool**. GitHub MCP tools (`create_pull_request`,
   `push_files`, `merge_pull_request`, ...) are not gated by it; use your
   permission settings for those.
-- The QA note is a file an agent can write. The gate that an agent cannot
-  pass alone is `/devops push-ok`, which only a typed command from you sets.
+- A push needs your authorization: say `push` in chat or `/devops push-ok`
+  (same meaning). That grant is final and is consumed by one push.
 - Shell parsing is by words, with quoted text ignored. A command built
   through `eval` or a script that itself pushes is not seen; the skill's
   rules and your review remain the control for those.

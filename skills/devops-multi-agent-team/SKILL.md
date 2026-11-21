@@ -74,30 +74,35 @@ Prefer **MCP** for live CI/quality/security/ticket data; prefer
 [references/agent-commands.md](references/agent-commands.md).
 
 Spawn `/create-subagent` (the host's subagent tool: Cursor `Task`,
-Claude Code `Agent`; prompts in `agents/`), naming the seat id in the
-spawn description. Frontmatter `is_background: true`; every spawn
+Claude Code `Agent`; prompts in `agents/`), naming the **agent hash**,
+**team hash**, **initial job** and **current job** in the spawn
+description. Frontmatter `is_background: true`; every spawn
 `run_in_background: true`.
 
 **Teams work in parallel and review across teams.** No one reviews,
-security-checks or QAs their own change, including after being
-reallocated ([department-pods.md](references/department-pods.md),
-Multiple teams).
+security-checks or QAs their own change **or their pod's change**,
+including after being reallocated
+([department-pods.md](references/department-pods.md), Multiple teams).
 
 **Team sizing and rotation.** One team per work item, 2 to 3 seats of
 each of Researcher, Coder, Reviewer, QA and Security (10 to 15 per
 team, a ceiling not a quota; cost and conflicts decide). A seat that
-finished its role may take another role on a *different* item, keeping
-its id; it never judges what it wrote, fixed or briefed (the
-Orchestrator judges "briefed" from the registry). If no independent
-seat is left it mints a new seat id (independence outranks the
-3-per-function ceiling) or asks the human, never reusing an author.
-Teams talk through the append-only `team-board.md` (informational, it
-never authorizes anything).
+finished its role may take another job on a *different* item, keeping
+its agent hash; it never judges what it wrote, fixed, briefed, or what
+its **pod** authored (the Orchestrator judges "briefed" from the
+registry). If no independent seat is left it mints a new agent on a
+new team hash (independence outranks the 3-per-function ceiling) or
+asks the human, never reusing an author or authoring pod. Teams talk
+through the append-only `team-board.md` (informational, it never
+authorizes anything). Allocate by comparing `initial_job` and free
+(`current_job: idle`) agents to who is already on a job.
 
-**Seats have hash ids.** Every subagent seat is told apart by a seat
-id, `<role>-<6 hex>` (for example `coder-0a0a0a`), minted by the
-Orchestrator at spawn, never a capital letter
-([role-identity.md](references/role-identity.md), Seat ids).
+**Hashes and jobs.** Each pod has a shared **team hash**
+(`team-<6 hex>`); each agent has a unique **agent hash**
+(`agent-<6 hex>`), an **initial job** and a **current job**. Shared
+artifacts get an **item hash** plus notes. Mint/check with
+`scripts/devops-ids.mjs`
+([role-identity.md](references/role-identity.md), Identity hashes).
 
 **Teams work dynamically.** Departments are named by function (from
 the profile), not by seat. A department's brief done → its Coder
@@ -114,13 +119,36 @@ Identity, ask-paths, Coder notify:
 Push JSON: [references/push-json.md](references/push-json.md).
 Do not `git add` anything under `devops-skill/thoughts/` (both folders are in `.gitignore`).
 
-**Only QA may give the OK to push.** Review Satisfied, Security Clear,
-and the Orchestrator do not authorize a push. Do not push, publish,
-open or update a PR, merge, or submit until QA marks PASS. Every
-change except review-bot feedback fixes (see
-[qa-publish-policy.md](references/qa-publish-policy.md), "Review-bot
-feedback") gets Security's review first; Clear does not authorize a
-push either.
+**Default publish path:** Review Satisfied → Security Clear → QA PASS,
+then the human authorizes the push. The **human's word is final**: if
+they say push (or `/devops push-ok`, same meaning), do that push — do
+not refuse it. Review Satisfied, Security Clear, and the Orchestrator
+alone still do not authorize a push. Every change except review-bot
+feedback fixes (see [qa-publish-policy.md](references/qa-publish-policy.md),
+"Review-bot feedback") still gets Security's review first; Clear does
+not authorize a push either.
+
+### Human authority and `/devops` (no restrictions)
+
+- **Parse freely.** `/devops` with any wording is a human directive:
+  parse the intent with no restricted vocabulary and do it. Known
+  forms (`status`, `push-ok`, `allow-branch`, …), **skill modes**
+  (`question`, `mind-map`, `clean`, `goal`, … with `--mode`), and
+  free-form chat ("push", "how does X work", "clean up src") are the
+  same class of order.
+- **Use the system, not a prose dump.** Skill modes return an
+  orchestration card that names MCP tools (`mindmap_*`, `cleanup_*`,
+  `story_*`, …) and how seats should behave. Prefer those tools over
+  pasting large file bodies into chat.
+  [agent-commands.md](references/agent-commands.md).
+- **Do not stop development.** A `/devops` command or chat alias never
+  pauses or cancels the current goal loop; apply it and keep working.
+- **Chat equals slash.** Saying `push` in chat is the same as
+  `/devops push-ok`. Plain wording and slash forms authorize the same
+  actions.
+- **Human is final.** Anything the human says is final and must be
+  done. Do not second-guess, delay, or refuse a human directive by
+  citing a gate, a seat, or a process rule.
 
 ### Reviewer entrypoint (before QA)
 
@@ -158,10 +186,11 @@ push either.
    it. The authors are the union of the Handoff `Authors:` and the
    Push JSON `authors` of every cherry-picked SHA, the Orchestrator's
    conflict fixes included; a seat is refused when its seat id or its
-   handle is in that set. The Orchestrator pushes only after the human
-   authorizes that push ([thoughts-layout.md](references/thoughts-layout.md),
-   One push). Check `git diff --stat <integration-base>...HEAD` for
-   process files after any strip. Do not commit process notes.
+   handle is in that set. The Orchestrator pushes when the human
+   authorizes that push (chat "push" = `/devops push-ok`; human word is
+   final) ([thoughts-layout.md](references/thoughts-layout.md), One
+   push). Check `git diff --stat <integration-base>...HEAD` for process
+   files after any strip. Do not commit process notes.
 
 ### Virtual PR and virtual git
 
@@ -263,7 +292,9 @@ ticket comment.
 
 ## Team roles
 
-Label every substantive reply with the active role, e.g. `[Planner]`; a spawned seat adds its id, e.g. `[Coder coder-0a0a0a]`.
+Label every substantive reply with the active job and agent hash,
+e.g. `[Planner]`; a spawned seat adds both, e.g.
+`[Coder agent-0a0a0a]`.
 
 - **Planner** — `/goal` when the human named X. Plans in
   `devops-skill/thoughts/non-final/`; durable docs in `docs/`.
@@ -317,13 +348,23 @@ Author.
 | **qa** | QA, CI Engineer, Verifier | Security clear (overlap allowed) |
 | **docs** | Documentation, Communicator | Implementation is documentable |
 
+Trigger one pod with `/devops stage --mode research|…|qa [goal]`, or
+the **full loop** with `/devops stage --mode full|loop [goal]` /
+`/devops goal --mode loop` / `/goal`: research → implement → review →
+security → qa → docs until Security Clear and `Publish gate: PASS`,
+then the Orchestrator **notifies the human and waits** for `push` /
+`/devops push-ok` (does not push on its own). Allocate first:
+`/devops allocate --mode pod` then `agent`. Seats use the same
+`/devops` skill modes as the human
+([agent-commands.md](references/agent-commands.md)).
+
 ```text
 research  ∥  implement  ∥  review   (department rules apply)
 security  →  qa  →  docs
-push      →  NEVER until QA marks PASS
-            After PASS: thoughts → final/ (local); the Orchestrator
-            pushes only after the human authorizes that push, keeping
-            approved Coder commits
+push      →  default: after QA PASS + human go
+            Human "push" / /devops push-ok is final and authorizes now;
+            do not stop development for /devops
+            After PASS: thoughts → final/ (local); keep approved Coder commits
 repeat    →  until PASS; QA blocked/send-back → triage;
             the Researcher joins the Coder who picks it up
 ```
@@ -337,9 +378,12 @@ from Coders and Researchers go first to the standing Review, Security
 and QA subagents by topic. Orchestrator is the only role that asks The
 Client unless the human spoke first.
 
-Treat human instructions as a **side sprint**. Pause only conflicting
-work. Start from research, then code. Stay on the current **real**
-branch. An interrupt does **not** authorize a push.
+Treat human instructions (including `/devops` and chat aliases) as
+**final directives**, not a pause. Apply them immediately, keep the
+current development loop running, and only redirect seats whose work
+the directive itself contradicts. Stay on the current **real** branch
+unless the human named another. A human "push" / `/devops push-ok`
+**does** authorize that push.
 
 ## Output rules
 

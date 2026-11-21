@@ -1,4 +1,4 @@
-export type Action =
+type Action =
   | { kind: 'publish'; what: string }
   | { kind: 'branch'; name: string | undefined; what: string }
 
@@ -9,6 +9,16 @@ const blankQuotes = (command: string): string =>
   command.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''")
 
 const isAssignment = (word: string): boolean => /^[A-Za-z_][A-Za-z0-9_]*=/.test(word)
+
+/**
+ * The command's simple commands: quotes blanked, split at the shell operators,
+ * each trimmed, empties dropped.
+ */
+const commandSegments = (command: string): string[] =>
+  blankQuotes(command)
+    .split(/&&|\|\||;|\||\n|\(|\)|`|\$\(/)
+    .map(part => part.trim())
+    .filter(part => part !== '')
 
 function gitSubcommand(words: string[]): { sub: string | undefined; rest: string[] } {
   let i = 1
@@ -40,8 +50,7 @@ function classifySegment(segment: string): Action | undefined {
 }
 
 export function classify(command: string): Action[] {
-  return blankQuotes(command)
-    .split(/&&|\|\||;|\||\n|\(|\)|`|\$\(/)
+  return commandSegments(command)
     .map(classifySegment)
     .filter((action): action is Action => action !== undefined)
 }
@@ -57,6 +66,36 @@ export function splitArgs(args: string): { word: string; rest: string } {
   return space === -1 ? { word: trimmed, rest: '' } : { word: trimmed.slice(0, space), rest: trimmed.slice(space).trim() }
 }
 
+const BRANCH_INTENT = /^(allow-branch|branch|cut(?:\s+a)?\s+branch)\s+/i
+
+/** Map free-form /devops wording (and chat aliases like "push") onto a known subcommand. */
+export function interpretDevopsIntent(args: string): { word: string; rest: string } | undefined {
+  const trimmed = args.trim()
+  if (trimmed === '') return { word: 'status', rest: '' }
+  const lower = trimmed.toLowerCase()
+  if (/^(push-ok|push|go|publish|ship)(?:\s|$)/.test(lower)) {
+    return { word: 'push-ok', rest: '' }
+  }
+  if (/^(push-reset|withdraw|revoke(?:\s+push)?)(?:\s|$)/.test(lower)) {
+    return { word: 'push-reset', rest: '' }
+  }
+  if (/^(allow-branch|branch|cut(?:\s+a)?\s+branch)\b/.test(lower)) {
+    const name = branchNameOf(trimmed.replace(BRANCH_INTENT, '').trim())
+    return { word: 'allow-branch', rest: name ?? '' }
+  }
+  if (/^gates?\s+(on|off)\b/.test(lower)) {
+    return { word: 'gates', rest: lower.includes('off') ? 'off' : 'on' }
+  }
+  if (/^monitor\s+(on|off)\b/.test(lower)) {
+    return { word: 'monitor', rest: lower.includes('off') ? 'off' : 'on' }
+  }
+  if (/^comments?\s+(warn|strict|off)\b/.test(lower)) {
+    const mode = /warn|strict|off/.exec(lower)?.[0] ?? ''
+    return { word: 'comments', rest: mode }
+  }
+  return undefined
+}
+
 /** Words as a shell splits them: "a b" and 'a b' stay one word, quotes removed. */
 export function shellWords(text: string): string[] {
   const words = [...text.matchAll(/"(?<double>(?:[^"\\]|\\.)*)"|'(?<single>[^']*)'|(?<bare>\S+)/g)]
@@ -70,7 +109,7 @@ export function branchNameOf(text: string): string | undefined {
 }
 
 export function classifySegments(command: string): string[] {
-  return blankQuotes(command).split(/&&|\|\||;|\||\n|\(|\)|`|\$\(/).map(part => part.trim()).filter(part => part !== '')
+  return commandSegments(command)
 }
 
 export function commitInfo(command: string): { isCommit: boolean; stagesAll: boolean } {

@@ -8,15 +8,21 @@ const assert = {
 
 const QA_DIR = '/work/devops-skill/thoughts/non-final'
 
-function engine(on: any, note: string | undefined) {
+/** Map-backed plugin state, and the session root (/work) the helpers read files from. */
+function wireState(on: any): Map<string, unknown> {
   const state = new Map<string, unknown>()
   on('state.get', (_: unknown, e: { key: string }) => ({ value: { value: state.get(e.key), version: 1 } }))
   on('state.set', (_: unknown, e: { key: string; value: unknown }) => {
     state.set(e.key, e.value)
     return { value: { isSet: true, version: 2 } }
   })
-  on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: '/work' }))
+  return state
+}
+
+function engine(on: any, note: string | undefined) {
+  const state = wireState(on)
+  on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
   on('command.register', () => ({ value: { command: 'devops' } }))
   on('tool.register', () => ({ value: { tool: 'mcp__devops-multi-agent-team__devops_brief' } }))
   on('ui.status', () => ({ value: undefined }))
@@ -39,8 +45,8 @@ test('a push is refused when no QA note exists', async ($, on) => {
   expect(noQa.isError ?? noQa.deny).toBeTruthy()
 })
 
-test('with PASS recorded the person still has to authorize, and the grant is consumed', async ($, on) => {
-  const state = engine(on, 'Publish gate: PASS\n')
+test('human authorization alone allows one push; the grant is consumed', async ($, on) => {
+  const state = engine(on, undefined)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
 
   const before = await $.tool.call({ tool: 'Bash', command: 'git push' })
@@ -68,14 +74,8 @@ test('branch creation is refused until the person allows that name, and reads pa
 })
 
 function engineWithChecks(on: any, results: { isError: boolean }[]) {
-  const state = new Map<string, unknown>()
+  const state = wireState(on)
   const written: string[] = []
-  on('state.get', (_: unknown, e: { key: string }) => ({ value: { value: state.get(e.key), version: 1 } }))
-  on('state.set', (_: unknown, e: { key: string; value: unknown }) => {
-    state.set(e.key, e.value)
-    return { value: { isSet: true, version: 2 } }
-  })
-  on('session.root', () => ({ value: '/work' }))
   on('fs.exists', () => ({ value: true }))
   on('fs.read', (_: unknown, e: { path: string }) => {
     if (e.path.endsWith('languages.json')) return { value: JSON.stringify({ languages: [{ validate: ['cargo test --locked', 'npm run lint', 'pytest -q'] }] }) }
@@ -119,14 +119,8 @@ test('commands that are not known checks are left alone, and the monitor can be 
 })
 
 function engineWithAudit(on: any, audit: { blocking: number; nonBlocking: number; findings: { file: string; line: number; remark: string }[] }) {
-  const state = new Map<string, unknown>()
+  const state = wireState(on)
   const calls: string[][] = []
-  on('state.get', (_: unknown, e: { key: string }) => ({ value: { value: state.get(e.key), version: 1 } }))
-  on('state.set', (_: unknown, e: { key: string; value: unknown }) => {
-    state.set(e.key, e.value)
-    return { value: { isSet: true, version: 2 } }
-  })
-  on('session.root', () => ({ value: '/work' }))
   on('fs.exists', () => ({ value: false }))
   on('fs.read', () => { throw new Error('missing') })
   on('process.run', (_: unknown, e: { argv: string[] }) => {

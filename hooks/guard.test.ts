@@ -1,6 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
-import { branchNameOf, classify, commitInfo, shellWords, splitArgs, verdictOf } from './guard'
+import {
+  branchNameOf, classify, commitInfo, interpretDevopsIntent, shellWords, splitArgs, verdictOf,
+} from './guard'
 
 test('git push and gh pr publishing are found, however they are spelled', () => {
   expect(classify('git push origin HEAD')).toEqual([{ kind: 'publish', what: 'git push' }])
@@ -46,6 +48,18 @@ test('command arguments and branch names are parsed strictly', () => {
   expect(branchNameOf('a..b')).toBeUndefined()
   expect(branchNameOf('x; rm -rf /')).toBeUndefined()
   expect(branchNameOf('-bad')).toBeUndefined()
+})
+
+test('chat aliases and free-form /devops wording map to gate commands', () => {
+  expect(interpretDevopsIntent('push')).toEqual({ word: 'push-ok', rest: '' })
+  expect(interpretDevopsIntent('go')).toEqual({ word: 'push-ok', rest: '' })
+  expect(interpretDevopsIntent('publish')).toEqual({ word: 'push-ok', rest: '' })
+  expect(interpretDevopsIntent('withdraw')).toEqual({ word: 'push-reset', rest: '' })
+  expect(interpretDevopsIntent('cut a branch topic/x')).toEqual({
+    word: 'allow-branch', rest: 'topic/x',
+  })
+  expect(interpretDevopsIntent('gates off')).toEqual({ word: 'gates', rest: 'off' })
+  expect(interpretDevopsIntent('something novel')).toBeUndefined()
 })
 
 test('a commit is recognised, and whether it stages everything', () => {

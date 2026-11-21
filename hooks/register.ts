@@ -2,13 +2,17 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Found } from '../types'
 import {
-  branchNameOf, classify, classifySegments, commitInfo, shellWords, splitArgs, verdictOf,
+  branchNameOf, classify, classifySegments, commitInfo, interpretDevopsIntent, shellWords,
+  splitArgs, verdictOf,
 } from './guard'
+import {
+  helpCatalog, interpretSkillIntent, isGateWord, isSkillWord, orchestrationCard, parseSkillMode,
+  scriptArgsFor, scriptNameFor, skillWords, type SkillMode,
+} from './modes'
 import { BRIEF_SPEC, BRIEF_TOOL, briefFor, card, readStandards, setupClaude } from './orchestrate'
 
 const PLUGIN = 'devops-multi-agent-team'
 const SCRIPT_TIMEOUT_MS = 20000
-const CONFIG_WRITES = ['set', 'unset', 'add', 'remove', 'rule']
 const THOUGHT_DIRS = ['devops-skill/thoughts/non-final', 'devops-skill/thoughts/final']
 const LANGUAGES_REF = { plugin: 'devops-multi-agent-team', key: 'languages' } as const
 const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
@@ -16,6 +20,7 @@ const LINT_MODE_REF = { plugin: 'devops-multi-agent-team', key: 'commentAudit' }
 const BRIEFED_REF = { plugin: 'devops-multi-agent-team', key: 'briefed' } as const
 const STANDARDS_REF = { plugin: 'devops-multi-agent-team', key: 'standards' } as const
 const STANDARDS_FILE_REF = { plugin: 'devops-multi-agent-team', key: 'standardsFile' } as const
+const PUSH_AUTHORIZED_REF = { plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const
 
 /** The standards summary, read again only when .devops/standards.json changed since the last read. */
 async function currentStandards($: EngineInterface, root: string): Promise<string> {
@@ -33,26 +38,6 @@ const MINDMAP_OVERVIEW = '.devops/mindmap/OVERVIEW.md'
 const MINDMAP_TEXT_OVERRIDE = '.devops/mindmap/text.json'
 /** Keeps the session prompt small: the overview is about forty lines, this is a guard against a huge README summary. */
 const MAX_OVERVIEW_CHARS = 4000
-
-
-const HELP = [
-  '/devops              status: languages, gates, QA verdict',
-  '/devops languages    what was detected and in which layer',
-  '/devops setup        how to install the skill and profile in this project',
-  '/devops setup claude [--dry-run] [--share-config] (you) set this project up for Claude Code:',
-  '                     only .devops/ and the thought folders; the plugin supplies the rest',
-  '/devops brief [TOPIC | role NAME]  one section of the skill, or a seat\'s brief',
-  '/devops push-ok      (you) allow ONE push once QA has recorded PASS',
-  '/devops push-reset   (you) withdraw that permission',
-  '/devops allow-branch NAME   (you) allow creating that git branch',
-  '/devops gates on|off (you) turn the push and branch gates on or off',
-  '/devops monitor on|off (you) turn the failed-check monitor on or off',
-  '/devops comments warn|strict|off (you) lint gate on git commit (comment and code rules): ' +
-    'warn (default), refuse a commit with blocking findings, or off',
-  '/devops config [show|get PATH] read the project standards (line length, limits, lint rules)',
-  '/devops config set|unset|add|remove PATH [VALUE] | rule RULE error|off (you) change ' +
-    '.devops/standards.json; checked before it is written',
-].join('\n')
 
 async function mindmapText($: EngineInterface, root: string): Promise<Record<string, string>> {
   const parse = (raw: unknown): Record<string, string> => {
@@ -190,34 +175,68 @@ function auditContext(audit: AuditSummary): string {
   return `${PLUGIN} lint: ${counts}. ${advice} ${first}`
 }
 
+function resolveSkill(word: string, rest: string, raw: string): SkillMode | undefined {
+  if (isSkillWord(word)) return parseSkillMode(word, rest)
+  if (isGateWord(word) || interpretDevopsIntent(raw) !== undefined) return undefined
+  return interpretSkillIntent(raw)
+}
+
+async function runPluginScript(
+  $: EngineInterface,
+  script: string,
+  args: string[],
+): Promise<string | undefined> {
+  const root = await $.session.root()
+  const command = ['node', `${$.plugin.root}/scripts/${script}`, ...args, '--dest', root]
+  const ran = await $.process
+    .run(command, { timeoutMs: SCRIPT_TIMEOUT_MS })
+    .catch(() => undefined)
+  if (ran === undefined) return undefined
+  const out = `${ran.stdout}${ran.stderr}`.trim()
+  return out === '' ? undefined : out
+}
+
+async function runSkillMode($: EngineInterface, skill: SkillMode): Promise<string> {
+  const cardText = orchestrationCard(skill)
+  const script = scriptNameFor(skill)
+  const args = scriptArgsFor(skill)
+  if (script === undefined || args === undefined) return cardText
+  const out = await runPluginScript($, script, args)
+  if (out === undefined) return cardText
+  return `${cardText}\n\n--- tool output ---\n${out}`
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'devops',
-      description: 'DevOps multi-agent team: languages, gates, QA verdict',
-      argumentHint: '[languages|setup [claude]|brief [TOPIC|role NAME]|push-ok|push-reset|' +
-        'allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off|config ...]',
+      description: 'DevOps multi-agent team: gates, skill modes (question, mind-map, clean, …)',
+      argumentHint: '[status|question|mind-map|clean|goal|story|…|--mode MODE|push-ok|config …]',
     })
     await $.tool.register(BRIEF_SPEC).catch(() => undefined)
     await currentStandards($, await $.session.root())
     const found = await detect($)
-    await $.state.set({ plugin: 'devops-multi-agent-team', key: 'languages' } as const, found.map(f => f.id))
+    await $.state.set(LANGUAGES_REF, found.map(f => f.id))
     $.ui.status(found.length === 0 ? undefined : `devops: ${found.slice(0, 4).map(f => f.id).join('+')}`)
 
     return next(e)
   })
 
   on('command.run', { command: 'devops' }, async ($, e) => {
-    const { word, rest } = splitArgs(e.args)
-    const isPerson = e.origin?.kind === 'composer'
-    const personOnly = (): { text: string } | undefined =>
-      isPerson ? undefined : { text: `/devops ${word} changes a gate, so only you can run it by typing it; an agent cannot.` }
+    const split = splitArgs(e.args)
+    const skill = resolveSkill(split.word, split.rest, e.args)
+    if (skill !== undefined) return { text: await runSkillMode($, skill) }
+
+    const mapped = isGateWord(split.word)
+      ? split
+      : (interpretDevopsIntent(e.args) ?? split)
+    const { word, rest } = mapped
 
     if (word === '' || word === 'status') {
-      const gates = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true
-      const authorized = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const)).value ?? false
+      const gates = (await $.state.get(GATES_REF)).value ?? true
+      const authorized = (await $.state.get(PUSH_AUTHORIZED_REF)).value ?? false
       const branches = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'allowedBranches' } as const)).value ?? []
-      const languages = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'languages' } as const)).value ?? []
+      const languages = (await $.state.get(LANGUAGES_REF)).value ?? []
       const qa = await latestQaVerdict($)
       return {
         text: [
@@ -225,8 +244,8 @@ export const register: Register = on => {
           `gates: ${gates ? 'on' : 'OFF'}`,
           `check monitor: ${((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) ? 'on' : 'OFF'}; failing checks now: ${Object.entries((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const)).value ?? {}).map(([k, n]) => `${k} x${n}`).join(', ') || 'none'}`,
           `latest QA note: ${qa.verdict ?? 'none'}${qa.file ? ` (${qa.file.split('/').pop()})` : ''}`,
-          `push authorized by you: ${authorized ? 'yes (one push)' : 'no'}`,
-          `branches you allowed: ${branches.length === 0 ? 'none' : branches.join(', ')}`,
+          `push authorized (human / chat "push"): ${authorized ? 'yes (one push)' : 'no'}`,
+          `branches allowed: ${branches.length === 0 ? 'none' : branches.join(', ')}`,
         ].join('\n'),
       }
     }
@@ -239,8 +258,6 @@ export const register: Register = on => {
       }
     }
     if (word === 'setup' && rest.split(/\s+/)[0] === 'claude') {
-      const refused = personOnly()
-      if (refused) return refused
       return { text: await setupClaude($, rest.split(/\s+/).slice(1)) }
     }
     if (word === 'brief') {
@@ -264,20 +281,17 @@ export const register: Register = on => {
       }
     }
     if (word === 'push-ok') {
-      const refused = personOnly()
-      if (refused) return refused
-      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const, true)
-      return { text: 'One push is allowed once the latest QA note says "Publish gate: PASS". It is consumed by that push.' }
+      await $.state.set(PUSH_AUTHORIZED_REF, true)
+      return {
+        text: 'One push is allowed now (human word is final; same as saying "push" in chat). '
+          + 'It is consumed by that push. Keep development running.',
+      }
     }
     if (word === 'push-reset') {
-      const refused = personOnly()
-      if (refused) return refused
-      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const, false)
+      await $.state.set(PUSH_AUTHORIZED_REF, false)
       return { text: 'Push permission withdrawn.' }
     }
     if (word === 'allow-branch') {
-      const refused = personOnly()
-      if (refused) return refused
       const name = branchNameOf(rest)
       if (name === undefined) return { text: 'Usage: /devops allow-branch NAME (letters, digits, . _ / -).' }
       const current = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'allowedBranches' } as const)).value ?? []
@@ -285,18 +299,12 @@ export const register: Register = on => {
       return { text: `Creating the git branch "${name}" is allowed.` }
     }
     if (word === 'comments') {
-      const refused = personOnly()
-      if (refused) return refused
       if (rest !== 'warn' && rest !== 'strict' && rest !== 'off') return { text: 'Usage: /devops comments warn|strict|off' }
-      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const, rest)
+      await $.state.set(LINT_MODE_REF, rest)
       return { text: `Comment audit on commit: ${rest}.` }
     }
     if (word === 'config') {
       const args = shellWords(rest)
-      if (CONFIG_WRITES.includes(args[0] ?? '')) {
-        const refused = personOnly()
-        if (refused) return refused
-      }
       const root = await $.session.root()
       const script = `${$.plugin.root}/scripts/devops-config.mjs`
       const command = ['node', script, ...(args.length > 0 ? args : ['show']), '--dest', root]
@@ -307,24 +315,32 @@ export const register: Register = on => {
       return { text: `${ran.stdout}${ran.stderr}`.trim() || 'devops-config printed nothing.' }
     }
     if (word === 'monitor') {
-      const refused = personOnly()
-      if (refused) return refused
       if (rest !== 'on' && rest !== 'off') return { text: 'Usage: /devops monitor on|off' }
       await $.state.set({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const, rest === 'on')
       return { text: `Check monitor ${rest}.` }
     }
     if (word === 'gates') {
-      const refused = personOnly()
-      if (refused) return refused
       if (rest !== 'on' && rest !== 'off') return { text: 'Usage: /devops gates on|off' }
-      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'gates' } as const, rest === 'on')
+      await $.state.set(GATES_REF, rest === 'on')
       return { text: `Gates ${rest}.` }
     }
-    return { text: HELP }
+    const fallback = interpretSkillIntent(e.args)
+    if (fallback !== undefined) return { text: await runSkillMode($, fallback) }
+    return {
+      text: [
+        'Unrecognized /devops wording. Prefer a skill mode so tools run instead of plain text:',
+        `  ${skillWords().join(', ')}`,
+        'Example: /devops question --mode symbol total',
+        '          /devops mind-map --mode build',
+        '          /devops clean --mode brief "split functions over 40 lines in src"',
+        'Human wording is still final: parse the intent, map it to a mode, and keep working.',
+        helpCatalog('all'),
+      ].join('\n'),
+    }
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    const gatesOn = ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true) !== false
+    const gatesOn = ((await $.state.get(GATES_REF)).value ?? true) !== false
     const actions = gatesOn ? classify(e.command) : []
     let consumeAuthorization = false
 
@@ -338,19 +354,22 @@ export const register: Register = on => {
       }
     }
     if (actions.some(action => action.kind === 'publish')) {
-      const authorized = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const)).value ?? false
-      const qa = await latestQaVerdict($)
-      if (qa.verdict !== 'PASS') {
-        return { deny: `${PLUGIN}: ${actions.find(a => a.kind === 'publish')?.what} is refused. Only QA may give the OK to push: no qa-*.md note under devops-skill/thoughts says "Publish gate: PASS" (latest: ${qa.verdict ?? 'none'}).` }
-      }
+      const authorized = (await $.state.get(PUSH_AUTHORIZED_REF)).value ?? false
+      // Human word is final: push-ok or chat "push" allows one push.
       if (!authorized) {
-        return { deny: `${PLUGIN}: QA recorded PASS, but the person has not authorized a push. Ask them to type /devops push-ok.` }
+        const qa = await latestQaVerdict($)
+        const what = actions.find(a => a.kind === 'publish')?.what
+        return {
+          deny: `${PLUGIN}: ${what} is refused until the human `
+            + 'authorizes it (say "push" in chat or /devops push-ok). '
+            + `Latest QA note: ${qa.verdict ?? 'none'}.`,
+        }
       }
       consumeAuthorization = true
     }
 
     const commit = commitInfo(e.command)
-    const auditMode = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const)).value ?? 'warn'
+    const auditMode = (await $.state.get(LINT_MODE_REF)).value ?? 'warn'
     const audit = commit.isCommit && auditMode !== 'off' ? await auditCommit($, commit.stagesAll) : undefined
     if (audit !== undefined && auditMode === 'strict' && audit.blocking > 0) return { deny: auditContext(audit) }
 
@@ -358,8 +377,13 @@ export const register: Register = on => {
     if (audit !== undefined && ran.deny === undefined && audit.blocking + audit.nonBlocking > 0) {
       return { ...ran, context: [...(ran.context ?? []), auditContext(audit)] }
     }
-    if (consumeAuthorization && ran.deny === undefined) await $.state.set({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const, false)
-    if (ran.deny !== undefined || ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) === false) return ran
+    if (consumeAuthorization && ran.deny === undefined) {
+      await $.state.set(PUSH_AUTHORIZED_REF, false)
+    }
+    if (ran.deny !== undefined) return ran
+    const monitorRef = { plugin: 'devops-multi-agent-team', key: 'monitor' } as const
+    const monitor = (await $.state.get(monitorRef)).value ?? true
+    if (monitor === false) return ran
 
     const check = await checkRunBy($, e.command)
     if (check === undefined) return ran

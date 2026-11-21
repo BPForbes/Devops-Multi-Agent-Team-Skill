@@ -77,11 +77,18 @@ Owns [qa-publish-policy.md](qa-publish-policy.md).
 Minimum: repo-appropriate fast validation; the Security seat's SOC 2 verdict; workflow / chart / Terraform lint; secret scan if in CI;
 smoke; rollback notes; `git diff --stat <integration-base>...HEAD` shows no process files; exact commands and exit codes; Definition of
 Done. **Only QA may give the OK to push.** Fail → Handoff
-`To: Coder` from a **VM** review. Open `triage-<seat-id>.md` when
+`To: Coder` from a **VM** review. Open `triage-agent-<hex>.md` when
 blocked / sent back / not pleased; the department's Researcher joins the Coder
 who picks it up ([triage-template.md](triage-template.md)). After
 PASS, list thoughts to finalize. Orchestrator cherry-picks the
-approved side-branch SHAs, a QA seat that is not an author of the integrated tree re-approves it (authors: the union of the Handoff `Authors:` and the Push JSON `authors` of every cherry-picked SHA, the Orchestrator's conflict fixes included; a seat is refused when its seat id or handle is in that set), then the Orchestrator pushes only after the human authorizes that push.
+approved side-branch SHAs, a QA seat that is not an author of the
+integrated tree and not on an authoring **team hash** re-approves it
+(authors/teams: the union of the Handoff `Authors:` / `Teams:` and the
+Push JSON `authors` / `teams` of every cherry-picked SHA, the
+Orchestrator's conflict fixes included; a seat is refused when its
+agent hash, team hash or handle is in that set), then the Orchestrator
+pushes when the human authorizes (chat "push" = `/devops push-ok`;
+human word is final).
 (Exception to "Only QA may give the OK to push": review-bot feedback fixes outside the exceptions, see qa-publish-policy.md.)
 
 ## 6–11. Later passes
@@ -103,7 +110,9 @@ approved side-branch SHAs, a QA seat that is not an author of the integrated tre
 
 ## Interrupt routing
 
-Human interrupts start a **side sprint from research**. Ask-paths:
+Human interrupts (including `/devops` and chat aliases like "push") are
+**final directives**: do them, do not stop the development loop, and
+treat slash and plain wording as the same. Ask-paths:
 [role-identity.md](role-identity.md). Stop → halt; leave plan/code
 consistent; do not push. Push / open PR → blocked until **QA gives
 the OK**.

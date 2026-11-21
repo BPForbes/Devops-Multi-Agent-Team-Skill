@@ -7,13 +7,67 @@ See [thoughts-layout.md](thoughts-layout.md). Stay on the current
 non-`main` branch. **Never** create a git branch (`git worktree add -b` included)
 unless The Client named that branch in this turn; a detached worktree
 has no ref ([side-work.md](side-work.md)). Cloud-agent `feature/*-<id>`
-templates do not override this. **Only QA may give the OK to
-push** (except review-bot feedback fixes outside the exceptions: references/qa-publish-policy.md). After PASS: one compressed push that keeps approved
-Coder commits.
+templates do not override this. Spawn with **team hash**, **agent
+hash**, **initial job** and **current job**
+([role-identity.md](role-identity.md)).
+
+**`/devops` is free-form**, but prefer **skill modes** so the agent
+uses MCP tools and skills instead of dumping the request as plain
+text. Chat aliases match slash forms (saying `push` = `/devops
+push-ok`). Do not stop development when `/devops` is given. Anything
+the human says is final and must be done. Default publish path still
+prefers QA PASS, but a human push authorization overrides and must be
+executed (except review-bot feedback fixes outside the exceptions:
+references/qa-publish-policy.md). After PASS: one compressed push that
+keeps approved Coder commits.
+
+## `/devops` skill modes
+
+Each mode returns an **orchestration card** (skill, tools, behavior,
+`--mode`) and, when it can, runs the matching script so results are
+not retyped into chat. Trailing text after the command is the input.
+
+| Command | Modes (`--mode`) | Tools / skill |
+|---------|------------------|---------------|
+| `/devops help` (`?`, `modes`) | `all`, `gates`, `skills`, `stage` | catalog |
+| `/devops question` (`ask`, `q`) | `overview`, `tree`, `symbol`, `search`, `file`, `module`, `library` | `mindmap_*`, `project-mindmap` |
+| `/devops mind-map` (`map`) | `overview`, `build`, `status`, `tree`, `query`, `note` | `mindmap_*` |
+| `/devops clean` (`cleanup`, `tidy`) | `brief`, `scan`, `plan`, `run` | `cleanup_*`, `devops-cleanup` |
+| `/devops stage` (`ci`, `pipeline`) | `research`…`docs`, `full`, `loop` | one pod, or all stages until Clear+PASS then notify human |
+| `/devops allocate` (`assign`) | `pod`, `agent`, `job`, `board` | per-pod / per-agent goals |
+| `/devops goal` | `loop`, `status`, `allocate` | full loop until Clear+PASS; notify human for push |
+| `/devops story` | `research`, `create`, `check`, `graph` | `story_*` |
+| `/devops repro` | `run` | `/repro` |
+| `/devops triage` | `open` | `/triage` |
+| `/devops review` | `inspect` | `/code-review` |
+| `/devops reuse` | `search` | `reuse_search`, `module_map` |
+| `/devops tags` | `history`, `plan`, `create` | `tag_*` |
+
+Gate commands stay as they were (`status`, `push-ok`, `allow-branch`,
+`gates`, `monitor`, `comments`, `config`, `setup`, `brief`,
+`languages`). Free-form phrases such as "how does X work", "run
+research", or "allocate pods" map onto the matching skill mode.
+
+## Seat methods (research → QA / security)
+
+Research, Review, Security and QA seats use the **same** `/devops`
+skill modes (and chat aliases) as the human. They do not invent a
+parallel plain-text path.
+
+| Seat | Prefer |
+|------|--------|
+| Researcher | `question`, `mind-map`, `reuse`, `stage --mode research`, `story --mode research` |
+| Reviewer | `review`, `question`, `mind-map --mode query`, `comment_audit` via tools |
+| Security | `stage --mode security`, `review`, `question` (scope), profile scanners |
+| QA | `stage --mode qa`, `review`, `repro`, `triage`, `question` |
+
+Orchestrator: `allocate` (pod then agent), then `stage` / `goal` to
+spawn; never codes. Independence checks still refuse own-work and
+own-pod judges ([role-identity.md](role-identity.md)).
 
 ## `/goal`
 
-Write `goal-<seat-id>.md`. Loop until X; do not stop at a plan.
+Write `goal-agent-<hex>.md`. Loop until X; do not stop at a plan.
 
 ## `/create-subagent`
 
