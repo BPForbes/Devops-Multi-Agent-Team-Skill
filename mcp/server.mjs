@@ -100,13 +100,15 @@ const svcs = { description: '"auto" (detect), "none", or a list of service ids f
 
 const BOARD_FILE = path.join('devops-skill', 'thoughts', 'non-final', 'board.json')
 const now = () => new Date().toISOString()
+const goalFilter = args => (args.goal === undefined ? {} : { goal: args.goal })
 const GOAL_STATE = {
   type: 'string', enum: ['backlog', 'ready', 'in_progress', 'review', 'qa', 'security', 'done'],
 }
 
 function readBoard(args) {
   try {
-    return normalizeBoard(JSON.parse(fs.readFileSync(path.join(projectDir(args), BOARD_FILE), 'utf8')))
+    const text = fs.readFileSync(path.join(projectDir(args), BOARD_FILE), 'utf8')
+    return normalizeBoard(JSON.parse(text))
   } catch (error) {
     if (error.code === 'ENOENT') return emptyBoard()
     throw error
@@ -774,7 +776,7 @@ const TOOLS = [
   },
   {
     name: 'thread_open',
-    description: 'Open a virtual PR thread on a goal item: a question or review point for the seats to answer.',
+    description: 'Open a virtual PR thread on a goal item: a question or review point.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -797,12 +799,20 @@ const TOOLS = [
     description: 'Reply to an open thread. Any seat may reply, so questions go back and forth.',
     inputSchema: {
       type: 'object',
-      properties: { dest, thread: { type: 'string' }, agent: { type: 'string' }, team: { type: 'string' }, body: { type: 'string' } },
+      properties: {
+        dest,
+        thread: { type: 'string' },
+        agent: { type: 'string' },
+        team: { type: 'string' },
+        body: { type: 'string' },
+      },
       required: ['thread', 'agent', 'team', 'body'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => ({ board: replyThread(board, { ...args, at: now() }) })),
+    run: args => boardChange(args, board => ({
+      board: replyThread(board, { ...args, at: now() }),
+    })),
   },
   {
     name: 'thread_resolve',
@@ -814,7 +824,9 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => ({ board: resolveThread(board, { ...args, at: now() }) })),
+    run: args => boardChange(args, board => ({
+      board: resolveThread(board, { ...args, at: now() }),
+    })),
   },
   {
     name: 'thread_list',
@@ -825,18 +837,18 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true },
-    run: args => ({ threads: threadsFor(readBoard(args), args.goal === undefined ? {} : { goal: args.goal }) }),
+    run: args => ({ threads: threadsFor(readBoard(args), goalFilter(args)) }),
   },
   {
     name: 'blame_list',
-    description: 'The send-backs on record, with the author each one returned work to. Filter by goal.',
+    description: 'The send-backs on record, with the author each one returned work to.',
     inputSchema: {
       type: 'object',
       properties: { dest, goal: { type: 'string' } },
       additionalProperties: false,
     },
     annotations: { readOnlyHint: true },
-    run: args => ({ blame: blameFor(readBoard(args), args.goal === undefined ? {} : { goal: args.goal }) }),
+    run: args => ({ blame: blameFor(readBoard(args), goalFilter(args)) }),
   },
   {
     name: 'handoff_close',
