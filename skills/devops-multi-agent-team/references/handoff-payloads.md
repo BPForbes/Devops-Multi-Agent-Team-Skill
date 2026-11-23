@@ -8,6 +8,27 @@ record of who asked for what, for which goal, and which pod.
 
 Read this file. Do not paste it into agent prompts.
 
+## Transport: the orchestration server
+
+Seats do not message each other, and do not write handoff files for
+each other. Every hand-off goes through the orchestration server, which
+is an MCP server (`mcp/server.mjs`). Its tools are the only writers of the
+goal board ([board.md](board.md)):
+
+| Tool | Who calls it | What it does |
+|------|--------------|--------------|
+| `handoff_send` | the sending seat (`caller` = its agent hash) | checks the payload with the validator and records it on the board |
+| `handoff_route` | Orchestration | picks the receiving seat for an unrouted triage |
+| `handoff_inbox` | the receiving seat | lists the handoffs addressed to it that are not done |
+| `handoff_ack` | the addressee | acknowledges a handoff it has read |
+| `handoff_close` | the addressee | marks the handoff done once its work is finished |
+
+The payload is the request body (the DTO). Its tool `inputSchema` is the
+same shape the validator checks, so a malformed payload is refused before it
+is recorded. A handoff's state moves `unrouted` (triage, no seat yet) or
+`sent`, then `acked`, then `done`. Only the sending seat can send, and only
+the addressee can acknowledge or close.
+
 ## Kinds
 
 | `kind` | From (signs) | To | Pod rule |
@@ -69,8 +90,8 @@ Every payload has these fields, in this order:
 ## Other hand-offs
 
 The same shape carries each hand-off in the loop. Orchestration checks
-it, routes it, and records it in the goal memory file
-([goal-hashes.md](goal-hashes.md)):
+it, routes it, and records it on the board and in the goal memory file
+([board.md](board.md), [goal-hashes.md](goal-hashes.md)):
 
 - research → coder: `research-to-coder`, when a brief is ready;
 - coder → review: `coder-to-review`, with the Push JSON;
