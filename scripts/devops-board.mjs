@@ -77,7 +77,9 @@ export function addGoal(board, { goal, title, sprint = '', state = 'backlog', at
   }
   if (sprint !== '') next.sprints[sprint].goals.push(goal)
   const existing = next.goals[goal]
+  // Keep everything the goal already carries: its authors, team and history.
   next.goals[goal] = {
+    ...(existing ?? {}),
     title: title ?? existing?.title ?? goal,
     state: existing?.state ?? state,
     sprint,

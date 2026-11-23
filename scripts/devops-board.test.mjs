@@ -12,6 +12,7 @@ import {
   emptyBoard,
   inboxFor,
   moveGoal,
+  backlogView,
   openThread,
   replyThread,
   resolveThread,
@@ -86,8 +87,8 @@ test('a goal moves one step at a time, may block, and resumes', () => {
   assert.equal(ready.goals[GOAL].state, 'ready')
   assert.throws(() => moveGoal(ready, { goal: GOAL, state: 'qa', at: AT }), /one step at a time/)
   const blocked = moveGoal(ready, { goal: GOAL, state: 'blocked', at: AT })
-  const back = moveGoal(blocked, { goal: GOAL, state: 'in_progress', at: AT })
-  assert.equal(back.goals[GOAL].state, 'in_progress')
+  const back = moveGoal(blocked, { goal: GOAL, state: 'ready', at: AT })
+  assert.equal(back.goals[GOAL].state, 'ready', 'a blocked goal resumes where it was')
   assert.equal(board.goals[GOAL].state, 'backlog', 'the input board is not changed')
 })
 
@@ -255,7 +256,7 @@ test('routing a judge from the authoring team is refused too', () => {
   const reviewed = coderToReview(board).board
   const payload = makeHandoff('review-to-qa', {
     item: 'item-3c9e41', goal: GOAL, signedBy: REVIEWER_SEAT, fromAgent: REVIEWER_SEAT,
-    fromTeam: T_REVIEW, toAgent: '', toTeam: '', created: AT,
+    fromTeam: T_REVIEW, toAgent: '', toTeam: T_QA, created: AT,
   })
   const sent = sendHandoff(reviewed, {
     payload, caller: REVIEWER_SEAT, at: AT, mint: () => '555555',
@@ -285,4 +286,36 @@ test('an exception covers only its goal and its team', () => {
   const reviewed = coderToReview(board).board
   const allowed = allowSameTeam(reviewed, { goal: GOAL, team: T_QA, reason: 'Other pod', at: AT })
   assert.throws(() => reviewToQa(allowed, { qaTeam: T_CODER }), /authored this goal/)
+})
+
+test('a blocked goal can only resume at the state it was blocked from', () => {
+  const { board } = withGoal()
+  const ready = moveGoal(board, { goal: GOAL, state: 'ready', at: AT })
+  const blocked = moveGoal(ready, { goal: GOAL, state: 'blocked', at: AT })
+  assert.throws(() => moveGoal(blocked, { goal: GOAL, state: 'done', at: AT }), /resumes at ready/)
+  assert.throws(() => moveGoal(blocked, { goal: GOAL, state: 'in_progress', at: AT }), /resumes at/)
+})
+
+test('the backlog lists the goals that belong to no sprint', () => {
+  const { board } = withGoal()
+  const loose = addGoal(board, { goal: 'goal-7f0a12', title: 'Loose', at: AT })
+  assert.deepEqual(backlogView(loose), [{ goal: 'goal-7f0a12', title: 'Loose', state: 'backlog' }])
+})
+
+test('moving a goal to another sprint keeps its authors, so independence still holds', () => {
+  const { board, sprint } = withGoal()
+  const reviewed = coderToReview(board).board
+  const second = createSprint(reviewed, { name: 'Sprint 2', at: AT, mint: () => 'cccccc' })
+  const moved = addGoal(second.board, { goal: GOAL, sprint: second.id, at: AT })
+  assert.deepEqual(moved.goals[GOAL].authors, [T_CODER])
+  assert.equal(moved.goals[GOAL].sprint, second.id)
+  assert.ok(sprint)
+  const judged = makeHandoff('review-to-qa', {
+    item: 'item-3c9e41', goal: GOAL, signedBy: REVIEWER_SEAT, fromAgent: REVIEWER_SEAT,
+    fromTeam: T_REVIEW, toAgent: QA, toTeam: T_CODER, created: AT,
+  })
+  const refused = () => sendHandoff(moved, {
+    payload: judged, caller: REVIEWER_SEAT, at: AT, mint: () => '999999',
+  })
+  assert.throws(refused, /authored this goal/)
 })
