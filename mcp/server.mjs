@@ -709,7 +709,9 @@ const TOOLS = [
     description: 'The addressee marks an acknowledged handoff done once its work is finished.',
     inputSchema: { type: 'object', properties: { dest, id: { type: 'string' }, agent: { type: 'string' } }, required: ['id', 'agent'], additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => ({ board: closeHandoff(board, { id: args.id, agent: args.agent, at: now() }) })),
+    run: args => boardChange(args, board => ({
+      board: closeHandoff(board, { id: args.id, agent: args.agent, at: now() }),
+    })),
   },
 ]
 
