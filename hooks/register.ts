@@ -16,6 +16,13 @@ const SCRIPT_TIMEOUT_MS = 20000
 const THOUGHT_DIRS = ['devops-skill/thoughts/non-final', 'devops-skill/thoughts/final']
 const LANGUAGES_REF = { plugin: 'devops-multi-agent-team', key: 'languages' } as const
 const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
+
+// Words that change what may be pushed. Only the person may run them.
+const HUMAN_ONLY_WORDS = new Set(['push-ok', 'push-reset', 'gates', 'allow-branch'])
+
+function isHuman(e: unknown): boolean {
+  return (e as { origin?: { kind?: unknown } }).origin?.kind === 'human'
+}
 const LINT_MODE_REF = { plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const
 const BRIEFED_REF = { plugin: 'devops-multi-agent-team', key: 'briefed' } as const
 const STANDARDS_REF = { plugin: 'devops-multi-agent-team', key: 'standards' } as const
@@ -266,6 +273,9 @@ export const register: Register = on => {
       ? split
       : (interpretDevopsIntent(e.args) ?? split)
     const { word, rest } = mapped
+    if (HUMAN_ONLY_WORDS.has(word) && !isHuman(e)) {
+      return { text: `/devops ${word} is the person's alone: an agent cannot allow a push or change the gates.` }
+    }
 
     if (word === '' || word === 'status') {
       const gates = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true

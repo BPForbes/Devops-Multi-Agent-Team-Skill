@@ -76,7 +76,10 @@ export function independenceOk(judge, authors) {
     return { ok: false, reason: 'incomplete: authors required' }
   }
   for (const author of list) {
-    if (author.agent && author.agent === judge.agent) {
+    if (!isAgentId(author.agent)) {
+      return { ok: false, reason: `incomplete: author agent id: ${author.agent ?? '?'}` }
+    }
+    if (author.agent === judge.agent) {
       return { ok: false, reason: `own work: ${judge.agent}` }
     }
     if (judge.handle && author.handle && author.handle === judge.handle) {

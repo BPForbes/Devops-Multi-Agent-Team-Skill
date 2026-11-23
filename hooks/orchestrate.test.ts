@@ -112,17 +112,20 @@ test('the model gets one section through devops_brief, and the card is composed'
   expect(section?.text).toContain('devops_brief')
 })
 
-test('/devops brief and gates run from any origin; push aliases work', async ($, on) => {
+test('/devops brief runs from any origin; push aliases need the person', async ($, on) => {
   const state = engine(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const run = (args: string) => $.command.run({
-    command: 'devops', args, origin: { kind: 'peer' } as never,
+  const run = (args: string, kind = 'human') => $.command.run({
+    command: 'devops', args, origin: { kind } as never,
     presentation: { isFullscreen: false, columns: 100 },
   })
   const brief = await run('brief role reviewer')
   expect(brief.text).toContain('Run lint_check first.')
   const setup = await run('setup claude')
   expect(setup.text).not.toContain('only you can run it')
+  const refused = await run('push', 'peer')
+  expect(refused.text).toContain('the person\'s alone')
+  expect(state.get('pushAuthorized')).toBeUndefined()
   const push = await run('push')
   expect(push.text).toContain('One push is allowed')
   expect(state.get('pushAuthorized')).toBe(true)

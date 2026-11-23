@@ -123,3 +123,9 @@ test('itemRecord requires notes and a well-formed item id', () => {
     item: 'item-abcdef', kind: 'x', notes: '  ',
   }))
 })
+
+test('independence fails closed when an author has no valid agent hash', () => {
+  const judge = { agent: 'agent-aaaaaa', team: 'team-111111' }
+  assert.equal(independenceOk(judge, [{ team: 'team-222222' }]).ok, false)
+  assert.match(independenceOk(judge, [{ agent: 'me', team: 'team-222222' }]).reason, /incomplete/)
+})
