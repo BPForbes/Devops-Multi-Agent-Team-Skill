@@ -901,7 +901,9 @@ const TOOLS = [
     run: args => {
       if (BOUND_SEAT) throw new Error('only Orchestration may allow a same-team review')
       return boardChange(args, board => ({
-        board: allowSameTeam(board, { goal: args.goal, team: args.team, reason: args.reason, at: now() }),
+        board: allowSameTeam(board, {
+          goal: args.goal, team: args.team, reason: args.reason, at: now(),
+        }),
       }))
     },
   },
