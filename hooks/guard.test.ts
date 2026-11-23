@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
-  branchNameOf, classify, commitInfo, interpretDevopsIntent, shellWords, splitArgs, verdictOf,
+  branchNameOf, classify, commitInfo, interpretDevopsIntent, shellWords, splitArgs, treeOf, verdictOf,
 } from './guard'
 
 test('git push and gh pr publishing are found, however they are spelled', () => {
@@ -50,16 +50,17 @@ test('command arguments and branch names are parsed strictly', () => {
   expect(branchNameOf('-bad')).toBeUndefined()
 })
 
-test('chat aliases and free-form /devops wording map to gate commands', () => {
-  expect(interpretDevopsIntent('push')).toEqual({ word: 'push-ok', rest: '' })
-  expect(interpretDevopsIntent('go')).toEqual({ word: 'push-ok', rest: '' })
-  expect(interpretDevopsIntent('publish')).toEqual({ word: 'push-ok', rest: '' })
-  expect(interpretDevopsIntent('withdraw')).toEqual({ word: 'push-reset', rest: '' })
-  expect(interpretDevopsIntent('cut a branch topic/x')).toEqual({
-    word: 'allow-branch', rest: 'topic/x',
-  })
-  expect(interpretDevopsIntent('gates off')).toEqual({ word: 'gates', rest: 'off' })
-  expect(interpretDevopsIntent('something novel')).toBeUndefined()
+test('free-form words never map to a gate command (rule 3)', () => {
+  for (const words of ['push', 'go', 'publish', 'ship', 'withdraw', 'cut a branch topic/x', 'gates off']) {
+    expect(interpretDevopsIntent(words)).toBeUndefined()
+  }
+  expect(interpretDevopsIntent('')).toEqual({ word: 'status', rest: '' })
+})
+
+test('a QA note names the tree it approved', () => {
+  const tree = 'a'.repeat(40)
+  expect(treeOf(`Publish gate: PASS\ntree: ${tree}\n`)).toBe(tree)
+  expect(treeOf('Publish gate: PASS\nno tree line')).toBeUndefined()
 })
 
 test('a commit is recognised, and whether it stages everything', () => {
@@ -69,4 +70,14 @@ test('a commit is recognised, and whether it stages everything', () => {
   expect(commitInfo('git -C sub commit --all -m x')).toEqual({ isCommit: true, stagesAll: true })
   expect(commitInfo('git status')).toEqual({ isCommit: false, stagesAll: false })
   expect(commitInfo('echo "git commit"')).toEqual({ isCommit: false, stagesAll: false })
+})
+
+test('a push hidden in a shell wrapper, env, xargs or eval is still a push', () => {
+  for (const command of [
+    'bash -c "git push"', "sh -c 'git push origin HEAD'", 'env -i PATH=$PATH git push',
+    'eval "git push"', 'xargs git push', 'nohup git push', 'git -c alias.x=push x',
+  ]) {
+    expect(classify(command).some(action => action.kind === 'publish')).toBe(true)
+  }
+  expect(classify('git commit -m "do not git push yet"')).toEqual([])
 })

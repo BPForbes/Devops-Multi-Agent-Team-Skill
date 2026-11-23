@@ -21,10 +21,16 @@ const valueAfter = (rest: string[], flags: string[]): string | undefined => {
   return at === -1 ? undefined : rest[at + 1]
 }
 
+const WRAPPERS = ['sudo', 'command', 'exec', 'time', 'env', 'nohup', 'nice', 'xargs', 'timeout']
+
+/** Shell wrappers whose quoted argument is itself a command: their inner text is classified too. */
+const INNER = /\b(?:(?:ba|z|da|k)?sh\s+-c|eval)\s+(["'])((?:(?!\1).)*)\1/g
+
 function classifySegment(segment: string): Action | undefined {
   const words = segment.trim().split(/\s+/).filter(Boolean)
-  while (words.length > 0 && (isAssignment(words[0]) || ['sudo', 'command', 'exec', 'time'].includes(words[0]))) words.shift()
+  while (words.length > 0 && (isAssignment(words[0]) || WRAPPERS.includes(words[0]) || (words[0] !== 'git' && words[0].startsWith('-')))) words.shift()
   if (words[0] === 'git') {
+    if (words.some((w, i) => w === '-c' && (words[i + 1] ?? '').startsWith('alias.'))) return { kind: 'publish', what: 'git alias' }
     const { sub, rest } = gitSubcommand(words)
     if (sub === 'push') return { kind: 'publish', what: 'git push' }
     if (sub === 'checkout' && rest.some(w => w === '-b' || w === '-B')) return { kind: 'branch', name: valueAfter(rest, ['-b', '-B']), what: 'git checkout -b' }
@@ -40,10 +46,11 @@ function classifySegment(segment: string): Action | undefined {
 }
 
 export function classify(command: string): Action[] {
-  return blankQuotes(command)
+  const inner = [...command.matchAll(INNER)].flatMap(match => classify(match[2]))
+  return [...inner, ...blankQuotes(command)
     .split(/&&|\|\||;|\||\n|\(|\)|`|\$\(/)
     .map(classifySegment)
-    .filter((action): action is Action => action !== undefined)
+    .filter((action): action is Action => action !== undefined)]
 }
 
 export function verdictOf(note: string): 'PASS' | 'BLOCKED' | undefined {
@@ -57,34 +64,19 @@ export function splitArgs(args: string): { word: string; rest: string } {
   return space === -1 ? { word: trimmed, rest: '' } : { word: trimmed.slice(0, space), rest: trimmed.slice(space).trim() }
 }
 
-const BRANCH_INTENT = /^(allow-branch|branch|cut(?:\s+a)?\s+branch)\s+/i
 
 /** Map free-form /devops wording (and chat aliases like "push") onto a known subcommand. */
+/**
+ * Free-form chat never changes a gate or authorizes a push (rule 3). Only the
+ * exact typed command does, so the only intent recognised here is an empty one.
+ */
 export function interpretDevopsIntent(args: string): { word: string; rest: string } | undefined {
-  const trimmed = args.trim()
-  if (trimmed === '') return { word: 'status', rest: '' }
-  const lower = trimmed.toLowerCase()
-  if (/^(push-ok|push|go|publish|ship)(?:\s|$)/.test(lower)) {
-    return { word: 'push-ok', rest: '' }
-  }
-  if (/^(push-reset|withdraw|revoke(?:\s+push)?)(?:\s|$)/.test(lower)) {
-    return { word: 'push-reset', rest: '' }
-  }
-  if (/^(allow-branch|branch|cut(?:\s+a)?\s+branch)\b/.test(lower)) {
-    const name = branchNameOf(trimmed.replace(BRANCH_INTENT, '').trim())
-    return { word: 'allow-branch', rest: name ?? '' }
-  }
-  if (/^gates?\s+(on|off)\b/.test(lower)) {
-    return { word: 'gates', rest: lower.includes('off') ? 'off' : 'on' }
-  }
-  if (/^monitor\s+(on|off)\b/.test(lower)) {
-    return { word: 'monitor', rest: lower.includes('off') ? 'off' : 'on' }
-  }
-  if (/^comments?\s+(warn|strict|off)\b/.test(lower)) {
-    const mode = /warn|strict|off/.exec(lower)?.[0] ?? ''
-    return { word: 'comments', rest: mode }
-  }
-  return undefined
+  return args.trim() === '' ? { word: 'status', rest: '' } : undefined
+}
+
+/** The tree hash a QA note approved: the 40-hex value on a line that names the tree. */
+export function treeOf(text: string): string | undefined {
+  return /\btree\b[^\n0-9a-f]*([0-9a-f]{40})\b/i.exec(text)?.[1]?.toLowerCase()
 }
 
 /** Words as a shell splits them: "a b" and 'a b' stay one word, quotes removed. */

@@ -2,7 +2,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Found } from '../types'
 import {
-  branchNameOf, classify, classifySegments, commitInfo, interpretDevopsIntent, shellWords,
+  branchNameOf, classify, classifySegments, commitInfo, interpretDevopsIntent, shellWords, treeOf,
   splitArgs, verdictOf,
 } from './guard'
 import {
@@ -111,7 +111,9 @@ async function detect($: EngineInterface): Promise<Found[]> {
   }
 }
 
-async function latestQaVerdict($: EngineInterface): Promise<{ verdict: 'PASS' | 'BLOCKED' | undefined; file?: string }> {
+async function latestQaVerdict($: EngineInterface): Promise<{
+  verdict: 'PASS' | 'BLOCKED' | undefined; tree?: string; file?: string
+}> {
   const root = await $.session.root()
   const notes: { path: string; mtimeMs: number }[] = []
   for (const dir of THOUGHT_DIRS) {
@@ -125,7 +127,15 @@ async function latestQaVerdict($: EngineInterface): Promise<{ verdict: 'PASS' | 
   const newest = notes.sort((a, b) => b.mtimeMs - a.mtimeMs)[0]
   if (newest === undefined) return { verdict: undefined }
   const text = await $.fs.read(newest.path).catch(() => '')
-  return { verdict: verdictOf(text), file: newest.path }
+  return { verdict: verdictOf(text), tree: treeOf(text), file: newest.path }
+}
+
+/** The tree the push would send: HEAD^{tree}, or undefined when git cannot say. */
+async function headTree($: EngineInterface): Promise<string | undefined> {
+  const root = await $.session.root()
+  const ran = await $.process.run(['git', '-C', root, 'rev-parse', 'HEAD^{tree}'], { timeoutMs: 10000 }).catch(() => undefined)
+  const hash = ran?.stdout.trim() ?? ''
+  return ran?.exitCode === 0 && /^[0-9a-f]{40}$/.test(hash) ? hash : undefined
 }
 
 
@@ -399,17 +409,20 @@ export const register: Register = on => {
       }
     }
     if (actions.some(action => action.kind === 'publish')) {
-      const pushKey = { plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const
-      const authorized = (await $.state.get(pushKey)).value ?? false
-      // Human word is final: push-ok or chat "push" allows one push.
-      if (!authorized) {
-        const qa = await latestQaVerdict($)
-        const what = actions.find(a => a.kind === 'publish')?.what
+      // Rule 2: QA must have recorded PASS on the exact tree this push would send.
+      const what = actions.find(a => a.kind === 'publish')?.what
+      const qa = await latestQaVerdict($)
+      const tree = await headTree($)
+      if (qa.verdict !== 'PASS' || tree === undefined || qa.tree !== tree) {
         return {
-          deny: `${PLUGIN}: ${what} is refused until the human `
-            + 'authorizes it (say "push" in chat or /devops push-ok). '
-            + `Latest QA note: ${qa.verdict ?? 'none'}.`,
+          deny: `${PLUGIN}: ${what} is refused: QA must record PASS on this exact tree `
+            + `(${tree ?? 'unknown'}). Latest QA note: ${qa.verdict ?? 'none'}, tree ${qa.tree ?? 'none'}.`,
         }
+      }
+      // Rule 1: only the person's typed /devops push-ok authorizes it.
+      const pushKey = { plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const
+      if (!((await $.state.get(pushKey)).value ?? false)) {
+        return { deny: `${PLUGIN}: ${what} is refused until the person types /devops push-ok.` }
       }
       consumeAuthorization = true
     }

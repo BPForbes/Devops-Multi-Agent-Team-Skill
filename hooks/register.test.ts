@@ -8,6 +8,9 @@ const assert = {
 
 const QA_DIR = '/work/devops-skill/thoughts/non-final'
 
+const TREE = 'a'.repeat(40)
+const PASS_NOTE = `Publish gate: PASS\ntree: ${TREE}\n`
+
 function engine(on: any, note: string | undefined) {
   const state = new Map<string, unknown>()
   on('state.get', (_: unknown, e: { key: string }) => ({ value: { value: state.get(e.key), version: 1 } }))
@@ -20,7 +23,9 @@ function engine(on: any, note: string | undefined) {
   on('command.register', () => ({ value: { command: 'devops' } }))
   on('tool.register', () => ({ value: { tool: 'mcp__devops-multi-agent-team__devops_brief' } }))
   on('ui.status', () => ({ value: undefined }))
-  on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify([{ id: 'rust', name: 'Rust', layers: ['systems'], evidence: ['Cargo.toml'] }]), stderr: '' } }))
+  on('process.run', (_: unknown, e: { argv?: string[] }) => ({ value: e.argv?.includes('rev-parse')
+    ? { exitCode: 0, stdout: `${TREE}\n`, stderr: '' }
+    : { exitCode: 0, stdout: JSON.stringify([{ id: 'rust', name: 'Rust', layers: ['systems'], evidence: ['Cargo.toml'] }]), stderr: '' } }))
   on('fs.list', (_: unknown, e: { path?: string }) => ({
     value: note !== undefined && e.path === QA_DIR ? [{ name: 'qa-qa-0e0e0e.md', kind: 'file', size: 1, mtimeMs: 1, isLink: false }] : [],
   }))
@@ -39,8 +44,8 @@ test('a push is refused when no QA note exists', async ($, on) => {
   expect(noQa.isError ?? noQa.deny).toBeTruthy()
 })
 
-test('human authorization alone allows one push; the grant is consumed', async ($, on) => {
-  const state = engine(on, undefined)
+test('a PASS on this tree and the person\'s push-ok allow one push; the grant is consumed', async ($, on) => {
+  const state = engine(on, PASS_NOTE)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
 
   const before = await $.tool.call({ tool: 'Bash', command: 'git push' })
@@ -201,4 +206,13 @@ test('a project\'s own wording replaces the default sentence', async ($, on) => 
   const section = (await $.prompt.compose(COMPOSE)).sections.find(s => s.id === 'devops-multi-agent-team:mindmap')
   assert.ok(String(section?.text).startsWith('Carte du projet : répondez à partir de ceci.'))
   assert.ok(!String(section?.text).includes('DEFAULT PROMPT'))
+})
+
+test('a PASS on another tree is refused even when the person authorized the push', async ($, on) => {
+  const state = engine(on, `Publish gate: PASS\ntree: ${'b'.repeat(40)}\n`)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', true)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push' })
+  expect(refused.isError ?? refused.deny).toBeTruthy()
+  expect(state.get('pushAuthorized')).toBe(true)
 })
