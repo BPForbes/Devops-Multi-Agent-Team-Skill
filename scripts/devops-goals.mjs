@@ -55,7 +55,7 @@ export function addGoal(memory, {
   const existing = reuse ? findGoalByText(next, text) : undefined
   if (existing !== undefined) {
     const reused = assignGoal(next, { hash: existing, team, judgedBy, at, event: 'reused' })
-    // A reused goal is live again, and no longer points at the goal that replaced it.
+    // The reused goal is live again and no longer points at its replacement.
     reused.goals[existing].status = 'active'
     delete reused.superseded[existing]
     return { hash: existing, reused: true, memory: reused }

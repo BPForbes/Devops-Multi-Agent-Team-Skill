@@ -43,6 +43,10 @@ export function makeHandoff(kind, fields) {
   return payload
 }
 
+function timestampErrors(payload) {
+  return isTimestamp(payload.created) ? [] : ['created must be a UTC timestamp, ending in Z']
+}
+
 const UTC_STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
 
 /** True for an ISO UTC timestamp, such as 2026-11-23T10:00:00Z. */
@@ -72,7 +76,7 @@ export function validateHandoff(payload) {
     errors.push('to.agent must be an agent hash or empty')
   }
   if (!isEmptyOr(payload.to?.team, isTeamId)) errors.push('to.team must be a team hash or empty')
-  if (!isTimestamp(payload.created)) errors.push('created must be a UTC timestamp, ending in Z')
+  errors.push(...timestampErrors(payload))
   if (rule.needsReason && String(payload.reason ?? '').trim() === '') {
     errors.push('reason is required: say in one line why it was resent')
   }
