@@ -23,6 +23,9 @@ import { ghasPlan } from '../scripts/devops-ghas.mjs'
 import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, parseStory } from '../scripts/devops-stories.mjs'
 import { buildMindMap, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree } from '../scripts/devops-mindmap.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
+import {
+  ackHandoff, addGoal, closeHandoff, createSprint, emptyBoard, inboxFor, moveGoal, routeHandoff, sendHandoff, sprintView,
+} from '../scripts/devops-board.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 
 const PKG = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'))
@@ -92,6 +95,28 @@ const text = value => ({ content: [{ type: 'text', text: typeof value === 'strin
 const dest = { type: 'string', description: 'Project folder. Defaults to the first folder the client opened (or DEVOPS_MCP_ROOTS).' }
 const langs = { description: '"auto" (detect) or a list of language ids from list_languages. Layers do not restrict: any id works anywhere.', anyOf: [{ type: 'string', enum: ['auto'] }, { type: 'array', items: { type: 'string' } }] }
 const svcs = { description: '"auto" (detect), "none", or a list of service ids from list_services (docker, ollama, aws, ...).', anyOf: [{ type: 'string', enum: ['auto', 'none'] }, { type: 'array', items: { type: 'string' } }] }
+
+const BOARD_FILE = path.join('devops-skill', 'thoughts', 'non-final', 'board.json')
+const now = () => new Date().toISOString()
+const GOAL_STATE = { type: 'string', enum: ['backlog', 'ready', 'in_progress', 'review', 'qa', 'security', 'done'] }
+
+function readBoard(args) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(projectDir(args), BOARD_FILE), 'utf8'))
+  } catch (error) {
+    if (error.code === 'ENOENT') return emptyBoard()
+    throw error
+  }
+}
+
+/** Applies one change to the board and saves it. `change` returns { board, ...result }. */
+function boardChange(args, change) {
+  const { board, ...result } = change(readBoard(args))
+  const file = path.join(projectDir(args), BOARD_FILE)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, `${JSON.stringify(board, null, 2)}\n`)
+  return result
+}
 
 const TOOLS = [
   {
@@ -616,6 +641,75 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { dest, branch: { type: 'string', description: 'Default branch name (default main).' }, apply: { type: 'boolean' }, force: { type: 'boolean' } }, additionalProperties: false },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     run: args => ghasPlan(projectDir(args), { branch: typeof args.branch === 'string' ? args.branch : 'main', apply: optionalBool(args, 'apply', false), force: optionalBool(args, 'force', false), roots: allowedRoots() }),
+  },
+  {
+    name: 'board_create_sprint',
+    description: 'Open a sprint on the goal board. Goals and handoffs live on the board; any seat may read it through board_view.',
+    inputSchema: { type: 'object', properties: { dest, name: { type: 'string' } }, required: ['name'], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => createSprint(board, { name: args.name, at: now() })),
+  },
+  {
+    name: 'board_add_goal',
+    description: 'Put a goal (a goal hash from the goal memory) on the board, in a sprint or the backlog. A goal already on the board moves to the sprint given.',
+    inputSchema: { type: 'object', properties: { dest, goal: { type: 'string' }, title: { type: 'string' }, sprint: { type: 'string' }, state: GOAL_STATE }, required: ['goal'], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: addGoal(board, { goal: args.goal, title: args.title, sprint: args.sprint ?? '', state: args.state ?? 'backlog', at: now() }),
+    })),
+  },
+  {
+    name: 'board_move_goal',
+    description: 'Move a goal one step along backlog, ready, in_progress, review, qa, security, done, or to blocked and back.',
+    inputSchema: { type: 'object', properties: { dest, goal: { type: 'string' }, state: { type: 'string', enum: ['backlog', 'ready', 'in_progress', 'review', 'qa', 'security', 'done', 'blocked'] } }, required: ['goal', 'state'], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({ board: moveGoal(board, { goal: args.goal, state: args.state, at: now() }) })),
+  },
+  {
+    name: 'board_view',
+    description: 'Read the goal board: one sprint with its goals and their states, or every sprint when sprint is omitted.',
+    inputSchema: { type: 'object', properties: { dest, sprint: { type: 'string' } }, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => {
+      const board = readBoard(args)
+      if (args.sprint !== undefined) return { goals: sprintView(board, args.sprint) }
+      return { sprints: Object.fromEntries(Object.keys(board.sprints).map(id => [id, sprintView(board, id)])) }
+    },
+  },
+  {
+    name: 'handoff_send',
+    description: 'Send a handoff payload (see references/handoff-payloads.md). caller must be the sending seat agent hash; the server checks the payload and records it on the board. An empty to.agent is routed later with handoff_route.',
+    inputSchema: { type: 'object', properties: { dest, caller: { type: 'string' }, payload: { type: 'object' } }, required: ['caller', 'payload'], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => sendHandoff(board, { payload: args.payload, caller: args.caller, at: now() })),
+  },
+  {
+    name: 'handoff_route',
+    description: 'Orchestration picks the receiving seat for an unrouted handoff.',
+    inputSchema: { type: 'object', properties: { dest, id: { type: 'string' }, agent: { type: 'string' } }, required: ['id', 'agent'], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({ board: routeHandoff(board, { id: args.id, agent: args.agent, at: now() }) })),
+  },
+  {
+    name: 'handoff_inbox',
+    description: 'The handoffs addressed to a seat that are not done yet.',
+    inputSchema: { type: 'object', properties: { dest, agent: { type: 'string' } }, required: ['agent'], additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    run: args => ({ handoffs: inboxFor(readBoard(args), args.agent) }),
+  },
+  {
+    name: 'handoff_ack',
+    description: 'The addressee acknowledges a handoff it has read.',
+    inputSchema: { type: 'object', properties: { dest, id: { type: 'string' }, agent: { type: 'string' } }, required: ['id', 'agent'], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({ board: ackHandoff(board, { id: args.id, agent: args.agent, at: now() }) })),
+  },
+  {
+    name: 'handoff_close',
+    description: 'The addressee marks an acknowledged handoff done once its work is finished.',
+    inputSchema: { type: 'object', properties: { dest, id: { type: 'string' }, agent: { type: 'string' } }, required: ['id', 'agent'], additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({ board: closeHandoff(board, { id: args.id, agent: args.agent, at: now() }) })),
   },
 ]
 
