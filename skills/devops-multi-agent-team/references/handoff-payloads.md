@@ -33,7 +33,10 @@ the addressee can acknowledge or close.
 
 | `kind` | From (signs) | To | Pod rule |
 |--------|--------------|----|----------|
-| `triage` | QA | Coder who picks it up | the Coder's pod differs from QA's pod |
+| `triage` | QA | Coder who picks it up | the Coder's pod differs from QA's pod; send-back |
+| `review-send-back` | Reviewer | Coder | the pods differ; send-back |
+| `security-send-back` | Security | Coder | the pods differ; send-back |
+| `research-send-back` | Coder | Researcher | same pod; send-back |
 | `research-to-coder` | Researcher | Coder | same pod (research joins its Coder) |
 | `coder-to-review` | Coder | Reviewer | the reviewer's pod differs |
 | `review-to-qa` | Reviewer | QA | QA's pod differs |
@@ -68,8 +71,12 @@ Every payload has these fields, in this order:
   hash is **empty** until the receiving seat is chosen. A triage
   usually goes out with `to.agent` empty, because the Coder who picks
   it up is not known yet; Orchestration fills it in and records it.
-- `reason`: one line saying why the item came back. **Required on a
-  triage**, empty elsewhere.
+- `reason`: one line saying why the item came back. **Required on every
+  send-back**, empty elsewhere.
+- `blame`: the author the work goes back to, `{ "agent": "agent-…", "team": "team-…" }`.
+  **Required on every send-back**, `null` elsewhere. It is the agent hash of the
+  coder (or researcher) whose signed virtual push the work came from
+  ([virtual-git.md](virtual-git.md)).
 - `created`: UTC timestamp.
 - `result` (only `security-signoff`): `clear` or `blocked`.
 

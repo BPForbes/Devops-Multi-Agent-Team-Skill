@@ -4,14 +4,20 @@ import test from 'node:test'
 import {
   ackHandoff,
   addGoal,
+  blameCounts,
+  blameFor,
   closeHandoff,
   createSprint,
   emptyBoard,
   inboxFor,
   moveGoal,
+  openThread,
+  replyThread,
+  resolveThread,
   routeHandoff,
   sendHandoff,
   sprintView,
+  threadsFor,
 } from './devops-board.mjs'
 import { makeHandoff } from './devops-handoff.mjs'
 
@@ -19,6 +25,7 @@ const AT = '2026-11-23T10:00:00Z'
 const GOAL = 'goal-3c9e41'
 const QA = 'agent-0c0c0c'
 const CODER = 'agent-0a0a0a'
+const RESEARCHER = 'agent-0f0f0f'
 const T_CODER = 'team-1a2b3c'
 const T_QA = 'team-4d5e6f'
 
@@ -32,6 +39,7 @@ function triagePayload(overrides = {}) {
     toAgent: '',
     toTeam: T_CODER,
     reason: 'The lint gate still fails',
+    blame: { agent: CODER, team: T_CODER },
     created: AT,
     ...overrides,
   })
@@ -128,4 +136,71 @@ test('only the addressee acknowledges, then closes, a handoff, in that order', (
   const done = closeHandoff(acked, { id: sent.id, agent: CODER, at: AT })
   assert.equal(done.handoffs[sent.id].state, 'done')
   assert.deepEqual(inboxFor(done, CODER), [], 'a done handoff leaves the inbox')
+})
+
+test('a send-back records blame on the board and in the goal history', () => {
+  const { board } = withGoal()
+  const payload = triagePayload()
+  const sent = sendHandoff(board, { payload, caller: QA, at: AT, mint: () => 'ffffff' })
+  assert.equal(sent.board.blame.length, 1)
+  assert.equal(sent.board.blame[0].blamed.agent, CODER)
+  assert.equal(sent.board.blame[0].by, QA)
+  assert.equal(sent.board.goals[GOAL].history.at(-1).event, 'sent_back')
+  assert.deepEqual(blameCounts(sent.board), { [CODER]: 1 })
+  assert.equal(blameFor(sent.board, { goal: GOAL }).length, 1)
+  assert.equal(blameFor(sent.board, { goal: 'goal-000000' }).length, 0)
+})
+
+test('a non send-back records no blame', () => {
+  const { board } = withGoal()
+  const payload = makeHandoff('research-to-coder', {
+    item: 'item-3c9e41', goal: GOAL, signedBy: RESEARCHER, fromAgent: RESEARCHER,
+    fromTeam: T_CODER, toAgent: CODER, toTeam: T_CODER, created: AT,
+  })
+  const sent = sendHandoff(board, { payload, caller: RESEARCHER, at: AT })
+  assert.deepEqual(sent.board.blame, [])
+})
+
+test('a board saved before blame and threads existed still loads', () => {
+  const old = { version: 1, sprints: {}, goals: {}, handoffs: {} }
+  const sprint = createSprint(old, { name: 'Sprint 1', at: AT, mint: () => '222222' })
+  const board = addGoal(sprint.board, { goal: GOAL, title: 'Lint gate', sprint: sprint.id, at: AT })
+  const sent = sendHandoff(board, { payload: triagePayload(), caller: QA, at: AT })
+  assert.equal(sent.board.blame.length, 1)
+  assert.deepEqual(threadsFor(board), [])
+})
+
+test('a thread is opened, answered in turn, then resolved by the seat that opened it', () => {
+  const { board } = withGoal()
+  const opened = openThread(board, {
+    goal: GOAL, item: 'item-3c9e41', topic: 'Repro fails on the VM',
+    agent: QA, team: T_QA, body: 'Step 3 gives exit 2, not 0', at: AT, mint: () => '111aaa',
+  })
+  assert.equal(opened.id, 'thread-111aaa')
+  const replied = replyThread(opened.board, {
+    thread: opened.id, agent: CODER, team: T_CODER, body: 'Which VM image?', at: AT,
+  })
+  assert.equal(replied.threads[opened.id].messages.length, 2)
+  assert.throws(
+    () => resolveThread(replied, { thread: opened.id, agent: CODER, at: AT }),
+    /only the seat that opened/,
+  )
+  const resolved = resolveThread(replied, { thread: opened.id, agent: QA, at: AT })
+  assert.equal(resolved.threads[opened.id].state, 'resolved')
+  assert.throws(
+    () => replyThread(resolved, { thread: opened.id, agent: CODER, team: T_CODER, body: 'late', at: AT }),
+    /is resolved/,
+  )
+  assert.equal(threadsFor(resolved, { goal: GOAL }).length, 1)
+})
+
+test('a thread needs a goal on the board, an item hash, a topic and a message', () => {
+  const { board } = withGoal()
+  const base = {
+    goal: GOAL, item: 'item-3c9e41', topic: 'T', agent: QA, team: T_QA, body: 'B', at: AT,
+  }
+  assert.throws(() => openThread(board, { ...base, goal: 'goal-999999' }), /not on the board/)
+  assert.throws(() => openThread(board, { ...base, item: 'goal-3c9e41' }), /not an item hash/)
+  assert.throws(() => openThread(board, { ...base, topic: ' ' }), /needs a topic/)
+  assert.throws(() => openThread(board, { ...base, body: '' }), /first message/)
 })

@@ -2,15 +2,38 @@
 // (see references/handoff-payloads.md). Pure functions, no file access.
 import { isAgentId, isGoalId, isItemId, isJob, isTeamId } from './devops-ids.mjs'
 
-/** kind → the seat that signs it, the seat it goes to, and whether teams must differ. */
+/**
+ * kind → the seat that signs it, the seat it goes to, whether teams must
+ * differ, whether it needs a one-line reason, and whether it is a send-back.
+ * A send-back returns work to its author and must carry a blame tag.
+ */
 export const HANDOFF_KINDS = Object.freeze({
-  'triage': { from: 'qa', to: 'coder', mustDiffer: true, needsReason: true },
-  'research-to-coder': { from: 'researcher', to: 'coder', mustDiffer: false, needsReason: false },
-  'coder-to-review': { from: 'coder', to: 'reviewer', mustDiffer: true, needsReason: false },
-  'review-to-qa': { from: 'reviewer', to: 'qa', mustDiffer: true, needsReason: false },
-  'qa-to-security': { from: 'qa', to: 'security', mustDiffer: true, needsReason: false },
+  'triage': {
+    from: 'qa', to: 'coder', mustDiffer: true, needsReason: true, sendBack: true,
+  },
+  'review-send-back': {
+    from: 'reviewer', to: 'coder', mustDiffer: true, needsReason: true, sendBack: true,
+  },
+  'security-send-back': {
+    from: 'security', to: 'coder', mustDiffer: true, needsReason: true, sendBack: true,
+  },
+  'research-send-back': {
+    from: 'coder', to: 'researcher', mustDiffer: false, needsReason: true, sendBack: true,
+  },
+  'research-to-coder': {
+    from: 'researcher', to: 'coder', mustDiffer: false, needsReason: false, sendBack: false,
+  },
+  'coder-to-review': {
+    from: 'coder', to: 'reviewer', mustDiffer: true, needsReason: false, sendBack: false,
+  },
+  'review-to-qa': {
+    from: 'reviewer', to: 'qa', mustDiffer: true, needsReason: false, sendBack: false,
+  },
+  'qa-to-security': {
+    from: 'qa', to: 'security', mustDiffer: true, needsReason: false, sendBack: false,
+  },
   'security-signoff': {
-    from: 'security', to: 'orchestrator', mustDiffer: false, needsReason: false,
+    from: 'security', to: 'orchestrator', mustDiffer: false, needsReason: false, sendBack: false,
   },
 })
 
@@ -37,10 +60,23 @@ export function makeHandoff(kind, fields) {
       team: fields.toTeam ?? '',
     },
     reason: fields.reason ?? '',
+    blame: fields.blame ?? null,
     created: fields.created,
   }
   if (kind === 'security-signoff') payload.result = fields.result
   return payload
+}
+
+/** True for a blame tag: the agent and team hashes of the author of the work. */
+export function isBlame(value) {
+  return value !== null && typeof value === 'object'
+    && isAgentId(value.agent) && isTeamId(value.team)
+}
+
+/** True for a kind that returns work to its author. */
+export function isSendBack(kind) {
+  const rule = ruleFor(kind)
+  return rule !== undefined && rule.sendBack
 }
 
 function isEmptyOr(value, check) {
@@ -73,6 +109,15 @@ export function validateHandoff(payload) {
   }
   if (payload.kind === 'security-signoff' && !SIGN_OFFS.includes(payload.result)) {
     errors.push('result must be clear or blocked')
+  }
+  if (rule.sendBack && !isBlame(payload.blame)) {
+    errors.push('a send-back needs a blame tag: {agent, team} of the author of the work')
+  }
+  if (!rule.sendBack && payload.blame !== null && payload.blame !== undefined) {
+    errors.push('only a send-back carries a blame tag')
+  }
+  if (payload.blame !== null && payload.blame !== undefined && !isBlame(payload.blame)) {
+    errors.push('blame must be {agent, team} with an agent hash and a team hash')
   }
   if (!isJob(payload.from?.job)) errors.push('from.job is not a known job')
   return { ok: errors.length === 0, errors }
