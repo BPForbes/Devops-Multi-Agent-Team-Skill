@@ -115,7 +115,7 @@ test('the model gets one section through devops_brief, and the card is composed'
 test('/devops brief runs from any origin; push aliases need the person', async ($, on) => {
   const state = engine(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const run = (args: string, kind = 'human') => $.command.run({
+  const run = (args: string, kind = 'composer') => $.command.run({
     command: 'devops', args, origin: { kind } as never,
     presentation: { isFullscreen: false, columns: 100 },
   })

@@ -21,7 +21,7 @@ const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
 const HUMAN_ONLY_WORDS = new Set(['push-ok', 'push-reset', 'gates', 'allow-branch'])
 
 function isHuman(e: unknown): boolean {
-  return (e as { origin?: { kind?: unknown } }).origin?.kind === 'human'
+  return (e as { origin?: { kind?: unknown } }).origin?.kind === 'composer'
 }
 const LINT_MODE_REF = { plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const
 const BRIEFED_REF = { plugin: 'devops-multi-agent-team', key: 'briefed' } as const
