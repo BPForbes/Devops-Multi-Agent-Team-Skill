@@ -5,7 +5,8 @@ import crypto from 'node:crypto'
 import { isAgentId, isGoalId, isItemId, isTeamId } from './devops-ids.mjs'
 import { validateHandoff } from './devops-handoff.mjs'
 
-// Forward hand-offs are judged by the receiver; send-backs and sign-off by the sender.
+// Forward hand-offs are judged by the receiver. Send-backs and sign-off
+// are judged by the sender.
 const FORWARD_JUDGING = new Set(['coder-to-review', 'review-to-qa', 'qa-to-security'])
 const JUDGING = new Set([
   ...FORWARD_JUDGING, 'triage', 'review-send-back', 'security-send-back', 'security-signoff',

@@ -873,7 +873,10 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        dest, goal: { type: 'string' }, team: { type: 'string' }, reason: { type: 'string' },
+        dest,
+        goal: { type: 'string' },
+        team: { type: 'string' },
+        reason: { type: 'string' },
       },
       required: ['goal', 'team', 'reason'],
       additionalProperties: false,
