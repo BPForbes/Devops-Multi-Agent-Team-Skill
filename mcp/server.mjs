@@ -24,7 +24,8 @@ import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, p
 import { buildMindMap, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree } from '../scripts/devops-mindmap.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
 import {
-  allowSameTeam, ackHandoff, addGoal, blameFor, closeHandoff, createSprint, emptyBoard, GOAL_STATES, inboxFor,
+  allowSameTeam, ackHandoff, addGoal, blameFor, closeHandoff, createSprint, emptyBoard,
+  GOAL_STATES, inboxFor,
   moveGoal, normalizeBoard, openThread, replyThread, resolveThread, routeHandoff, sendHandoff,
   sprintView, threadsFor,
 } from '../scripts/devops-board.mjs'
@@ -739,7 +740,9 @@ const TOOLS = [
     description: 'Orchestration picks the receiving seat for an unrouted handoff.',
     inputSchema: {
       type: 'object',
-      properties: { dest, id: { type: 'string' }, agent: { type: 'string' }, team: { type: 'string' } },
+      properties: {
+        dest, id: { type: 'string' }, agent: { type: 'string' }, team: { type: 'string' },
+      },
       required: ['id', 'agent', 'team'],
       additionalProperties: false,
     },
@@ -866,16 +869,20 @@ const TOOLS = [
   },
   {
     name: 'board_allow_same_team',
-    description: 'Orchestration only: allow one team to review a goal it authored, when resources are low. The reason is kept on the board.',
+    description: 'Orchestration only: allow one team to judge a goal it authored, when resources are low.',
     inputSchema: {
       type: 'object',
-      properties: { dest, goal: { type: 'string' }, team: { type: 'string' }, reason: { type: 'string' } },
+      properties: {
+        dest, goal: { type: 'string' }, team: { type: 'string' }, reason: { type: 'string' },
+      },
       required: ['goal', 'team', 'reason'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => boardChange(args, board => ({
-      board: allowSameTeam(board, { goal: args.goal, team: args.team, reason: args.reason, at: now() }),
+      board: allowSameTeam(board, {
+        goal: args.goal, team: args.team, reason: args.reason, at: now(),
+      }),
     })),
   },
 ]
