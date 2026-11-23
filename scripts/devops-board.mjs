@@ -33,12 +33,13 @@ export function emptyBoard() {
     threads: {},
     exceptions: [],
     assignments: {},
+    reads: {},
   }
 }
 
 /** A board saved before blame and threads existed still loads with empty ones. */
 export function normalizeBoard(board) {
-  return { blame: [], threads: {}, exceptions: [], assignments: {}, ...board }
+  return { blame: [], threads: {}, exceptions: [], assignments: {}, reads: {}, ...board }
 }
 
 const MINT_TRIES = 16
@@ -160,6 +161,7 @@ export function sendHandoff(board, { payload, caller, at, mint }) {
   if (AUTHORING.has(payload.kind)) {
     const goal = next.goals[payload.goal]
     goal.authors = [...new Set([...(goal.authors ?? []), payload.from.team])]
+    goal.author_agents = [...new Set([...(goal.author_agents ?? []), payload.from.agent])]
   }
   const id = mintId('handoff', next.handoffs, mint)
   need(HANDOFF_RE.test(id), 'bad handoff id')
@@ -269,6 +271,7 @@ export function openThread(board, { goal, item, topic, agent, team, body, at, mi
   need(String(body ?? '').trim() !== '', 'a thread needs a first message')
   const next = normalizeBoard(structuredClone(board))
   const id = mintId('thread', next.threads, mint)
+  const participants = [...new Set([agent, ...(next.goals[goal].author_agents ?? [])])]
   next.threads[id] = {
     goal,
     item,
@@ -276,8 +279,10 @@ export function openThread(board, { goal, item, topic, agent, team, body, at, mi
     state: 'open',
     opened_by: { agent, team },
     opened_at: at,
+    participants,
     messages: [{ agent, team, at, body: body.trim() }],
   }
+  next.reads[agent] = { ...(next.reads[agent] ?? {}), [id]: 1 }
   return { id, board: next }
 }
 
@@ -288,8 +293,30 @@ export function replyThread(board, { thread, agent, team, body, at }) {
   need(row.state === 'open', `thread ${thread} is resolved`)
   need(String(body ?? '').trim() !== '', 'a reply needs a message')
   const next = normalizeBoard(structuredClone(board))
-  next.threads[thread].messages.push({ agent, team, at, body: body.trim() })
+  const row2 = next.threads[thread]
+  row2.messages.push({ agent, team, at, body: body.trim() })
+  row2.participants = [...new Set([...row2.participants, agent])]
+  next.reads[agent] = { ...(next.reads[agent] ?? {}), [thread]: row2.messages.length }
   return next
+}
+
+/** The seat has read a thread up to its latest message. */
+export function markThreadRead(board, { thread, agent }) {
+  const row = normalizeBoard(board).threads[thread]
+  need(row !== undefined, `unknown thread: ${thread}`)
+  need(row.participants.includes(agent), 'only a participant can read a thread')
+  const next = normalizeBoard(structuredClone(board))
+  next.reads[agent] = { ...(next.reads[agent] ?? {}), [thread]: row.messages.length }
+  return next
+}
+
+/** Open threads this seat takes part in that have messages it has not read. */
+export function unreadThreads(board, agent) {
+  const b = normalizeBoard(board)
+  return Object.entries(b.threads)
+    .filter(([id, t]) => t.state === 'open' && t.participants.includes(agent)
+      && t.messages.length > (b.reads[agent]?.[id] ?? 0))
+    .map(([id, t]) => ({ id, goal: t.goal, topic: t.topic, unread: t.messages.length - (b.reads[agent]?.[id] ?? 0) }))
 }
 
 /** Only the seat that opened a thread resolves it. */
