@@ -24,7 +24,8 @@ import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, p
 import { buildMindMap, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree } from '../scripts/devops-mindmap.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
 import {
-  ackHandoff, addGoal, closeHandoff, createSprint, emptyBoard, inboxFor, moveGoal, routeHandoff, sendHandoff, sprintView,
+  ackHandoff, addGoal, closeHandoff, createSprint, emptyBoard, GOAL_STATES, inboxFor, moveGoal,
+  routeHandoff, sendHandoff, sprintView,
 } from '../scripts/devops-board.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 
@@ -98,7 +99,9 @@ const svcs = { description: '"auto" (detect), "none", or a list of service ids f
 
 const BOARD_FILE = path.join('devops-skill', 'thoughts', 'non-final', 'board.json')
 const now = () => new Date().toISOString()
-const GOAL_STATE = { type: 'string', enum: ['backlog', 'ready', 'in_progress', 'review', 'qa', 'security', 'done'] }
+const GOAL_STATE = {
+  type: 'string', enum: ['backlog', 'ready', 'in_progress', 'review', 'qa', 'security', 'done'],
+}
 
 function readBoard(args) {
   try {
@@ -644,7 +647,7 @@ const TOOLS = [
   },
   {
     name: 'board_create_sprint',
-    description: 'Open a sprint on the goal board. Goals and handoffs live on the board; any seat may read it through board_view.',
+    description: 'Open a sprint on the goal board. Any seat may read the board through board_view.',
     inputSchema: {
       type: 'object',
       properties: { dest, name: { type: 'string' } },
@@ -656,33 +659,41 @@ const TOOLS = [
   },
   {
     name: 'board_add_goal',
-    description: 'Put a goal (a goal hash from the goal memory) on the board, in a sprint or the backlog. A goal already on the board moves to the sprint given.',
+    description: 'Put a goal (a goal hash from goal memory) on the board, in a sprint or the backlog.',
     inputSchema: {
       type: 'object',
-      properties: { dest, goal: { type: 'string' }, title: { type: 'string' }, sprint: { type: 'string' }, state: GOAL_STATE },
+      properties: {
+        dest, goal: { type: 'string' }, title: { type: 'string' }, sprint: { type: 'string' }, state: GOAL_STATE,
+      },
       required: ['goal'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => boardChange(args, board => ({
-      board: addGoal(board, { goal: args.goal, title: args.title, sprint: args.sprint ?? '', state: args.state ?? 'backlog', at: now() }),
+      board: addGoal(board, {
+        goal: args.goal, title: args.title, sprint: args.sprint ?? '', state: args.state ?? 'backlog', at: now(),
+      }),
     })),
   },
   {
     name: 'board_move_goal',
-    description: 'Move a goal one step along backlog, ready, in_progress, review, qa, security, done, or to blocked and back.',
+    description: 'Move a goal one step along the board states, or to blocked and back.',
     inputSchema: {
       type: 'object',
-      properties: { dest, goal: { type: 'string' }, state: { type: 'string', enum: ['backlog', 'ready', 'in_progress', 'review', 'qa', 'security', 'done', 'blocked'] } },
+      properties: {
+        dest, goal: { type: 'string' }, state: { type: 'string', enum: [...GOAL_STATES, 'blocked'] },
+      },
       required: ['goal', 'state'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => ({ board: moveGoal(board, { goal: args.goal, state: args.state, at: now() }) })),
+    run: args => boardChange(args, board => ({
+      board: moveGoal(board, { goal: args.goal, state: args.state, at: now() }),
+    })),
   },
   {
     name: 'board_view',
-    description: 'Read the goal board: one sprint with its goals and their states, or every sprint when sprint is omitted.',
+    description: 'Read the goal board: one sprint and its goals, or every sprint when none is given.',
     inputSchema: {
       type: 'object',
       properties: { dest, sprint: { type: 'string' } },
@@ -692,12 +703,13 @@ const TOOLS = [
     run: args => {
       const board = readBoard(args)
       if (args.sprint !== undefined) return { goals: sprintView(board, args.sprint) }
-      return { sprints: Object.fromEntries(Object.keys(board.sprints).map(id => [id, sprintView(board, id)])) }
+      const sprints = Object.keys(board.sprints)
+      return { sprints: Object.fromEntries(sprints.map(id => [id, sprintView(board, id)])) }
     },
   },
   {
     name: 'handoff_send',
-    description: 'Send a handoff payload (see references/handoff-payloads.md). caller must be the sending seat agent hash; the server checks the payload and records it on the board. An empty to.agent is routed later with handoff_route.',
+    description: 'Send a handoff payload (references/handoff-payloads.md). caller is the sending seat; the server checks the payload and records it. An empty to.agent is routed later with handoff_route.',
     inputSchema: {
       type: 'object',
       properties: { dest, caller: { type: 'string' }, payload: { type: 'object' } },
@@ -705,7 +717,9 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => sendHandoff(board, { payload: args.payload, caller: args.caller, at: now() })),
+    run: args => boardChange(args, board => sendHandoff(board, {
+      payload: args.payload, caller: args.caller, at: now(),
+    })),
   },
   {
     name: 'handoff_route',
@@ -717,7 +731,9 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => ({ board: routeHandoff(board, { id: args.id, agent: args.agent, at: now() }) })),
+    run: args => boardChange(args, board => ({
+      board: routeHandoff(board, { id: args.id, agent: args.agent, at: now() }),
+    })),
   },
   {
     name: 'handoff_inbox',
@@ -741,7 +757,9 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => ({ board: ackHandoff(board, { id: args.id, agent: args.agent, at: now() }) })),
+    run: args => boardChange(args, board => ({
+      board: ackHandoff(board, { id: args.id, agent: args.agent, at: now() }),
+    })),
   },
   {
     name: 'handoff_close',
