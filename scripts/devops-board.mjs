@@ -316,7 +316,10 @@ export function unreadThreads(board, agent) {
   return Object.entries(b.threads)
     .filter(([id, t]) => t.state === 'open' && t.participants.includes(agent)
       && t.messages.length > (b.reads[agent]?.[id] ?? 0))
-    .map(([id, t]) => ({ id, goal: t.goal, topic: t.topic, unread: t.messages.length - (b.reads[agent]?.[id] ?? 0) }))
+    .map(([id, t]) => {
+      const seen = b.reads[agent]?.[id] ?? 0
+      return { id, goal: t.goal, topic: t.topic, unread: t.messages.length - seen }
+    })
 }
 
 /** Only the seat that opened a thread resolves it. */
