@@ -274,7 +274,7 @@ export const register: Register = on => {
       : (interpretDevopsIntent(e.args) ?? split)
     const { word, rest } = mapped
     if (HUMAN_ONLY_WORDS.has(word) && !isHuman(e)) {
-      return { text: `/devops ${word} is the person's alone: an agent cannot allow a push or change the gates.` }
+      return { text: `/devops ${word} is the person's alone: an agent cannot run it.` }
     }
 
     if (word === '' || word === 'status') {

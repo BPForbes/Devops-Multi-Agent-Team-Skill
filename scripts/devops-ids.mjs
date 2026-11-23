@@ -63,6 +63,22 @@ export function teamsOf(record) {
 }
 
 /** Refuse a judge that authored the work or shares any authoring pod. */
+function authorProblem(judge, judgeTeams, author) {
+  if (!isAgentId(author.agent)) {
+    return `incomplete: author agent id: ${author.agent ?? '?'}`
+  }
+  if (author.agent === judge.agent) return `own work: ${judge.agent}`
+  if (judge.handle && author.handle && author.handle === judge.handle) {
+    return `own handle: ${judge.handle}`
+  }
+  const authorTeams = teamsOf(author)
+  if (authorTeams.length === 0) {
+    return `incomplete: author teams for ${author.agent ?? '?'}`
+  }
+  const shared = judgeTeams.find(team => authorTeams.includes(team))
+  return shared === undefined ? undefined : `own pod: ${shared}`
+}
+
 export function independenceOk(judge, authors) {
   if (!judge || !isAgentId(judge.agent)) {
     return { ok: false, reason: 'judge needs an agent id' }
@@ -76,23 +92,8 @@ export function independenceOk(judge, authors) {
     return { ok: false, reason: 'incomplete: authors required' }
   }
   for (const author of list) {
-    if (!isAgentId(author.agent)) {
-      return { ok: false, reason: `incomplete: author agent id: ${author.agent ?? '?'}` }
-    }
-    if (author.agent === judge.agent) {
-      return { ok: false, reason: `own work: ${judge.agent}` }
-    }
-    if (judge.handle && author.handle && author.handle === judge.handle) {
-      return { ok: false, reason: `own handle: ${judge.handle}` }
-    }
-    const authorTeams = teamsOf(author)
-    if (authorTeams.length === 0) {
-      return { ok: false, reason: `incomplete: author teams for ${author.agent ?? '?'}` }
-    }
-    const shared = judgeTeams.find(team => authorTeams.includes(team))
-    if (shared !== undefined) {
-      return { ok: false, reason: `own pod: ${shared}` }
-    }
+    const problem = authorProblem(judge, judgeTeams, author)
+    if (problem !== undefined) return { ok: false, reason: problem }
   }
   return { ok: true }
 }
