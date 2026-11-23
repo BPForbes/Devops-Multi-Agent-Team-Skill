@@ -719,7 +719,7 @@ const TOOLS = [
   },
   {
     name: 'handoff_send',
-    description: 'Send a handoff payload (references/handoff-payloads.md). The server checks it and records it. An empty to.agent is routed later with handoff_route.',
+    description: 'Send a handoff payload (references/handoff-payloads.md). Routed later if to.agent is empty.',
     inputSchema: {
       type: 'object',
       properties: { dest, caller: { type: 'string' }, payload: { type: 'object' } },
