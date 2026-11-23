@@ -2,15 +2,38 @@
 // (see references/handoff-payloads.md). Pure functions, no file access.
 import { isAgentId, isGoalId, isItemId, isJob, isTeamId } from './devops-ids.mjs'
 
-/** kind → the seat that signs it, the seat it goes to, and whether teams must differ. */
+/**
+ * kind → the seat that signs it, the seat it goes to, whether teams must
+ * differ, whether it needs a one-line reason, and whether it is a send-back.
+ * A send-back returns work to its author and must carry a blame tag.
+ */
 export const HANDOFF_KINDS = Object.freeze({
-  'triage': { from: 'qa', to: 'coder', mustDiffer: true, needsReason: true },
-  'research-to-coder': { from: 'researcher', to: 'coder', mustDiffer: false, needsReason: false },
-  'coder-to-review': { from: 'coder', to: 'reviewer', mustDiffer: true, needsReason: false },
-  'review-to-qa': { from: 'reviewer', to: 'qa', mustDiffer: true, needsReason: false },
-  'qa-to-security': { from: 'qa', to: 'security', mustDiffer: true, needsReason: false },
+  'triage': {
+    from: 'qa', to: 'coder', mustDiffer: true, needsReason: true, sendBack: true,
+  },
+  'review-send-back': {
+    from: 'reviewer', to: 'coder', mustDiffer: true, needsReason: true, sendBack: true,
+  },
+  'security-send-back': {
+    from: 'security', to: 'coder', mustDiffer: true, needsReason: true, sendBack: true,
+  },
+  'research-send-back': {
+    from: 'coder', to: 'researcher', mustDiffer: false, needsReason: true, sendBack: true,
+  },
+  'research-to-coder': {
+    from: 'researcher', to: 'coder', mustDiffer: false, needsReason: false, sendBack: false,
+  },
+  'coder-to-review': {
+    from: 'coder', to: 'reviewer', mustDiffer: true, needsReason: false, sendBack: false,
+  },
+  'review-to-qa': {
+    from: 'reviewer', to: 'qa', mustDiffer: true, needsReason: false, sendBack: false,
+  },
+  'qa-to-security': {
+    from: 'qa', to: 'security', mustDiffer: true, needsReason: false, sendBack: false,
+  },
   'security-signoff': {
-    from: 'security', to: 'orchestrator', mustDiffer: false, needsReason: false,
+    from: 'security', to: 'orchestrator', mustDiffer: false, needsReason: false, sendBack: false,
   },
 })
 
@@ -37,24 +60,11 @@ export function makeHandoff(kind, fields) {
       team: fields.toTeam ?? '',
     },
     reason: fields.reason ?? '',
+    blame: fields.blame ?? null,
     created: fields.created,
   }
   if (kind === 'security-signoff') payload.result = fields.result
   return payload
-}
-
-/** A judging hand-off names a receiving team that differs from the sender. */
-function judgeTeamErrors(payload, rule) {
-  if (!rule.mustDiffer) return []
-  if (!isTeamId(payload.to?.team)) return ['a judging hand-off must name the receiving team']
-  if (payload.to.team === payload.from?.team) {
-    return ['the receiving team must differ from the sending team']
-  }
-  return []
-}
-
-function timestampErrors(payload) {
-  return isTimestamp(payload.created) ? [] : ['created must be a UTC timestamp, ending in Z']
 }
 
 const UTC_STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
@@ -64,11 +74,52 @@ function isTimestamp(value) {
   return typeof value === 'string' && UTC_STAMP.test(value) && !Number.isNaN(Date.parse(value))
 }
 
+function timestampErrors(payload) {
+  return isTimestamp(payload.created) ? [] : ['created must be a UTC timestamp, ending in Z']
+}
+
+/**
+ * A judging hand-off names a receiving team. It must differ from the sender
+ * unless Orchestration allowed a same-team review.
+ */
+function judgeTeamErrors(payload, rule, allowSameTeam) {
+  if (!rule.mustDiffer) return []
+  if (!isTeamId(payload.to?.team)) return ['a judging hand-off must name the receiving team']
+  if (!allowSameTeam && payload.to.team === payload.from?.team) {
+    return ['the receiving team must differ from the sending team']
+  }
+  return []
+}
+
+export function isBlame(value) {
+  return value !== null && typeof value === 'object'
+    && isAgentId(value.agent) && isTeamId(value.team)
+}
+
 function isEmptyOr(value, check) {
   return value === '' || check(value)
 }
 
-export function validateHandoff(payload) {
+function extraErrors(payload, rule) {
+  const present = payload.blame !== null && payload.blame !== undefined
+  if (rule.sendBack && !isBlame(payload.blame)) {
+    return ['a send-back needs a blame tag: {agent, team} of the author of the work']
+  }
+  if (!rule.sendBack && present) return ['only a send-back carries a blame tag']
+  if (present && !isBlame(payload.blame)) {
+    return ['blame must be {agent, team} with an agent hash and a team hash']
+  }
+  if (payload.kind === 'security-signoff' && !SIGN_OFFS.includes(payload.result)) {
+    return ['result must be clear or blocked']
+  }
+  return []
+}
+
+/**
+ * Validates a payload. `allowSameTeam` is set only by the board, when
+ * Orchestration has approved a same-team review for this goal.
+ */
+export function validateHandoff(payload, { allowSameTeam = false } = {}) {
   const errors = []
   const rule = ruleFor(payload?.kind)
   if (rule === undefined) return { ok: false, errors: ['kind is not a handoff kind'] }
@@ -86,14 +137,12 @@ export function validateHandoff(payload) {
     errors.push('to.agent must be an agent hash or empty')
   }
   if (!isEmptyOr(payload.to?.team, isTeamId)) errors.push('to.team must be a team hash or empty')
-  errors.push(...timestampErrors(payload))
   if (rule.needsReason && String(payload.reason ?? '').trim() === '') {
     errors.push('reason is required: say in one line why it was resent')
   }
-  errors.push(...judgeTeamErrors(payload, rule))
-  if (payload.kind === 'security-signoff' && !SIGN_OFFS.includes(payload.result)) {
-    errors.push('result must be clear or blocked')
-  }
+  errors.push(...judgeTeamErrors(payload, rule, allowSameTeam))
+  errors.push(...timestampErrors(payload))
+  errors.push(...extraErrors(payload, rule))
   if (!isJob(payload.from?.job)) errors.push('from.job is not a known job')
   return { ok: errors.length === 0, errors }
 }

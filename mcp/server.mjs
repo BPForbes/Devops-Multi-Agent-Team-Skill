@@ -24,8 +24,9 @@ import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, p
 import { buildMindMap, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree } from '../scripts/devops-mindmap.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
 import {
-  ackHandoff, addGoal, closeHandoff, createSprint, emptyBoard, GOAL_STATES, inboxFor, moveGoal,
-  routeHandoff, sendHandoff, sprintView,
+  ackHandoff, addGoal, blameFor, closeHandoff, createSprint, emptyBoard, GOAL_STATES, inboxFor,
+  moveGoal, normalizeBoard, openThread, replyThread, resolveThread, routeHandoff, sendHandoff,
+  sprintView, threadsFor,
 } from '../scripts/devops-board.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 
@@ -105,7 +106,7 @@ const GOAL_STATE = {
 
 function readBoard(args) {
   try {
-    return JSON.parse(fs.readFileSync(path.join(projectDir(args), BOARD_FILE), 'utf8'))
+    return normalizeBoard(JSON.parse(fs.readFileSync(path.join(projectDir(args), BOARD_FILE), 'utf8')))
   } catch (error) {
     if (error.code === 'ENOENT') return emptyBoard()
     throw error
@@ -770,6 +771,72 @@ const TOOLS = [
     run: args => boardChange(args, board => ({
       board: ackHandoff(board, { id: args.id, agent: args.agent, at: now() }),
     })),
+  },
+  {
+    name: 'thread_open',
+    description: 'Open a virtual PR thread on a goal item: a question or review point for the seats to answer.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        goal: { type: 'string' },
+        item: { type: 'string' },
+        topic: { type: 'string' },
+        agent: { type: 'string' },
+        team: { type: 'string' },
+        body: { type: 'string' },
+      },
+      required: ['goal', 'item', 'topic', 'agent', 'team', 'body'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => openThread(board, { ...args, at: now() })),
+  },
+  {
+    name: 'thread_reply',
+    description: 'Reply to an open thread. Any seat may reply, so questions go back and forth.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, thread: { type: 'string' }, agent: { type: 'string' }, team: { type: 'string' }, body: { type: 'string' } },
+      required: ['thread', 'agent', 'team', 'body'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({ board: replyThread(board, { ...args, at: now() }) })),
+  },
+  {
+    name: 'thread_resolve',
+    description: 'Close a thread. Only the seat that opened it can resolve it.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, thread: { type: 'string' }, agent: { type: 'string' } },
+      required: ['thread', 'agent'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({ board: resolveThread(board, { ...args, at: now() }) })),
+  },
+  {
+    name: 'thread_list',
+    description: 'The threads on a goal, or on every goal when none is given.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, goal: { type: 'string' } },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => ({ threads: threadsFor(readBoard(args), args.goal === undefined ? {} : { goal: args.goal }) }),
+  },
+  {
+    name: 'blame_list',
+    description: 'The send-backs on record, with the author each one returned work to. Filter by goal.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, goal: { type: 'string' } },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => ({ blame: blameFor(readBoard(args), args.goal === undefined ? {} : { goal: args.goal }) }),
   },
   {
     name: 'handoff_close',

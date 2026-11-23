@@ -2,7 +2,7 @@
 // Pure functions over a plain object. The orchestration server (mcp/server.mjs)
 // is the only writer; subagents read and act through its tools.
 import crypto from 'node:crypto'
-import { isGoalId, isAgentId } from './devops-ids.mjs'
+import { isAgentId, isGoalId, isItemId } from './devops-ids.mjs'
 import { validateHandoff } from './devops-handoff.mjs'
 
 /** Goal statuses in order. A goal moves forward one step, or to `blocked`. */
@@ -15,7 +15,12 @@ const SPRINT_RE = /^sprint-[0-9a-f]{6}$/
 const HANDOFF_RE = /^handoff-[0-9a-f]{6}$/
 
 export function emptyBoard() {
-  return { version: 1, sprints: {}, goals: {}, handoffs: {} }
+  return { version: 1, sprints: {}, goals: {}, handoffs: {}, blame: [], threads: {} }
+}
+
+/** A board saved before blame and threads existed still loads with empty ones. */
+export function normalizeBoard(board) {
+  return { blame: [], threads: {}, ...board }
 }
 
 const MINT_TRIES = 16
@@ -97,9 +102,18 @@ export function sendHandoff(board, { payload, caller, at, mint }) {
   need(check.ok, `handoff refused: ${check.errors.join('; ')}`)
   need(caller === payload.from.agent, 'only the sending seat can send its handoff')
   need(board.goals[payload.goal] !== undefined, `goal is not on the board: ${payload.goal}`)
-  const next = structuredClone(board)
+  const next = normalizeBoard(structuredClone(board))
   const id = mintId('handoff', next.handoffs, mint)
   need(HANDOFF_RE.test(id), 'bad handoff id')
+  if (payload.blame) {
+    next.blame.push({
+      at, goal: payload.goal, item: payload.item, kind: payload.kind,
+      blamed: payload.blame, by: caller, reason: payload.reason, handoff: id,
+    })
+    next.goals[payload.goal].history.push({
+      at, event: 'sent_back', by: caller, blamed: payload.blame.agent, handoff: id,
+    })
+  }
   next.handoffs[id] = {
     payload,
     state: payload.to.agent === '' ? 'unrouted' : 'sent',
@@ -161,4 +175,72 @@ export function sprintView(board, sprint) {
     title: board.goals[goal].title,
     state: board.goals[goal].state,
   }))
+}
+
+/** Blame entries for a goal, or for every goal when none is given. */
+export function blameFor(board, { goal } = {}) {
+  const entries = normalizeBoard(board).blame
+  return goal === undefined ? entries : entries.filter(entry => entry.goal === goal)
+}
+
+/** How many send-backs each author has taken: { agent: count }. */
+export function blameCounts(board) {
+  const counts = {}
+  for (const entry of normalizeBoard(board).blame) {
+    counts[entry.blamed.agent] = (counts[entry.blamed.agent] ?? 0) + 1
+  }
+  return counts
+}
+
+/**
+ * Opens a virtual PR thread on a goal's item: a question or review point
+ * that the seats answer in turn. Returns { id, board }.
+ */
+export function openThread(board, { goal, item, topic, agent, team, body, at, mint }) {
+  need(board.goals[goal] !== undefined, `goal is not on the board: ${goal}`)
+  need(isItemId(item), `not an item hash: ${item}`)
+  need(String(topic ?? '').trim() !== '', 'a thread needs a topic')
+  need(String(body ?? '').trim() !== '', 'a thread needs a first message')
+  const next = normalizeBoard(structuredClone(board))
+  const id = mintId('thread', next.threads, mint)
+  next.threads[id] = {
+    goal,
+    item,
+    topic: topic.trim(),
+    state: 'open',
+    opened_by: { agent, team },
+    opened_at: at,
+    messages: [{ agent, team, at, body: body.trim() }],
+  }
+  return { id, board: next }
+}
+
+/** Any seat may reply to an open thread. */
+export function replyThread(board, { thread, agent, team, body, at }) {
+  const row = normalizeBoard(board).threads[thread]
+  need(row !== undefined, `unknown thread: ${thread}`)
+  need(row.state === 'open', `thread ${thread} is resolved`)
+  need(String(body ?? '').trim() !== '', 'a reply needs a message')
+  const next = normalizeBoard(structuredClone(board))
+  next.threads[thread].messages.push({ agent, team, at, body: body.trim() })
+  return next
+}
+
+/** Only the seat that opened a thread resolves it. */
+export function resolveThread(board, { thread, agent, at }) {
+  const row = normalizeBoard(board).threads[thread]
+  need(row !== undefined, `unknown thread: ${thread}`)
+  need(row.opened_by.agent === agent, 'only the seat that opened a thread can resolve it')
+  need(row.state === 'open', `thread ${thread} is already resolved`)
+  const next = normalizeBoard(structuredClone(board))
+  next.threads[thread].state = 'resolved'
+  next.threads[thread].resolved_at = at
+  return next
+}
+
+/** The threads on a goal, or on every goal when none is given. */
+export function threadsFor(board, { goal } = {}) {
+  return Object.entries(normalizeBoard(board).threads)
+    .filter(([, t]) => goal === undefined || t.goal === goal)
+    .map(([id, t]) => ({ id, ...t }))
 }
