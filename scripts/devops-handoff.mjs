@@ -43,6 +43,14 @@ export function makeHandoff(kind, fields) {
   return payload
 }
 
+/** A judging hand-off names a receiving team that differs from the sender. */
+function judgeTeamErrors(payload, rule) {
+  if (!rule.mustDiffer) return []
+  if (!isTeamId(payload.to?.team)) return ['a judging hand-off must name the receiving team']
+  if (payload.to.team === payload.from?.team) return ['the receiving team must differ from the sending team']
+  return []
+}
+
 function timestampErrors(payload) {
   return isTimestamp(payload.created) ? [] : ['created must be a UTC timestamp, ending in Z']
 }
@@ -80,12 +88,7 @@ export function validateHandoff(payload) {
   if (rule.needsReason && String(payload.reason ?? '').trim() === '') {
     errors.push('reason is required: say in one line why it was resent')
   }
-  if (rule.mustDiffer && !isTeamId(payload.to?.team)) {
-    errors.push('a judging hand-off must name the receiving team')
-  }
-  if (rule.mustDiffer && payload.to?.team === payload.from?.team) {
-    errors.push('the receiving team must differ from the sending team')
-  }
+  errors.push(...judgeTeamErrors(payload, rule))
   if (payload.kind === 'security-signoff' && !SIGN_OFFS.includes(payload.result)) {
     errors.push('result must be clear or blocked')
   }
