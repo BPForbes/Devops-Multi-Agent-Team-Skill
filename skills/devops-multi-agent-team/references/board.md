@@ -44,6 +44,18 @@ When resources are low, Orchestration may allow one same-team review with
 `board_allow_same_team`, which records a reason. The allowance covers only
 that goal and that team. It does not change the authors.
 
+## Assigned work
+
+Orchestration gives a seat a piece of work on a goal with `work_assign`:
+the seat's job (coder, reviewer, qa, security, ...), its agent and team hash,
+and a description of what it has to do. The seat sees its work with
+`work_inbox`, accepts it with `work_accept`, and reports it done with
+`work_complete`. Only the assigned seat can accept or complete its work, and
+completing requires accepting first.
+
+A judging job (reviewer, qa, security) cannot go to a team that authored the
+goal, under the same rule as hand-offs.
+
 ## Blame
 
 Every send-back ([handoff-payloads.md](handoff-payloads.md)) carries a blame

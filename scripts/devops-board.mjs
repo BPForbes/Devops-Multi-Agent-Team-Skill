@@ -2,7 +2,7 @@
 // Pure functions over a plain object. The orchestration server (mcp/server.mjs)
 // is the only writer; subagents read and act through its tools.
 import crypto from 'node:crypto'
-import { isAgentId, isGoalId, isItemId, isTeamId } from './devops-ids.mjs'
+import { isAgentId, isGoalId, isItemId, isJob, isTeamId } from './devops-ids.mjs'
 import { validateHandoff } from './devops-handoff.mjs'
 
 // Forward hand-offs are judged by the receiver. Send-backs and sign-off
@@ -25,13 +25,20 @@ const HANDOFF_RE = /^handoff-[0-9a-f]{6}$/
 
 export function emptyBoard() {
   return {
-    version: 1, sprints: {}, goals: {}, handoffs: {}, blame: [], threads: {}, exceptions: [],
+    version: 1,
+    sprints: {},
+    goals: {},
+    handoffs: {},
+    blame: [],
+    threads: {},
+    exceptions: [],
+    assignments: {},
   }
 }
 
 /** A board saved before blame and threads existed still loads with empty ones. */
 export function normalizeBoard(board) {
-  return { blame: [], threads: {}, exceptions: [], ...board }
+  return { blame: [], threads: {}, exceptions: [], assignments: {}, ...board }
 }
 
 const MINT_TRIES = 16
@@ -314,5 +321,62 @@ export function allowSameTeam(board, { goal, team, reason, at }) {
   need(String(reason ?? '').trim() !== '', 'a same-team review needs a reason')
   const next = normalizeBoard(structuredClone(board))
   next.exceptions.push({ goal, team, reason: reason.trim(), at })
+  return next
+}
+
+// Judging jobs may not be given to a team that authored the goal.
+const JUDGING_JOBS = new Set(['reviewer', 'qa', 'security'])
+
+/** Gives a seat a piece of work on a goal, with what it has to do. */
+export function assignWork(board, { goal, job, agent, team, description, by, at, mint }) {
+  need(board.goals[goal] !== undefined, `goal is not on the board: ${goal}`)
+  need(isJob(job), `not a job: ${job}`)
+  need(isAgentId(agent), `not an agent hash: ${agent}`)
+  need(isTeamId(team), `not a team hash: ${team}`)
+  need(String(description ?? '').trim() !== '', 'assigned work needs a description')
+  if (JUDGING_JOBS.has(job) && !isExempt(board, goal, team)) {
+    const authors = normalizeBoard(board).goals[goal].authors ?? []
+    need(!authors.includes(team), `team ${team} authored this goal and cannot judge it`)
+  }
+  const next = normalizeBoard(structuredClone(board))
+  const id = mintId('work', next.assignments, mint)
+  next.assignments[id] = {
+    goal, job, agent, team, description: description.trim(), state: 'assigned',
+    assigned_by: by, assigned_at: at, accepted_at: null, done_at: null,
+  }
+  return { id, board: next }
+}
+
+/** The work a seat has been given and has not finished. */
+export function workInbox(board, agent) {
+  return Object.entries(normalizeBoard(board).assignments)
+    .filter(([, w]) => w.agent === agent && (w.state === 'assigned' || w.state === 'accepted'))
+    .map(([id, w]) => ({ id, ...w }))
+}
+
+function ownWork(board, id, agent) {
+  const row = normalizeBoard(board).assignments[id]
+  need(row !== undefined, `unknown work: ${id}`)
+  need(row.agent === agent, 'only the assigned seat can change its work')
+  return row
+}
+
+/** The assigned seat accepts the work it was given. */
+export function acceptWork(board, { id, agent, at }) {
+  const row = ownWork(board, id, agent)
+  need(row.state === 'assigned', `work ${id} is ${row.state}, not assigned`)
+  const next = normalizeBoard(structuredClone(board))
+  next.assignments[id].state = 'accepted'
+  next.assignments[id].accepted_at = at
+  return next
+}
+
+/** The assigned seat reports the work done. */
+export function completeWork(board, { id, agent, at }) {
+  const row = ownWork(board, id, agent)
+  need(row.state === 'accepted', `work ${id} must be accepted before it is done`)
+  const next = normalizeBoard(structuredClone(board))
+  next.assignments[id].state = 'done'
+  next.assignments[id].done_at = at
   return next
 }
