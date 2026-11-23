@@ -131,10 +131,12 @@ async function latestQaVerdict($: EngineInterface): Promise<{
 }
 
 /** The tree the push would send: HEAD^{tree}, or undefined when git cannot say. */
+const GIT_TIMEOUT_MS = 10000
+
 async function headTree($: EngineInterface): Promise<string | undefined> {
   const root = await $.session.root()
   const argv = ['git', '-C', root, 'rev-parse', 'HEAD^{tree}']
-  const ran = await $.process.run(argv, { timeoutMs: 10000 }).catch(() => undefined)
+  const ran = await $.process.run(argv, { timeoutMs: GIT_TIMEOUT_MS }).catch(() => undefined)
   const hash = ran?.stdout.trim() ?? ''
   return ran?.exitCode === 0 && /^[0-9a-f]{40}$/.test(hash) ? hash : undefined
 }

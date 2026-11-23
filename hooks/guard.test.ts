@@ -52,7 +52,8 @@ test('command arguments and branch names are parsed strictly', () => {
 })
 
 test('free-form words never map to a gate command (rule 3)', () => {
-  const freeForm = ['push', 'go', 'publish', 'ship', 'withdraw', 'cut a branch topic/x', 'gates off']
+  const freeForm = ['push', 'go', 'publish', 'ship', 'withdraw']
+  freeForm.push('cut a branch topic/x', 'gates off')
   for (const words of freeForm) {
     expect(interpretDevopsIntent(words)).toBeUndefined()
   }
