@@ -110,12 +110,39 @@ test('a change back to an old goal text reuses that old hash', () => {
   assert.equal(back.reused, true)
 })
 
-test('superseding a goal with its own text is refused', () => {
+test('superseding a goal with nothing changed is refused', () => {
   const added = addGoal(emptyMemory(), { text: 'A', team: T1, at: AT, mint: () => 'goal-111111' })
   assert.throws(
     () => supersedeGoal(added.memory, { hash: 'goal-111111', text: 'A', team: T1, at: AT }),
-    /same hash/,
+    /nothing changed/,
   )
+})
+
+test('a metric-only change mints a new hash instead of reusing the old one', () => {
+  const added = addGoal(emptyMemory(), {
+    text: 'A', metric: 'm1', team: T1, at: AT, mint: () => 'goal-111111',
+  })
+  const changed = supersedeGoal(added.memory, {
+    hash: 'goal-111111', text: 'A', metric: 'm2', team: T1, judgedBy: [T2], at: AT,
+    mint: () => 'goal-222222',
+  })
+  assert.equal(changed.hash, 'goal-222222')
+  assert.equal(changed.memory.goals['goal-222222'].metric, 'm2')
+  assert.equal(changed.memory.superseded['goal-111111'], 'goal-222222')
+})
+
+test('returning to an old goal reactivates it and drops its old supersession link', () => {
+  const first = addGoal(emptyMemory(), { text: 'A', team: T1, at: AT, mint: () => 'goal-111111' })
+  const second = supersedeGoal(first.memory, {
+    hash: 'goal-111111', text: 'B', team: T1, judgedBy: [T2], at: AT, mint: () => 'goal-222222',
+  })
+  const back = supersedeGoal(second.memory, {
+    hash: 'goal-222222', text: 'A', team: T2, judgedBy: [T1], at: AT, mint: () => 'goal-333333',
+  })
+  assert.equal(back.hash, 'goal-111111')
+  assert.equal(back.memory.goals['goal-111111'].status, 'active')
+  assert.equal(back.memory.superseded['goal-111111'], undefined)
+  assert.equal(back.memory.superseded['goal-222222'], 'goal-111111')
 })
 
 test('the input memory is never changed', () => {

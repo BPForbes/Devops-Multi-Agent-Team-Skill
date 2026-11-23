@@ -47,12 +47,17 @@ function indexTeam(memory, team, hash) {
  * Adds a goal, or reuses the hash of a goal with the same text.
  * Returns { hash, reused, memory } and never changes the input.
  */
-export function addGoal(memory, { text, metric = '', team, judgedBy = [], at, mint = mintGoalId }) {
+export function addGoal(memory, {
+  text, metric = '', team, judgedBy = [], at, mint = mintGoalId, reuse = true,
+}) {
   checkPod(team, judgedBy)
   const next = structuredClone(memory)
-  const existing = findGoalByText(next, text)
+  const existing = reuse ? findGoalByText(next, text) : undefined
   if (existing !== undefined) {
     const reused = assignGoal(next, { hash: existing, team, judgedBy, at, event: 'reused' })
+    // A reused goal is live again, and no longer points at the goal that replaced it.
+    reused.goals[existing].status = 'active'
+    delete reused.superseded[existing]
     return { hash: existing, reused: true, memory: reused }
   }
   let hash = mint()
@@ -92,7 +97,15 @@ export function assignGoal(memory, { hash, team, judgedBy = [], at, event = 'ass
  */
 export function supersedeGoal(memory, { hash, text, metric, team, judgedBy, at, mint }) {
   if (memory.goals[hash] === undefined) throw new Error(`unknown goal: ${hash}`)
-  const added = addGoal(memory, { text, metric, team, judgedBy, at, mint })
+  // A metric-only change keeps the text, so it must not reuse the old hash.
+  const old = memory.goals[hash]
+  const sameText = normalizeGoalText(old.text) === normalizeGoalText(text)
+  if (sameText && (old.metric ?? '') === (metric ?? '')) {
+    throw new Error('nothing changed: the goal text and metric are the same')
+  }
+  const added = addGoal(memory, {
+    text, metric, team, judgedBy, at, mint, reuse: !sameText,
+  })
   if (added.hash === hash) throw new Error('the new goal has the same hash as the old one')
   const next = added.memory
   next.goals[hash].status = 'superseded'

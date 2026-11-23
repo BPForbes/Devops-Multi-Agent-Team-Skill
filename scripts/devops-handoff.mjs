@@ -43,6 +43,13 @@ export function makeHandoff(kind, fields) {
   return payload
 }
 
+const UTC_STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
+
+/** True for an ISO UTC timestamp, such as 2026-11-23T10:00:00Z. */
+function isTimestamp(value) {
+  return typeof value === 'string' && UTC_STAMP.test(value) && !Number.isNaN(Date.parse(value))
+}
+
 function isEmptyOr(value, check) {
   return value === '' || check(value)
 }
@@ -65,10 +72,14 @@ export function validateHandoff(payload) {
     errors.push('to.agent must be an agent hash or empty')
   }
   if (!isEmptyOr(payload.to?.team, isTeamId)) errors.push('to.team must be a team hash or empty')
+  if (!isTimestamp(payload.created)) errors.push('created must be a UTC timestamp, ending in Z')
   if (rule.needsReason && String(payload.reason ?? '').trim() === '') {
     errors.push('reason is required: say in one line why it was resent')
   }
-  if (rule.mustDiffer && payload.to?.team !== '' && payload.to?.team === payload.from?.team) {
+  if (rule.mustDiffer && !isTeamId(payload.to?.team)) {
+    errors.push('a judging hand-off must name the receiving team')
+  }
+  if (rule.mustDiffer && payload.to?.team === payload.from?.team) {
     errors.push('the receiving team must differ from the sending team')
   }
   if (payload.kind === 'security-signoff' && !SIGN_OFFS.includes(payload.result)) {

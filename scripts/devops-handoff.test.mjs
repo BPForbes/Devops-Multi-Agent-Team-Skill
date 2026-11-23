@@ -106,3 +106,19 @@ test('inherited object keys are not kinds', () => {
     })
   }
 })
+
+test('a judging hand-off names the receiving team, and created is a UTC timestamp', () => {
+  const unnamed = makeHandoff('coder-to-review', {
+    ...BASE, signedBy: CODER, fromAgent: CODER, fromTeam: T_CODER,
+    toAgent: '', toTeam: '',
+  })
+  assert.match(validateHandoff(unnamed).errors.join(' '), /must name the receiving team/)
+  const local = makeHandoff('coder-to-review', {
+    ...BASE, signedBy: CODER, fromAgent: CODER, fromTeam: T_CODER,
+    toAgent: '', toTeam: T_QA,
+  })
+  assert.equal(validateHandoff(local).ok, true)
+  const noStamp = { ...local, created: 'yesterday' }
+  assert.match(validateHandoff(noStamp).errors.join(' '), /UTC timestamp/)
+  assert.match(validateHandoff({ ...local, created: undefined }).errors.join(' '), /UTC timestamp/)
+})
