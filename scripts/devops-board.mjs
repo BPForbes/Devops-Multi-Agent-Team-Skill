@@ -25,7 +25,9 @@ function mintId(prefix, existing, mint) {
   const hex = () => crypto.randomBytes(HEX_BYTES).toString('hex')
   let id = `${prefix}-${(mint ?? hex)()}`
   for (let tries = 0; existing[id] !== undefined; tries += 1) {
-    if (tries >= MINT_TRIES) throw new Error(`could not mint a ${prefix} id that is not on the board`)
+    if (tries >= MINT_TRIES) {
+      throw new Error(`could not mint a ${prefix} id that is not on the board`)
+    }
     id = `${prefix}-${(mint ?? hex)()}`
   }
   return id
