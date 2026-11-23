@@ -47,7 +47,9 @@ export function makeHandoff(kind, fields) {
 function judgeTeamErrors(payload, rule) {
   if (!rule.mustDiffer) return []
   if (!isTeamId(payload.to?.team)) return ['a judging hand-off must name the receiving team']
-  if (payload.to.team === payload.from?.team) return ['the receiving team must differ from the sending team']
+  if (payload.to.team === payload.from?.team) {
+    return ['the receiving team must differ from the sending team']
+  }
   return []
 }
 
