@@ -869,7 +869,7 @@ const TOOLS = [
   },
   {
     name: 'board_allow_same_team',
-    description: 'Orchestration only: allow one team to judge a goal it authored, when resources are low.',
+    description: 'Orchestration only: let one team judge a goal it authored, if resources are low.',
     inputSchema: {
       type: 'object',
       properties: {
