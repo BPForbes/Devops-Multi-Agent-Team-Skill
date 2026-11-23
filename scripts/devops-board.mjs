@@ -2,8 +2,16 @@
 // Pure functions over a plain object. The orchestration server (mcp/server.mjs)
 // is the only writer; subagents read and act through its tools.
 import crypto from 'node:crypto'
-import { isAgentId, isGoalId, isItemId } from './devops-ids.mjs'
+import { isAgentId, isGoalId, isItemId, isTeamId } from './devops-ids.mjs'
 import { validateHandoff } from './devops-handoff.mjs'
+
+// Forward hand-offs judge the item with the receiving seat; send-backs and sign-off judge with the sender.
+const FORWARD_JUDGING = new Set(['coder-to-review', 'review-to-qa', 'qa-to-security'])
+const JUDGING = new Set([
+  ...FORWARD_JUDGING, 'triage', 'review-send-back', 'security-send-back', 'security-signoff',
+])
+// Hand-offs that record the team that produced the work.
+const AUTHORING = new Set(['coder-to-review', 'research-to-coder'])
 
 /** Goal statuses in order. A goal moves forward one step, or to `blocked`. */
 export const GOAL_STATES = Object.freeze([
@@ -15,12 +23,14 @@ const SPRINT_RE = /^sprint-[0-9a-f]{6}$/
 const HANDOFF_RE = /^handoff-[0-9a-f]{6}$/
 
 export function emptyBoard() {
-  return { version: 1, sprints: {}, goals: {}, handoffs: {}, blame: [], threads: {} }
+  return {
+    version: 1, sprints: {}, goals: {}, handoffs: {}, blame: [], threads: {}, exceptions: [],
+  }
 }
 
 /** A board saved before blame and threads existed still loads with empty ones. */
 export function normalizeBoard(board) {
-  return { blame: [], threads: {}, ...board }
+  return { blame: [], threads: {}, exceptions: [], ...board }
 }
 
 const MINT_TRIES = 16
@@ -97,12 +107,39 @@ export function moveGoal(board, { goal, state, at }) {
  * Accepts a handoff from the seat that signed it. The payload must pass
  * validateHandoff and name a goal on the board. Returns { id, board }.
  */
+/** The team that judges this hand-off's item: '' when no judge is named yet. */
+function judgeTeamOf(payload) {
+  if (FORWARD_JUDGING.has(payload.kind)) return payload.to.team
+  if (JUDGING.has(payload.kind)) return payload.from.team
+  return ''
+}
+
+function isExempt(board, goal, team) {
+  return team !== '' && normalizeBoard(board).exceptions.some(e => e.goal === goal && e.team === team)
+}
+
+/** Refuses a judge from a team that authored this goal, unless Orchestration allowed it. */
+function assertIndependent(board, payload, judge) {
+  if (judge === '' || isExempt(board, payload.goal, judge)) return
+  const authors = normalizeBoard(board).goals[payload.goal]?.authors ?? []
+  need(
+    !authors.includes(judge),
+    `team ${judge} authored this goal: another team must judge it, or Orchestration allows a same-team review`,
+  )
+}
+
 export function sendHandoff(board, { payload, caller, at, mint }) {
-  const check = validateHandoff(payload)
-  need(check.ok, `handoff refused: ${check.errors.join('; ')}`)
   need(caller === payload.from.agent, 'only the sending seat can send its handoff')
   need(board.goals[payload.goal] !== undefined, `goal is not on the board: ${payload.goal}`)
+  const judge = judgeTeamOf(payload)
+  assertIndependent(board, payload, judge)
+  const check = validateHandoff(payload, { allowSameTeam: isExempt(board, payload.goal, judge) })
+  need(check.ok, `handoff refused: ${check.errors.join('; ')}`)
   const next = normalizeBoard(structuredClone(board))
+  if (AUTHORING.has(payload.kind)) {
+    const goal = next.goals[payload.goal]
+    goal.authors = [...new Set([...(goal.authors ?? []), payload.from.team])]
+  }
   const id = mintId('handoff', next.handoffs, mint)
   need(HANDOFF_RE.test(id), 'bad handoff id')
   if (payload.blame) {
@@ -125,11 +162,20 @@ export function sendHandoff(board, { payload, caller, at, mint }) {
 }
 
 /** The orchestrator picks the receiving seat for an unrouted handoff. */
-export function routeHandoff(board, { id, agent, at }) {
+export function routeHandoff(board, { id, agent, team, at }) {
   need(board.handoffs[id] !== undefined, `unknown handoff: ${id}`)
   need(board.handoffs[id].state === 'unrouted', `handoff ${id} is already routed`)
   need(isAgentId(agent), `not an agent hash: ${agent}`)
+  need(isTeamId(team), `not a team hash: ${team}`)
+  const payload = structuredClone(board.handoffs[id].payload)
+  payload.to.agent = agent
+  payload.to.team = team
+  const judge = judgeTeamOf(payload)
+  assertIndependent(board, payload, judge)
+  const check = validateHandoff(payload, { allowSameTeam: isExempt(board, payload.goal, judge) })
+  need(check.ok, `handoff refused: ${check.errors.join('; ')}`)
   const next = structuredClone(board)
+  next.handoffs[id].payload = payload
   next.handoffs[id].payload.to.agent = agent
   next.handoffs[id].state = 'sent'
   next.handoffs[id].sent_at = at
@@ -242,4 +288,17 @@ export function threadsFor(board, { goal } = {}) {
   return Object.entries(normalizeBoard(board).threads)
     .filter(([, t]) => goal === undefined || t.goal === goal)
     .map(([id, t]) => ({ id, ...t }))
+}
+
+/**
+ * Orchestration allows one same-team review: `team` may judge `goal` even
+ * though it authored it. The reason is kept on the board. Returns a new board.
+ */
+export function allowSameTeam(board, { goal, team, reason, at }) {
+  need(board.goals[goal] !== undefined, `goal is not on the board: ${goal}`)
+  need(isTeamId(team), `not a team hash: ${team}`)
+  need(String(reason ?? '').trim() !== '', 'a same-team review needs a reason')
+  const next = normalizeBoard(structuredClone(board))
+  next.exceptions.push({ goal, team, reason: reason.trim(), at })
+  return next
 }
