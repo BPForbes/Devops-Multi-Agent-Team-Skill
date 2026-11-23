@@ -120,7 +120,8 @@ test('an unrouted handoff is routed to a seat, then appears in its inbox', () =>
   assert.equal(routed.handoffs[sent.id].state, 'sent')
   assert.equal(routed.handoffs[sent.id].payload.to.agent, CODER)
   assert.equal(inboxFor(routed, CODER)[0].id, sent.id)
-  assert.throws(() => routeHandoff(routed, { id: sent.id, agent: QA, team: T_QA, at: AT }), /already routed/)
+  const again = () => routeHandoff(routed, { id: sent.id, agent: QA, team: T_QA, at: AT })
+  assert.throws(again, /already routed/)
 })
 
 test('only the addressee acknowledges, then closes, a handoff, in that order', () => {
@@ -256,7 +257,9 @@ test('routing a judge from the authoring team is refused too', () => {
     item: 'item-3c9e41', goal: GOAL, signedBy: REVIEWER_SEAT, fromAgent: REVIEWER_SEAT,
     fromTeam: T_REVIEW, toAgent: '', toTeam: '', created: AT,
   })
-  const sent = sendHandoff(reviewed, { payload, caller: REVIEWER_SEAT, at: AT, mint: () => '555555' })
+  const sent = sendHandoff(reviewed, {
+    payload, caller: REVIEWER_SEAT, at: AT, mint: () => '555555',
+  })
   assert.throws(
     () => routeHandoff(sent.board, { id: sent.id, agent: QA, team: T_CODER, at: AT }),
     /authored this goal/,
@@ -267,7 +270,8 @@ test('Orchestration can allow one same-team review, with a reason, and it is kep
   const { board } = withGoal()
   const reviewed = coderToReview(board).board
   assert.throws(() => reviewToQa(reviewed, { qaTeam: T_CODER }), /authored this goal/)
-  assert.throws(() => allowSameTeam(reviewed, { goal: GOAL, team: T_CODER, reason: ' ', at: AT }), /needs a reason/)
+  const blank = () => allowSameTeam(reviewed, { goal: GOAL, team: T_CODER, reason: ' ', at: AT })
+  assert.throws(blank, /needs a reason/)
   const allowed = allowSameTeam(reviewed, {
     goal: GOAL, team: T_CODER, reason: 'Only one QA seat is free', at: AT,
   })

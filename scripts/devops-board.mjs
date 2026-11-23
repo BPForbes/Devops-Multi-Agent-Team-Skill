@@ -5,7 +5,7 @@ import crypto from 'node:crypto'
 import { isAgentId, isGoalId, isItemId, isTeamId } from './devops-ids.mjs'
 import { validateHandoff } from './devops-handoff.mjs'
 
-// Forward hand-offs judge the item with the receiving seat; send-backs and sign-off judge with the sender.
+// Forward hand-offs are judged by the receiver; send-backs and sign-off by the sender.
 const FORWARD_JUDGING = new Set(['coder-to-review', 'review-to-qa', 'qa-to-security'])
 const JUDGING = new Set([
   ...FORWARD_JUDGING, 'triage', 'review-send-back', 'security-send-back', 'security-signoff',
@@ -115,7 +115,8 @@ function judgeTeamOf(payload) {
 }
 
 function isExempt(board, goal, team) {
-  return team !== '' && normalizeBoard(board).exceptions.some(e => e.goal === goal && e.team === team)
+  const exceptions = normalizeBoard(board).exceptions
+  return team !== '' && exceptions.some(e => e.goal === goal && e.team === team)
 }
 
 /** Refuses a judge from a team that authored this goal, unless Orchestration allowed it. */
@@ -124,7 +125,7 @@ function assertIndependent(board, payload, judge) {
   const authors = normalizeBoard(board).goals[payload.goal]?.authors ?? []
   need(
     !authors.includes(judge),
-    `team ${judge} authored this goal: another team must judge it, or Orchestration allows a same-team review`,
+    `team ${judge} authored this goal: another team must judge it, unless Orchestration allows it`,
   )
 }
 
