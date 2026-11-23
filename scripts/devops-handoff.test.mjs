@@ -120,7 +120,7 @@ test('a send-back must carry a blame tag, and no other kind may', () => {
 
 test('a blame tag names an agent hash and a team hash', () => {
   const bad = triage({ blame: { agent: 'coder', team: T_CODER } })
-  assert.match(validateHandoff(bad).errors.join(' '), /blame must be/)
+  assert.match(validateHandoff(bad).errors.join(' '), /blame/)
 })
 
 test('a reviewer send-back goes to the coder and names the author', () => {

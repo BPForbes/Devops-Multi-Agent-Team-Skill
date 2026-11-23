@@ -67,7 +67,6 @@ export function makeHandoff(kind, fields) {
   return payload
 }
 
-/** Checks the shape of a blame tag: an agent hash and a team hash. */
 export function isBlame(value) {
   return value !== null && typeof value === 'object'
     && isAgentId(value.agent) && isTeamId(value.team)
@@ -77,7 +76,7 @@ function isEmptyOr(value, check) {
   return value === '' || check(value)
 }
 
-function blameErrors(payload, rule) {
+function extraErrors(payload, rule) {
   const present = payload.blame !== null && payload.blame !== undefined
   if (rule.sendBack && !isBlame(payload.blame)) {
     return ['a send-back needs a blame tag: {agent, team} of the author of the work']
@@ -85,6 +84,9 @@ function blameErrors(payload, rule) {
   if (!rule.sendBack && present) return ['only a send-back carries a blame tag']
   if (present && !isBlame(payload.blame)) {
     return ['blame must be {agent, team} with an agent hash and a team hash']
+  }
+  if (payload.kind === 'security-signoff' && !SIGN_OFFS.includes(payload.result)) {
+    return ['result must be clear or blocked']
   }
   return []
 }
@@ -113,10 +115,7 @@ export function validateHandoff(payload) {
   if (rule.mustDiffer && payload.to?.team !== '' && payload.to?.team === payload.from?.team) {
     errors.push('the receiving team must differ from the sending team')
   }
-  if (payload.kind === 'security-signoff' && !SIGN_OFFS.includes(payload.result)) {
-    errors.push('result must be clear or blocked')
-  }
-  errors.push(...blameErrors(payload, rule))
+  errors.push(...extraErrors(payload, rule))
   if (!isJob(payload.from?.job)) errors.push('from.job is not a known job')
   return { ok: errors.length === 0, errors }
 }
