@@ -28,6 +28,22 @@ A goal may go to `blocked` from any state and return to the state it left.
 `board_move_goal` refuses a jump that skips a step. The step names match the
 hand-off kinds, so the board tells a reader which hand-off is next.
 
+## Independence
+
+A team never judges an item it authored. The board enforces this:
+
+- A team that sends a `coder-to-review` or `research-to-coder` hand-off is
+  recorded as an author of the goal.
+- A seat judges the item when it is the receiving seat of `coder-to-review`,
+  `review-to-qa` or `qa-to-security`, or the sending seat of a triage,
+  send-back or `security-signoff`. Its team must not be an author team.
+- Routing a judge checks the same rule, so a seat cannot be routed in from an
+  authoring team.
+
+When resources are low, Orchestration may allow one same-team review with
+`board_allow_same_team`, which records a reason. The allowance covers only
+that goal and that team. It does not change the authors.
+
 ## Blame
 
 Every send-back ([handoff-payloads.md](handoff-payloads.md)) carries a blame

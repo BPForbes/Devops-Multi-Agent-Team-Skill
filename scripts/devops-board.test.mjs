@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   ackHandoff,
   addGoal,
+  allowSameTeam,
   blameCounts,
   blameFor,
   closeHandoff,
@@ -115,11 +116,11 @@ test('an unrouted handoff is routed to a seat, then appears in its inbox', () =>
     payload: triagePayload(), caller: QA, at: AT, mint: () => 'eeeeee',
   })
   assert.deepEqual(inboxFor(sent.board, CODER), [])
-  const routed = routeHandoff(sent.board, { id: sent.id, agent: CODER, at: AT })
+  const routed = routeHandoff(sent.board, { id: sent.id, agent: CODER, team: T_CODER, at: AT })
   assert.equal(routed.handoffs[sent.id].state, 'sent')
   assert.equal(routed.handoffs[sent.id].payload.to.agent, CODER)
   assert.equal(inboxFor(routed, CODER)[0].id, sent.id)
-  assert.throws(() => routeHandoff(routed, { id: sent.id, agent: QA, at: AT }), /already routed/)
+  assert.throws(() => routeHandoff(routed, { id: sent.id, agent: QA, team: T_QA, at: AT }), /already routed/)
 })
 
 test('only the addressee acknowledges, then closes, a handoff, in that order', () => {
@@ -127,7 +128,7 @@ test('only the addressee acknowledges, then closes, a handoff, in that order', (
   const sent = sendHandoff(board, {
     payload: triagePayload(), caller: QA, at: AT, mint: () => 'eeeeee',
   })
-  const routed = routeHandoff(sent.board, { id: sent.id, agent: CODER, at: AT })
+  const routed = routeHandoff(sent.board, { id: sent.id, agent: CODER, team: T_CODER, at: AT })
   assert.throws(() => ackHandoff(routed, { id: sent.id, agent: QA, at: AT }), /only the addressee/)
   const early = () => closeHandoff(routed, { id: sent.id, agent: CODER, at: AT })
   assert.throws(early, /acknowledged before/)
@@ -205,4 +206,79 @@ test('a thread needs a goal on the board, an item hash, a topic and a message', 
   assert.throws(() => openThread(board, { ...base, item: 'goal-3c9e41' }), /not an item hash/)
   assert.throws(() => openThread(board, { ...base, topic: ' ' }), /needs a topic/)
   assert.throws(() => openThread(board, { ...base, body: '' }), /first message/)
+})
+
+const REVIEWER_SEAT = 'agent-0b0b0b'
+const T_REVIEW = 'team-7a8b9c'
+
+function coderToReview(board, { reviewerTeam = T_REVIEW } = {}) {
+  const payload = makeHandoff('coder-to-review', {
+    item: 'item-3c9e41', goal: GOAL, signedBy: CODER, fromAgent: CODER, fromTeam: T_CODER,
+    toAgent: REVIEWER_SEAT, toTeam: reviewerTeam, created: AT,
+  })
+  return sendHandoff(board, { payload, caller: CODER, at: AT, mint: () => '333333' })
+}
+
+function reviewToQa(board, { qaTeam, reviewerTeam = T_REVIEW }) {
+  const payload = makeHandoff('review-to-qa', {
+    item: 'item-3c9e41', goal: GOAL, signedBy: REVIEWER_SEAT, fromAgent: REVIEWER_SEAT,
+    fromTeam: reviewerTeam, toAgent: QA, toTeam: qaTeam, created: AT,
+  })
+  return sendHandoff(board, { payload, caller: REVIEWER_SEAT, at: AT, mint: () => '444444' })
+}
+
+test('the coder who wrote the work is recorded as its author team', () => {
+  const { board } = withGoal()
+  const sent = coderToReview(board)
+  assert.deepEqual(sent.board.goals[GOAL].authors, [T_CODER])
+})
+
+test('a reviewer from the authoring team is refused', () => {
+  const { board } = withGoal()
+  assert.throws(() => coderToReview(board, { reviewerTeam: T_CODER }), /another team|must differ/)
+})
+
+test('a QA from the authoring team cannot judge the item later', () => {
+  const { board } = withGoal()
+  const reviewed = coderToReview(board).board
+  assert.throws(
+    () => reviewToQa(reviewed, { qaTeam: T_CODER }),
+    /authored this goal/,
+  )
+  const qa = reviewToQa(reviewed, { qaTeam: T_QA })
+  assert.equal(qa.board.handoffs[qa.id].state, 'sent')
+})
+
+test('routing a judge from the authoring team is refused too', () => {
+  const { board } = withGoal()
+  const reviewed = coderToReview(board).board
+  const payload = makeHandoff('review-to-qa', {
+    item: 'item-3c9e41', goal: GOAL, signedBy: REVIEWER_SEAT, fromAgent: REVIEWER_SEAT,
+    fromTeam: T_REVIEW, toAgent: '', toTeam: '', created: AT,
+  })
+  const sent = sendHandoff(reviewed, { payload, caller: REVIEWER_SEAT, at: AT, mint: () => '555555' })
+  assert.throws(
+    () => routeHandoff(sent.board, { id: sent.id, agent: QA, team: T_CODER, at: AT }),
+    /authored this goal/,
+  )
+})
+
+test('Orchestration can allow one same-team review, with a reason, and it is kept', () => {
+  const { board } = withGoal()
+  const reviewed = coderToReview(board).board
+  assert.throws(() => reviewToQa(reviewed, { qaTeam: T_CODER }), /authored this goal/)
+  assert.throws(() => allowSameTeam(reviewed, { goal: GOAL, team: T_CODER, reason: ' ', at: AT }), /needs a reason/)
+  const allowed = allowSameTeam(reviewed, {
+    goal: GOAL, team: T_CODER, reason: 'Only one QA seat is free', at: AT,
+  })
+  assert.equal(allowed.exceptions.length, 1)
+  const qa = reviewToQa(allowed, { qaTeam: T_CODER })
+  assert.equal(qa.board.handoffs[qa.id].payload.to.team, T_CODER)
+})
+
+test('an exception covers only its goal and its team', () => {
+  const { board } = withGoal()
+  const reviewed = coderToReview(board).board
+  const allowed = allowSameTeam(reviewed, { goal: GOAL, team: T_QA, reason: 'Other pod', at: AT })
+  assert.throws(() => reviewToQa(allowed, { qaTeam: T_CODER }), /authored this goal/)
 })

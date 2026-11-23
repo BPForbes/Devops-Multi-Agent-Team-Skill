@@ -91,7 +91,11 @@ function extraErrors(payload, rule) {
   return []
 }
 
-export function validateHandoff(payload) {
+/**
+ * Validates a payload. `allowSameTeam` is set only by the board, when
+ * Orchestration has approved a same-team review for this goal.
+ */
+export function validateHandoff(payload, { allowSameTeam = false } = {}) {
   const errors = []
   const rule = ruleFor(payload?.kind)
   if (rule === undefined) return { ok: false, errors: ['kind is not a handoff kind'] }
@@ -112,7 +116,8 @@ export function validateHandoff(payload) {
   if (rule.needsReason && String(payload.reason ?? '').trim() === '') {
     errors.push('reason is required: say in one line why it was resent')
   }
-  if (rule.mustDiffer && payload.to?.team !== '' && payload.to?.team === payload.from?.team) {
+  if (!allowSameTeam && rule.mustDiffer && payload.to?.team !== ''
+    && payload.to?.team === payload.from?.team) {
     errors.push('the receiving team must differ from the sending team')
   }
   errors.push(...extraErrors(payload, rule))

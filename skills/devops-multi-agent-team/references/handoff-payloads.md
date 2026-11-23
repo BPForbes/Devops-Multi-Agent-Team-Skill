@@ -8,6 +8,14 @@ record of who asked for what, for which goal, and which pod.
 
 Read this file. Do not paste it into agent prompts.
 
+## Same-team rule
+
+No item is judged by the team that authored it, and a judging hand-off must
+name a different team from its sender. The board refuses a judge from an
+authoring team. The only exception is one Orchestration allowance for that
+goal and that team, recorded with a reason
+([board.md](board.md), Independence). Use it only when resources are low.
+
 ## Transport: the orchestration server
 
 Seats do not message each other, and do not write handoff files for
@@ -18,7 +26,7 @@ goal board ([board.md](board.md)):
 | Tool | Who calls it | What it does |
 |------|--------------|--------------|
 | `handoff_send` | the sending seat (`caller` = its agent hash) | checks the payload with the validator and records it on the board |
-| `handoff_route` | Orchestration | picks the receiving seat for an unrouted triage |
+| `handoff_route` | Orchestration | picks the receiving seat and its team for an unrouted hand-off |
 | `handoff_inbox` | the receiving seat | lists the handoffs addressed to it that are not done |
 | `handoff_ack` | the addressee | acknowledges a handoff it has read |
 | `handoff_close` | the addressee | marks the handoff done once its work is finished |
