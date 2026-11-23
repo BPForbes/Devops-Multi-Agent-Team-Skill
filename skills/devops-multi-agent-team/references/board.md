@@ -56,6 +56,16 @@ completing requires accepting first.
 A judging job (reviewer, qa, security) cannot go to a team that authored the
 goal, under the same rule as hand-offs.
 
+## Inboxes and push
+
+A seat's inbox is the resource `devops://inbox/<agent hash>`. It holds the
+hand-offs addressed to the seat and its open work. A seat subscribes to its
+inbox (`resources/subscribe`), and the server sends
+`notifications/resources/updated` when the inbox changes, so the seat need not
+poll. The server checks the board every two seconds for subscribed inboxes,
+because each seat's server process reads the same board file. A subscription
+is only for an inbox; other URIs are refused.
+
 ## Blame
 
 Every send-back ([handoff-payloads.md](handoff-payloads.md)) carries a blame
