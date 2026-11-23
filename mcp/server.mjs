@@ -659,11 +659,15 @@ const TOOLS = [
   },
   {
     name: 'board_add_goal',
-    description: 'Put a goal (a goal hash from goal memory) on the board, in a sprint or the backlog.',
+    description: 'Put a goal (a goal hash from goal memory) on the board: a sprint or the backlog.',
     inputSchema: {
       type: 'object',
       properties: {
-        dest, goal: { type: 'string' }, title: { type: 'string' }, sprint: { type: 'string' }, state: GOAL_STATE,
+        dest,
+        goal: { type: 'string' },
+        title: { type: 'string' },
+        sprint: { type: 'string' },
+        state: GOAL_STATE,
       },
       required: ['goal'],
       additionalProperties: false,
@@ -671,7 +675,11 @@ const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => boardChange(args, board => ({
       board: addGoal(board, {
-        goal: args.goal, title: args.title, sprint: args.sprint ?? '', state: args.state ?? 'backlog', at: now(),
+        goal: args.goal,
+        title: args.title,
+        sprint: args.sprint ?? '',
+        state: args.state ?? 'backlog',
+        at: now(),
       }),
     })),
   },
@@ -681,7 +689,9 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        dest, goal: { type: 'string' }, state: { type: 'string', enum: [...GOAL_STATES, 'blocked'] },
+        dest,
+        goal: { type: 'string' },
+        state: { type: 'string', enum: [...GOAL_STATES, 'blocked'] },
       },
       required: ['goal', 'state'],
       additionalProperties: false,
@@ -693,7 +703,7 @@ const TOOLS = [
   },
   {
     name: 'board_view',
-    description: 'Read the goal board: one sprint and its goals, or every sprint when none is given.',
+    description: 'Read the goal board: one sprint and its goals, or all sprints.',
     inputSchema: {
       type: 'object',
       properties: { dest, sprint: { type: 'string' } },
@@ -709,7 +719,7 @@ const TOOLS = [
   },
   {
     name: 'handoff_send',
-    description: 'Send a handoff payload (references/handoff-payloads.md). caller is the sending seat; the server checks the payload and records it. An empty to.agent is routed later with handoff_route.',
+    description: 'Send a handoff payload (references/handoff-payloads.md). The server checks it and records it. An empty to.agent is routed later with handoff_route.',
     inputSchema: {
       type: 'object',
       properties: { dest, caller: { type: 'string' }, payload: { type: 'object' } },
