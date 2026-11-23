@@ -25,7 +25,9 @@ function engine(on: any, note: string | undefined) {
   on('ui.status', () => ({ value: undefined }))
   on('process.run', (_: unknown, e: { argv?: string[] }) => ({ value: e.argv?.includes('rev-parse')
     ? { exitCode: 0, stdout: `${TREE}\n`, stderr: '' }
-    : { exitCode: 0, stdout: JSON.stringify([{ id: 'rust', name: 'Rust', layers: ['systems'], evidence: ['Cargo.toml'] }]), stderr: '' } }))
+    : { exitCode: 0, stdout: JSON.stringify([{
+      id: 'rust', name: 'Rust', layers: ['systems'], evidence: ['Cargo.toml'],
+    }]), stderr: '' } }))
   on('fs.list', (_: unknown, e: { path?: string }) => ({
     value: note !== undefined && e.path === QA_DIR ? [{ name: 'qa-qa-0e0e0e.md', kind: 'file', size: 1, mtimeMs: 1, isLink: false }] : [],
   }))
@@ -44,7 +46,7 @@ test('a push is refused when no QA note exists', async ($, on) => {
   expect(noQa.isError ?? noQa.deny).toBeTruthy()
 })
 
-test('a PASS on this tree and the person\'s push-ok allow one push; the grant is consumed', async ($, on) => {
+test('a PASS on this tree and push-ok allow one push; the grant is consumed', async ($, on) => {
   const state = engine(on, PASS_NOTE)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
 
@@ -208,7 +210,7 @@ test('a project\'s own wording replaces the default sentence', async ($, on) => 
   assert.ok(!String(section?.text).includes('DEFAULT PROMPT'))
 })
 
-test('a PASS on another tree is refused even when the person authorized the push', async ($, on) => {
+test('a PASS on another tree is refused even when push-ok was typed', async ($, on) => {
   const state = engine(on, `Publish gate: PASS\ntree: ${'b'.repeat(40)}\n`)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', true)

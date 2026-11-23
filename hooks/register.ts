@@ -133,7 +133,8 @@ async function latestQaVerdict($: EngineInterface): Promise<{
 /** The tree the push would send: HEAD^{tree}, or undefined when git cannot say. */
 async function headTree($: EngineInterface): Promise<string | undefined> {
   const root = await $.session.root()
-  const ran = await $.process.run(['git', '-C', root, 'rev-parse', 'HEAD^{tree}'], { timeoutMs: 10000 }).catch(() => undefined)
+  const argv = ['git', '-C', root, 'rev-parse', 'HEAD^{tree}']
+  const ran = await $.process.run(argv, { timeoutMs: 10000 }).catch(() => undefined)
   const hash = ran?.stdout.trim() ?? ''
   return ran?.exitCode === 0 && /^[0-9a-f]{40}$/.test(hash) ? hash : undefined
 }
@@ -409,14 +410,15 @@ export const register: Register = on => {
       }
     }
     if (actions.some(action => action.kind === 'publish')) {
-      // Rule 2: QA must have recorded PASS on the exact tree this push would send.
+      // Rule 2: QA records PASS on the exact tree the push would send.
       const what = actions.find(a => a.kind === 'publish')?.what
       const qa = await latestQaVerdict($)
       const tree = await headTree($)
       if (qa.verdict !== 'PASS' || tree === undefined || qa.tree !== tree) {
         return {
           deny: `${PLUGIN}: ${what} is refused: QA must record PASS on this exact tree `
-            + `(${tree ?? 'unknown'}). Latest QA note: ${qa.verdict ?? 'none'}, tree ${qa.tree ?? 'none'}.`,
+            + `(${tree ?? 'unknown'}). Latest QA note: ${qa.verdict ?? 'none'}, `
+            + `tree ${qa.tree ?? 'none'}.`,
         }
       }
       // Rule 1: only the person's typed /devops push-ok authorizes it.

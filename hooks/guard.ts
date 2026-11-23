@@ -26,11 +26,20 @@ const WRAPPERS = ['sudo', 'command', 'exec', 'time', 'env', 'nohup', 'nice', 'xa
 /** Shell wrappers whose quoted argument is itself a command: their inner text is classified too. */
 const INNER = /\b(?:(?:ba|z|da|k)?sh\s+-c|eval)\s+(["'])((?:(?!\1).)*)\1/g
 
+/** Words that may precede the real command: wrappers, assignments and wrapper flags. */
+function isPrefix(word: string): boolean {
+  return isAssignment(word) || WRAPPERS.includes(word) || (word !== 'git' && word.startsWith('-'))
+}
+
+function aliasConfigured(words: string[]): boolean {
+  return words.some((w, i) => w === '-c' && (words[i + 1] ?? '').startsWith('alias.'))
+}
+
 function classifySegment(segment: string): Action | undefined {
   const words = segment.trim().split(/\s+/).filter(Boolean)
-  while (words.length > 0 && (isAssignment(words[0]) || WRAPPERS.includes(words[0]) || (words[0] !== 'git' && words[0].startsWith('-')))) words.shift()
+  while (words.length > 0 && isPrefix(words[0])) words.shift()
   if (words[0] === 'git') {
-    if (words.some((w, i) => w === '-c' && (words[i + 1] ?? '').startsWith('alias.'))) return { kind: 'publish', what: 'git alias' }
+    if (aliasConfigured(words)) return { kind: 'publish', what: 'git alias' }
     const { sub, rest } = gitSubcommand(words)
     if (sub === 'push') return { kind: 'publish', what: 'git push' }
     if (sub === 'checkout' && rest.some(w => w === '-b' || w === '-B')) return { kind: 'branch', name: valueAfter(rest, ['-b', '-B']), what: 'git checkout -b' }

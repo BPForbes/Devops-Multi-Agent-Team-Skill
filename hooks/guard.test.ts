@@ -1,7 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
-  branchNameOf, classify, commitInfo, interpretDevopsIntent, shellWords, splitArgs, treeOf, verdictOf,
+  branchNameOf, classify, commitInfo, interpretDevopsIntent, shellWords, splitArgs, treeOf,
+  verdictOf,
 } from './guard'
 
 test('git push and gh pr publishing are found, however they are spelled', () => {
@@ -51,7 +52,8 @@ test('command arguments and branch names are parsed strictly', () => {
 })
 
 test('free-form words never map to a gate command (rule 3)', () => {
-  for (const words of ['push', 'go', 'publish', 'ship', 'withdraw', 'cut a branch topic/x', 'gates off']) {
+  const freeForm = ['push', 'go', 'publish', 'ship', 'withdraw', 'cut a branch topic/x', 'gates off']
+  for (const words of freeForm) {
     expect(interpretDevopsIntent(words)).toBeUndefined()
   }
   expect(interpretDevopsIntent('')).toEqual({ word: 'status', rest: '' })
