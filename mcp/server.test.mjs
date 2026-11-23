@@ -336,3 +336,35 @@ test('config_set plans by default, writes only with apply, refuses an invalid va
     assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).defaults.lineLength.code, 120)
   } finally { c.close() }
 })
+
+test('a server bound to a seat refuses to act as another seat', async () => {
+  const root = tmp()
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root, DEVOPS_SEAT: 'agent-0a0a0a' } })
+  const refused = await c.call('handoff_send', { caller: 'agent-0c0c0c', payload: {} })
+  assert.equal(refused.isError, true)
+  assert.match(refused.text, /bound to agent-0a0a0a/)
+  c.close()
+})
+
+test('the board is never written through a symbolic link out of the project', async () => {
+  const root = tmp()
+  const outside = tmp()
+  fs.symlinkSync(outside, path.join(root, 'devops-skill'))
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  const refused = await c.call('board_create_sprint', { name: 'S1' })
+  assert.equal(refused.isError, true)
+  assert.match(refused.text, /symbolic link/)
+  assert.equal(fs.existsSync(path.join(outside, 'thoughts')), false)
+  c.close()
+})
+
+test('only Orchestration, not a bound seat, may allow a same-team review', async () => {
+  const root = tmp()
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root, DEVOPS_SEAT: 'agent-0a0a0a' } })
+  const refused = await c.call('board_allow_same_team', {
+    goal: 'goal-3c9e41', team: 'team-1a2b3c', reason: 'low on resources',
+  })
+  assert.equal(refused.isError, true)
+  assert.match(refused.text, /only Orchestration/)
+  c.close()
+})

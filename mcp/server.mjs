@@ -106,9 +106,25 @@ const GOAL_STATE = {
   type: 'string', enum: ['backlog', 'ready', 'in_progress', 'review', 'qa', 'security', 'done'],
 }
 
+/**
+ * The board file's path inside the project. Refuses a symbolic link on the way,
+ * so a read or write cannot be redirected outside the project.
+ */
+function boardFile(args) {
+  const root = fs.realpathSync(projectDir(args))
+  let at = root
+  for (const part of BOARD_FILE.split(path.sep)) {
+    at = path.join(at, part)
+    if (fs.existsSync(at) && fs.lstatSync(at).isSymbolicLink()) {
+      throw new Error(`refusing to use a symbolic link for the board: ${at}`)
+    }
+  }
+  return at
+}
+
 function readBoard(args) {
   try {
-    const text = fs.readFileSync(path.join(projectDir(args), BOARD_FILE), 'utf8')
+    const text = fs.readFileSync(boardFile(args), 'utf8')
     return normalizeBoard(JSON.parse(text))
   } catch (error) {
     if (error.code === 'ENOENT') return emptyBoard()
@@ -119,7 +135,7 @@ function readBoard(args) {
 /** Applies one change to the board and saves it. `change` returns { board, ...result }. */
 function boardChange(args, change) {
   const { board, ...result } = change(readBoard(args))
-  const file = path.join(projectDir(args), BOARD_FILE)
+  const file = boardFile(args)
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, `${JSON.stringify(board, null, 2)}\n`)
   return result
@@ -882,11 +898,12 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => ({
-      board: allowSameTeam(board, {
-        goal: args.goal, team: args.team, reason: args.reason, at: now(),
-      }),
-    })),
+    run: args => {
+      if (BOUND_SEAT) throw new Error('only Orchestration may allow a same-team review')
+      return boardChange(args, board => ({
+        board: allowSameTeam(board, { goal: args.goal, team: args.team, reason: args.reason, at: now() }),
+      }))
+    },
   },
 ]
 
