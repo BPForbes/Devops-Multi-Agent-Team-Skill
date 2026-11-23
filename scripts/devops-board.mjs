@@ -183,7 +183,7 @@ export function blameFor(board, { goal } = {}) {
   return goal === undefined ? entries : entries.filter(entry => entry.goal === goal)
 }
 
-/** How many send-backs each author has taken: { agent: count }. */
+/** Blame count per agent: { agent: count }. */
 export function blameCounts(board) {
   const counts = {}
   for (const entry of normalizeBoard(board).blame) {

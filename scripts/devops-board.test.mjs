@@ -188,7 +188,9 @@ test('a thread is opened, answered in turn, then resolved by the seat that opene
   const resolved = resolveThread(replied, { thread: opened.id, agent: QA, at: AT })
   assert.equal(resolved.threads[opened.id].state, 'resolved')
   assert.throws(
-    () => replyThread(resolved, { thread: opened.id, agent: CODER, team: T_CODER, body: 'late', at: AT }),
+    () => replyThread(resolved, {
+      thread: opened.id, agent: CODER, team: T_CODER, body: 'late', at: AT,
+    }),
     /is resolved/,
   )
   assert.equal(threadsFor(resolved, { goal: GOAL }).length, 1)
