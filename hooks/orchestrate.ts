@@ -118,8 +118,8 @@ export function card(state: CardState): string {
     ? 'Project profile: .devops/project.md; read only the section your step needs.'
     : 'This project is not set up yet; the person can run /devops setup claude.'
   const gate = state.gates
-    ? 'Push gate on: human must authorize (type /devops push-ok on the tree; chat words do '
-      + 'not count). Human wording is'
+    ? 'Push gate on: human must authorize (say push in chat, or type /devops push-ok, on the tree; '
+      + 'Human wording is'
       + ' final. Prefer /devops skill modes (question, mind-map, clean, goal, …) with --mode so'
       + ' MCP tools run instead of plain-text dumps; do not stop development. New branch:'
       + ' /devops allow-branch NAME.'

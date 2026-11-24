@@ -67,6 +67,17 @@ export function verdictOf(note: string): 'PASS' | 'BLOCKED' | undefined {
   return all.length === 0 ? undefined : (all[all.length - 1][1] as 'PASS' | 'BLOCKED')
 }
 
+/** Words the person can type in chat to authorize one push on the current tree. */
+const CHAT_PUSH_WORDS = new Set(['push', 'push it', 'push now'])
+
+/**
+ * True when the person's own chat message is a push approval. Only the person's
+ * composer counts; messages from any other origin never authorize a push.
+ */
+export function chatAuthorizesPush(text: string, origin: string | undefined): boolean {
+  return origin === 'composer' && CHAT_PUSH_WORDS.has(text.trim().toLowerCase())
+}
+
 /** The latest "Security: CLEAR" or "Security: BLOCKED" line in a security note. */
 export function securityVerdictOf(note: string): 'CLEAR' | 'BLOCKED' | undefined {
   const all = [...note.matchAll(/^Security:\s*(CLEAR|BLOCKED)\b/gm)]

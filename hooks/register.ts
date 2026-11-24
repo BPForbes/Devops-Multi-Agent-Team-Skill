@@ -2,7 +2,8 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Found } from '../types'
 import {
-  branchNameOf, classify, classifySegments, commitInfo, interpretDevopsIntent, shellWords, treeOf,
+  branchNameOf, chatAuthorizesPush, classify, classifySegments, commitInfo, interpretDevopsIntent,
+  shellWords, treeOf,
   securityVerdictOf, splitArgs, verdictOf,
 } from './guard'
 import {
@@ -53,8 +54,8 @@ const HELP = [
   '/devops setup claude [--dry-run] [--share-config]  set this project up for Claude Code:',
   '                     only .devops/ and the thought folders; the plugin supplies the rest',
   '/devops brief [TOPIC | role NAME]  one section of the skill, or a seat\'s brief',
-  '/devops push-ok   allow ONE push on the current tree (typed by the person;',
-  '                     chat words do not count; QA PASS and Security CLEAR are still needed)',
+  '/devops push-ok, or "push" in chat   allow ONE push on the current tree (the person\'s word;',
+  '                     QA PASS and Security CLEAR are still needed)',
   '/devops push-reset | withdraw   withdraw that permission',
   '/devops allow-branch NAME   allow creating that git branch',
   '/devops gates on|off   turn the push and branch gates on or off',
@@ -340,6 +341,18 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // The person's chat message "push" (or "push it") authorizes one push on
+  // the current tree, as /devops push-ok does. Other messages pass unchanged.
+  on('prompt.submit', async ($, e, next) => {
+    const message = e as { text?: unknown; origin?: { kind?: unknown } }
+    const kind = typeof message.origin?.kind === 'string' ? message.origin.kind : undefined
+    if (typeof message.text === 'string' && chatAuthorizesPush(message.text, kind)) {
+      const tree = await headTree($)
+      if (tree !== undefined) await $.state.set(PUSH_KEY, tree)
+    }
+    return next(e)
+  })
+
   on('command.run', { command: 'devops' }, async ($, e) => {
     const split = splitArgs(e.args)
     const skill = resolveSkill(split.word, split.rest, e.args)
@@ -365,7 +378,7 @@ export const register: Register = on => {
           `gates: ${gates ? 'on' : 'OFF'}`,
           `check monitor: ${((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) ? 'on' : 'OFF'}; failing checks now: ${Object.entries((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const)).value ?? {}).map(([k, n]) => `${k} x${n}`).join(', ') || 'none'}`,
           `latest QA note: ${qa.verdict ?? 'none'}${qa.file ? ` (${qa.file.split('/').pop()})` : ''}`,
-          `push authorized (typed /devops push-ok, this tree): `
+          `push authorized (push in chat or push-ok, this tree): `
             + (authorized ? 'yes (one push)' : 'no'),
           `branches allowed: ${branches.length === 0 ? 'none' : branches.join(', ')}`,
         ].join('\n'),
