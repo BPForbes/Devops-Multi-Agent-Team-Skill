@@ -71,7 +71,8 @@ test('events appended under the log lock through the linker form one verifiable 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dmat-chain-'))
   const log = path.join(dir, 'events.jsonl')
   for (let i = 0; i < 5; i += 1) {
-    appendEvent(log, { id: `ev-${i}`, from: { agent: 'agent-m' }, kind: 'x' }, { link: chainLinker(KEY) })
+    const event = { id: `ev-${i}`, from: { agent: 'agent-m' }, kind: 'x' }
+    appendEvent(log, event, { link: chainLinker(KEY) })
   }
   assert.equal(verifyChain(readEvents(log), KEY), true)
 })
