@@ -63,6 +63,24 @@ test('the manager may block a team item, and the assignee may unblock it', () =>
   assert.equal(transition(itemIn('blocked'), 'in_progress', 'manager').ok, false)
 })
 
+test('the manager may escalate to blocked from any live state, not only two', () => {
+  for (const state of ['queued', 'in_review', 'in_qa', 'ready_for_human']) {
+    assert.equal(transition(itemIn(state), 'blocked', 'manager').ok, true, state)
+  }
+  assert.equal(transition(itemIn('done'), 'blocked', 'manager').ok, false)
+})
+
+test('the actor list is a copy, so a caller cannot change the table', () => {
+  allowedActors('queued', 'assigned').push('human')
+  assert.deepEqual(allowedActors('queued', 'assigned'), ['server'])
+})
+
+test('an item id must be item- and six hex digits', () => {
+  assert.equal(checkIntake({ ...VALID, item: 'item-a' }).ok, false)
+  assert.equal(checkIntake({ ...VALID, item: 'item-deadbeef' }).ok, false)
+  assert.equal(checkIntake({ ...VALID, item: 'item-3c9e41' }).ok, true)
+})
+
 test('a lapsed lease sends an item back to the queue only through the server', () => {
   assert.equal(transition(itemIn('in_progress'), 'queued', 'server').ok, true)
   assert.equal(transition(itemIn('in_progress'), 'queued', 'assignee').ok, false)
