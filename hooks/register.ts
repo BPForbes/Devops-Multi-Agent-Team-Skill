@@ -6,7 +6,7 @@ import {
   namesPush, securityVerdictOf, shellWords, splitArgs, treeOf, verdictOf,
 } from './guard'
 import {
-  interpretSkillIntent, isGateWord, isSkillWord, orchestrationCard, parseSkillMode,
+  helpCatalog, interpretSkillIntent, isGateWord, isSkillWord, orchestrationCard, parseSkillMode,
   scriptArgsFor, scriptNameFor, skillWords, type SkillMode,
 } from './modes'
 import { BRIEF_SPEC, BRIEF_TOOL, briefFor, card, readStandards, setupClaude } from './orchestrate'
@@ -60,41 +60,6 @@ const MINDMAP_OVERVIEW = '.devops/mindmap/OVERVIEW.md'
 const MINDMAP_TEXT_OVERRIDE = '.devops/mindmap/text.json'
 /** Keeps the session prompt small: the overview is about forty lines, this is a guard against a huge README summary. */
 const MAX_OVERVIEW_CHARS = 4000
-
-
-const HELP = [
-  '/devops              status: languages, gates, QA verdict',
-  '/devops languages    what was detected and in which layer',
-  '/devops setup        how to install the skill and profile in this project',
-  '/devops setup claude [--dry-run] [--share-config] (you) set this project up for Claude Code:',
-  '                     only .devops/ and the thought folders; the plugin supplies the rest',
-  '/devops brief [TOPIC | role NAME]  one section of the skill, or a seat\'s brief',
-  '/devops push-ok      (you) allow ONE push on this tree after QA PASS and Security CLEAR',
-  '/devops push-reset   (you) withdraw that permission',
-  '/devops allow-branch NAME   (you) allow creating that git branch',
-  '/devops gates on|off (you) turn the branch gate on or off; the push check is always on',
-  '/devops monitor on|off (you) turn the failed-check monitor on or off',
-  '/devops comments warn|strict|off (you) lint gate on git commit (comment and code rules): ' +
-    'warn (default), refuse a commit with blocking findings, or off',
-  '/devops config [show|get PATH] read the project standards (line length, limits, lint rules)',
-  '/devops config set|unset|add|remove PATH [VALUE] | rule RULE error|off (you) change ' +
-    '.devops/standards.json; checked before it is written',
-  '/devops help [--mode all|gates|skills|stage]   catalog of gates and skill modes',
-  '/devops question [--mode overview|tree|symbol|search|…] QUERY',
-  '                     answer from mindmap_* (project-mindmap); no team',
-  '/devops mind-map [--mode overview|build|status|tree|query|note] …',
-  '                     repository mind map via mindmap_* / devops-mindmap.mjs',
-  '/devops clean [--mode brief|scan|plan|run] STATEMENT',
-  '                     cleanup_brief / cleanup_scan + devops-cleanup skill',
-  '/devops stage|ci|pipeline [--mode research|…|qa|docs|full|loop] [GOAL]',
-  '                     one CI/CD pod, or full loop until Clear+PASS then notify human',
-  '/devops allocate [--mode pod|agent|job|board] [GOAL]',
-  '                     Orchestrator assigns goals to pods and each agent',
-  '/devops goal|story|repro|triage|review|reuse|tags [--mode …] …',
-  '                     skill modes: structured tools + orchestration card',
-  'Free-form phrases map onto these skill modes, never onto a gate word. Call the named',
-  'tools; keep large file bodies out of chat. Keep development running.',
-].join('\n')
 
 async function mindmapText($: EngineInterface, root: string): Promise<Record<string, string>> {
   const parse = (raw: unknown): Record<string, string> => {
@@ -570,7 +535,7 @@ export const register: Register = on => {
         '          /devops mind-map --mode build',
         '          /devops clean --mode brief "split functions over 40 lines in src"',
         'Free-form wording never changes a gate: map it to a skill mode and keep working.',
-        HELP,
+        helpCatalog('all'),
       ].join('\n'),
     }
   })

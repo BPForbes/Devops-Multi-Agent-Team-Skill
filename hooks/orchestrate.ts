@@ -50,7 +50,7 @@ async function readDir($: EngineInterface, dir: string, shown: string): Promise<
 }
 
 /** The skill's Markdown, read once per load of the mod. */
-export async function skillDocs($: EngineInterface): Promise<Doc[]> {
+async function skillDocs($: EngineInterface): Promise<Doc[]> {
   if (docsCache) return docsCache
   const all: Doc[] = []
   for (const [dir, shown] of DOC_DIRS) all.push(...await readDir($, dir, shown))

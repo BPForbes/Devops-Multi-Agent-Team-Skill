@@ -1,4 +1,4 @@
-export type Action =
+type Action =
   | { kind: 'publish'; what: string; problem?: string; repo?: string }
   | { kind: 'branch'; name: string | undefined; what: string }
 
@@ -288,8 +288,7 @@ const SEPARATORS = /&&|\|\||;|\||&|\n|\(|\)|`|\$\(/
 
 function branchActions(command: string): Action[] {
   const inner = [...command.matchAll(INNER)].flatMap(match => branchActions(match[2]))
-  return [...inner, ...blankQuotes(command)
-    .split(SEPARATORS)
+  return [...inner, ...classifySegments(command)
     .map(branchAction)
     .filter((action): action is Action => action !== undefined)]
 }
@@ -342,8 +341,9 @@ export function branchNameOf(text: string): string | undefined {
   return /^[A-Za-z0-9][A-Za-z0-9._\/-]{0,99}$/.test(text) && !text.includes('..') ? text : undefined
 }
 
+/** The simple commands of a shell line, quotes blanked, trimmed, empties dropped. */
 export function classifySegments(command: string): string[] {
-  return blankQuotes(command).split(/&&|\|\||;|\||\n|\(|\)|`|\$\(/).map(part => part.trim()).filter(part => part !== '')
+  return blankQuotes(command).split(SEPARATORS).map(part => part.trim()).filter(part => part !== '')
 }
 
 export function commitInfo(command: string): { isCommit: boolean; stagesAll: boolean } {
