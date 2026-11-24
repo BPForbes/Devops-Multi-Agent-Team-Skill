@@ -21,6 +21,10 @@ Async. Follow QA primaries. **Only QA may give the OK to push** (except review-b
 `/triage`, plus any CI or quality MCP the profile lists. Security's SOC 2 review
 is not a push either. Quality-tool results are additive.
 
+**Seat `/devops` methods** (same cards as the human; call the tools):
+`/devops stage --mode qa` · `/devops review` · `/devops repro` ·
+`/devops triage` · `/devops question`.
+
 0. Confirm the Reviewers' record covers comments and reuse (no open
    `issue (blocking)` on either) and that the profile's doc check ran.
 0b. When Lean is on for the goal, run the Lean gate ([qa-publish-policy.md](../skills/devops-multi-agent-team/references/qa-publish-policy.md)): `lake build`, `formal_check` with the Push JSON, re-derive one statement, counterexamples are tests. A `proved` row that fails blocks PASS.
@@ -41,10 +45,10 @@ is not a push either. Quality-tool results are additive.
 4. PASS only when AC, tests, the SOC 2 verdict and the bug hunt hold. List thoughts for
    `final/`. Orchestrator cherry-picks the approved
    side-branch SHAs; a QA seat that is not an author of the integrated
-   tree re-approves it (authors: the union of the Handoff `Authors:` and the
-   Push JSON `authors` of every cherry-picked SHA, the Orchestrator's conflict
-   fixes included; refuse when your seat id or handle is in that set); the
-   Orchestrator pushes only after the human authorizes that push.
+   tree and not on an authoring team hash re-approves it (authors/teams:
+   the union of Handoff `Authors:` / `Teams:` and Push JSON `authors` /
+   `teams`; refuse when your agent hash, team hash or handle is in that
+   set); the Orchestrator pushes only after the human authorizes that push.
 
 ## Definition of done
 
