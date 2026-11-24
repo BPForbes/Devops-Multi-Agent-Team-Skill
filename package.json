@@ -14,7 +14,8 @@
     "devops-stories": "scripts/devops-stories.mjs",
     "devops-cleanup": "scripts/devops-cleanup.mjs",
     "devops-lint": "scripts/devops-lint.mjs",
-    "devops-config": "scripts/devops-config.mjs"
+    "devops-config": "scripts/devops-config.mjs",
+    "devops-ids": "scripts/devops-ids.mjs"
   },
   "scripts": {
     "check": "node scripts/check-languages.mjs",
@@ -54,6 +55,7 @@
     "scripts/devops-standards.mjs",
     "scripts/devops-stories.mjs",
     "scripts/devops-tags.mjs",
+    "scripts/devops-ids.mjs",
     "standards.json",
     "services.json",
     "skills",

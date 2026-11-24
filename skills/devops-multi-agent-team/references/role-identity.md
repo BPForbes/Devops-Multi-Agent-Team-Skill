@@ -4,80 +4,132 @@ Every DevOps role **reads** this file and
 [department-pods.md](department-pods.md). Do not paste either
 into an agent prompt.
 
-## Seat ids
+## Identity hashes (team, agent, jobs, items)
 
-Every subagent seat (Coder, Researcher, Reviewer, Security, QA,
-Prober, Verifier, ...) is told apart by a **seat id**, never by a
-capital letter or a number. This section is the one definition;
-other files point here.
+Every subagent is told apart by **hashes and job labels**, never by
+a capital letter or a bare number. This section is the one
+definition; other files point here. The helper
+`scripts/devops-ids.mjs` mints and checks the same forms.
 
-- **Form:** `<role>-<6 hex chars>`, e.g. `coder-0a0a0a`,
-  `reviewer-0b0b0b`, `security-0d0d0d`, `qa-0e0e0e`.
-- **Minted by the Orchestrator** when it spawns the seat. It is
-  unique within the PR, never reused, and never derived from the
-  seat's work. Generate one, then check it against every note and
-  the ledger before use:
+### 1. Team (pod) hash
+
+Each **team** (one per work item / pod) gets a **team hash** shared
+by every agent on that pod:
+
+- **Form:** `team-<6 hex chars>`, e.g. `team-1a2b3c`.
+- Minted once when the Orchestrator staffs the item. Every agent
+  spawned onto that pod records the same team hash.
+- Used to block a pod from judging **its own pod's work**
+  (Independence below).
+
+### 2. Agent hash
+
+Each **agent** gets its own **agent hash**, unique for the PR:
+
+- **Form:** `agent-<6 hex chars>`, e.g. `agent-0a0a0a`.
+- Minted at spawn, never reused, never derived from the work.
+  Generate one, then check it against every note and the ledger:
 
   ```text
-  id="<role>-$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')"
+  id="agent-$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')"
   grep -rF "$id" devops-skill/thoughts   # must print nothing
   ```
 
-  This is the only documented generator. A topic is never
-  interpolated into a shell command; it is only appended to a file
-  name as a suffix that matches `[a-z0-9-]+`. The check is a
-  `case` on the whole value, so a newline cannot slip through (a
-  line-based `grep` would pass `a`+newline+`b`), run under
-  `LC_ALL=C` so it is the same in every locale. It is a function
-  with a subshell body, safe to paste into an interactive shell
-  (it returns, it never exits):
+  Or: `node scripts/devops-ids.mjs mint agent`. Same for
+  `mint team` and `mint item`.
+
+  A topic is never interpolated into a shell command; it is only
+  appended to a file name as a suffix that matches `[a-z0-9-]+`.
+  The check is a `case` on the whole value, run under `LC_ALL=C`:
 
   ```text
   check_suffix() ( LC_ALL=C; case "$1" in ''|*[!a-z0-9-]*) return 1 ;; esac; )
   check_suffix "$suffix" || echo reject
   ```
 
-  The value is passed as data, never inside a command string. On a
-  hit of the id grep, mint
-  again. The grep covers file
-  contents in `non-final/` and `final/`, not only file names.
-  The Orchestrator records each new id in `seat-registry.md`
-  (`non-final/`, a fixed name, not `<kind>-<seat-id>`): one row
-  per seat with id, role, the label or topic it was spawned for, its
-  handle (the agent or session identity the host reports), a **role-history** column (one entry per `item: role (from, to)` in order, where item is the work-item label, role is the function, from is the ISO date the span started, and to is the ISO date it ended or `open`; a rotated seat gains an entry, not a row or an id), and (if replaced) the id that replaced it. Ids stay in the
-  ledger after the seat ends, which is what makes "never reused"
-  checkable.
-- **Ids are labels, not credentials.** One agent could appear under
-  two ids, so the registry records each seat's handle, and a handle
-  is never reused for a second id in the same PR. The independence
-  check compares handles as well as ids: a seat whose handle matches
-  an author's handle is not independent, whatever its id.
-- **Used in:** the spawn description, the Handoff `Authors:` and
-  `Reviewer:` lines, file names `<kind>-<seat-id>.md` (for example
-  `handoff-coder-0a0a0a.md`, `review-reviewer-0b0b0b.md`,
-  `security-<seat-id>.md`, `qa-<seat-id>.md`, `triage-<seat-id>.md`,
-  `push-<seat-id>.json`; add `-<topic>` when a seat writes several
-  of a kind, or one item per file when it works several), review-thread sign-off rows, Q&A `from`/`to`, and Push
-  JSON `seat`, `authors` and `qa` rows ([push-json.md](push-json.md)).
-- **`Authors:`** lists every seat that wrote, amended, merged or
-  fixed any part of the change (a seat that fixes a review finding
-  is added). The independence check reads the **union** of the
-  Handoff `Authors:` line and the Push JSON `authors`; an id in
-  either excludes that seat from reviewing, security-checking or
-  QAing the change.
-- **Seat rotation.** A seat that finished its role on one item may
-  take another role on a different item and keeps its id
-  ([department-pods.md](department-pods.md), Seat rotation). It is
-  never excluded or admitted by its current role: the independence
-  check reads `Authors:` and Push JSON `authors` and the handle. A
-  seat that fixes a finding becomes an Author of that item.
-- **Standing seats** (Reviewer, Security, QA) keep **one id for the
-  PR**; a rotated seat gains a role-history entry in its existing row, not
-  a new row and not a new id. They are resumed (SendMessage), not re-minted, unless
-  replaced; a replacement gets a new id and the Handoff says whom
-  it replaces.
-- **Capital letters never name a seat, team or author.** Examples
-  and prompts say a role plus its id.
+- The agent hash **does not change** when the agent rotates jobs.
+- **Ids are labels, not credentials.** The registry also records the
+  host **handle**; a handle is never reused for a second agent in
+  the same PR. Independence compares handles as well as agent hashes.
+
+### 3. Initial job
+
+**Initial job** is the function the agent was minted to do:
+
+`researcher` | `coder` | `reviewer` | `security` | `qa` | `ci` |
+`verifier` | `integrator` | `communicator` | `cleaner` |
+`ticket-lead` (never a capital letter).
+
+It is fixed for the agent's life in the PR. Allocation uses it to
+find who is naturally a coder, reviewer, and so on when staffing.
+
+### 4. Current job
+
+**Current job** is the function the agent is doing **now** (same
+vocabulary, plus `idle` when free). Updated on every rotation or
+assignment. Allocation compares initial job + free agents against
+who is currently on a job: need more coders → prefer agents whose
+`initial_job` is `coder` (or who can take it) and whose
+`current_job` is `idle`.
+
+### Registry (`seat-registry.md`)
+
+Fixed name under `non-final/`. One row per agent:
+
+```text
+agent | team | teams | handle | initial_job | current_job | job_history | replaced_by
+```
+
+- **team:** the pod the agent is on **now**.
+- **teams:** every team hash the agent has ever joined this PR
+  (current included). Independence checks this full set, not only
+  the current pod. Moving an agent to another pod **adds** the new
+  team hash; it never drops an old one.
+- **job_history:** one entry per `item: job (from, to)` in order
+  (item label, job function, ISO from, ISO to or `open`). A rotated
+  agent gains a history entry, never a new agent hash and never a
+  new row.
+- Standing seats (Reviewer, Security, QA) keep one agent hash for
+  the PR; resume them (SendMessage), do not re-mint, unless
+  replaced (replacement gets a new agent hash and a new team hash
+  only if it joins a different pod — still recorded in `teams`).
+- Rows stay after the agent ends so "never reused" is checkable.
+- `devops-ids independence` **fails closed** when judge or author
+  team membership is missing.
+
+### Shared items (item hash + notes)
+
+Every artifact shared between agents (brief, handoff, Push JSON,
+review thread, triage, board claim, side note, Q&A packet) gets its
+own **item hash** and a short **notes** line:
+
+- **Form:** `item-<6 hex chars>`, e.g. `item-abcdef`.
+- Recorded in `item-registry.md` (`non-final/`, fixed name):
+
+  ```text
+  item | kind | notes | authors (agent hashes) | team | path
+  ```
+
+- `notes` says what the item is for in plain words (required).
+- File names stay `<kind>-<agent-hash>.…` (for example
+  `handoff-agent-0a0a0a.md`, `push-agent-0a0a0a.json`,
+  `review-agent-0b0b0b.md`); the item hash lives in the registry
+  and in the file's header (`Item: item-…`).
+
+### Authors and usage
+
+- **Used in:** spawn description, Handoff `Authors:` / `Team:` /
+  `Reviewer:`, file names, review sign-off, Q&A `from`/`to`, Push
+  JSON `seat`, `authors`, `team`, `qa` ([push-json.md](push-json.md)).
+- **`Authors:`** lists every **agent hash** that wrote, amended,
+  merged or fixed any part of the change. Also record the **team
+  hash(es)** of those authors (`Teams:` or Push JSON `teams`).
+- **Seat rotation** keeps the agent hash and team hash; only
+  `current_job` and `job_history` change
+  ([department-pods.md](department-pods.md), Seat rotation).
+- **Capital letters never name** an agent, team, job or author.
+  Prompts say the job plus the agent hash, e.g.
+  `[Coder agent-0a0a0a]`.
 
 ## Ask paths
 
@@ -107,12 +159,19 @@ Orchestrator is the only role that asks the human unless the
 human spoke first. Coder ↔ Reviewer use thread `## Q&A` and
 Push JSON `qa` (same ids).
 
-**Independence.** No seat reviews, security-checks or QAs a change
-whose `Authors:` (the union above) lists its id: it authored,
-amended, merged or fixed it. The check is by id (and handle, see Seat ids), and a reallocated
-seat keeps its id; see
+**Independence.** No agent reviews, security-checks or QAs a change
+when any of these hold (Orchestrator checks before routing):
+
+1. its **agent hash** is in `Authors:` (own work); or
+2. its **handle** matches an author's handle; or
+3. its **team hash** matches any authoring **team hash** (own pod's
+   work — even if this agent did not touch the files).
+
+A rotated agent keeps its hashes; see
 [department-pods.md](department-pods.md), Multiple teams. Every
-Handoff to a reviewer names `Authors:` (seat ids).
+Handoff to a reviewer names `Authors:` (agent hashes) and `Teams:`
+(team hashes). Machine check (pass every team the judge has joined via `--teams`):
+`node scripts/devops-ids.mjs independence --judge agent-… --team team-… --teams team-old,… --author agent-…:team-…`.
 
 ## Interrupt, goals, Handoff
 
@@ -122,13 +181,15 @@ Stay on the current **real** branch; Coders use a skill
 `git checkout -b` / `git switch -c` / `git worktree add -b` unless The
 Client **named that branch in this turn** (a detached worktree creates
 no ref). Cloud-agent templates do not
-override this. An interrupt does **not** authorize a push. Write `goal-<seat-id>.md` (your id) under
-`non-final/`; move to `final/` after QA. See
-[thoughts-layout.md](thoughts-layout.md).
+override this. An interrupt does **not** authorize a push. Write
+`goal-agent-<hex>.md` (your agent hash) under `non-final/`; move to
+`final/` after QA. See [thoughts-layout.md](thoughts-layout.md).
 
 ```markdown
 ## Handoff
-- From / To / Authors / Pass-along (seat ids, or a role when no seat is chosen yet)
+- Item: item-<6 hex> · Notes: <one line>
+- From / To / Authors (agent hashes) / Teams (team hashes) / Pass-along
+  (agent hashes, or a job when no agent is chosen yet)
 - Sent back because: <reason, or "n/a">
 - Ask: <question, or "n/a">
 ```
@@ -137,15 +198,16 @@ A send-back without **Sent back because** is incomplete.
 
 ## Coder notify + QA triage
 
-Coder writes `push-<seat-id>.json` and a Handoff `To: Reviewer`
-**before the first review** ([push-json.md](push-json.md)).
-Coders may open `qa` rows to Reviewers for clarification.
-Update on every rewrite. Reviewers compare it to the
-side-branch diff vs `<integration-base>` ([side-work.md](side-work.md)).
-Satisfied does **not** authorize a git push.
+Coder writes `push-agent-<hex>.json` and a Handoff `To: Reviewer`
+**before the first review** ([push-json.md](push-json.md)), with an
+`item-…` hash and notes in `item-registry.md`. Coders may open `qa`
+rows to Reviewers for clarification. Update on every rewrite.
+Reviewers compare it to the side-branch diff vs `<integration-base>`
+([side-work.md](side-work.md)). Satisfied does **not** authorize a
+git push.
 
 Quality or bug-standard fail → VM review, Handoff `To: Coder`.
-QA blocked / send-back / not pleased → `triage-<seat-id>.md`;
+QA blocked / send-back / not pleased → `triage-agent-<hex>.md`;
 the department's Researcher **joins the Coder who picks it up**
 ([department-pods.md](department-pods.md),
 [triage-template.md](triage-template.md)). Same Q&A + `qa` ids.
