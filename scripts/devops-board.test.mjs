@@ -544,3 +544,9 @@ test('moving a goal to another sprint keeps its authors, so independence still h
   })
   assert.throws(refused, /authored this goal/)
 })
+
+test('a goal signed off as done cannot be blocked, so it cannot be stranded', () => {
+  const board = addGoal(emptyBoard(), { goal: GOAL, title: 'Lint gate', at: AT })
+  board.goals[GOAL].state = 'done'
+  assert.throws(() => moveGoal(board, { goal: GOAL, state: 'blocked', at: AT }), /is done/)
+})

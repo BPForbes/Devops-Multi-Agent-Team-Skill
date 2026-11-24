@@ -34,18 +34,25 @@ export function emptyBoard() {
     exceptions: [],
     assignments: {},
     reads: {},
+    meetings: {},
+    allocations: {},
+    reports: {},
   }
 }
 
 /** A board saved before blame and threads existed still loads with empty ones. */
 export function normalizeBoard(board) {
-  return { blame: [], threads: {}, exceptions: [], assignments: {}, reads: {}, ...board }
+  return {
+    blame: [], threads: {}, exceptions: [], assignments: {}, reads: {},
+    meetings: {}, allocations: {}, reports: {},
+    ...board,
+  }
 }
 
 const MINT_TRIES = 16
 const HEX_BYTES = 3
 
-function mintId(prefix, existing, mint) {
+export function mintId(prefix, existing, mint) {
   const hex = () => crypto.randomBytes(HEX_BYTES).toString('hex')
   let id = `${prefix}-${(mint ?? hex)()}`
   for (let tries = 0; existing[id] !== undefined; tries += 1) {
@@ -57,17 +64,22 @@ function mintId(prefix, existing, mint) {
   return id
 }
 
-function need(condition, message) {
+export function need(condition, message) {
   if (!condition) throw new Error(message)
 }
 
+/** The longest sprint, in weeks; Scrum sprints run one month at most. */
+export const MAX_SPRINT_WEEKS = 4
+
 /** Opens a sprint. Returns { id, board }. */
-export function createSprint(board, { name, at, mint }) {
+export function createSprint(board, { name, at, mint, weeks = 1 }) {
   need(typeof name === 'string' && name.trim() !== '', 'a sprint needs a name')
+  const runs = Number.isInteger(weeks) && weeks >= 1 && weeks <= MAX_SPRINT_WEEKS
+  need(runs, `a sprint runs 1 to ${MAX_SPRINT_WEEKS} weeks`)
   const next = structuredClone(board)
   const id = mintId('sprint', next.sprints, mint)
   need(SPRINT_RE.test(id), 'bad sprint id')
-  next.sprints[id] = { name: name.trim(), status: 'active', opened: at, goals: [] }
+  next.sprints[id] = { name: name.trim(), status: 'active', opened: at, weeks, goals: [] }
   return { id, board: next }
 }
 
@@ -75,9 +87,29 @@ export function createSprint(board, { name, at, mint }) {
  * Puts a goal from goal memory on the board and in a sprint (or the backlog
  * when sprint is empty). A goal already on the board moves to the new sprint.
  */
+/** True when `allocation` lists `goal`, built or judged there. */
+const listsGoal = (allocation, goal) => allocation.teams
+  .some(t => (t.goals ?? []).includes(goal) || (t.judged_goals ?? []).includes(goal))
+
+/** The open sprint whose allocation lists `goal`, or undefined; it holds the goal. */
+export function allocatedSprintOf(board, goal) {
+  return Object.entries(board.allocations ?? {})
+    .find(([sprint, allocation]) => board.sprints?.[sprint]?.status !== 'closed'
+      && listsGoal(allocation, goal))?.[0]
+}
+
+/** True when any allocation, open or closed, has listed `goal`: it is done only by sign-off. */
+export function everAllocated(board, goal) {
+  return Object.values(board.allocations ?? {}).some(allocation => listsGoal(allocation, goal))
+}
+
 export function addGoal(board, { goal, title, sprint = '', state = 'backlog', at }) {
   need(isGoalId(goal), `not a goal hash: ${goal}`)
-  need(STATE_SET.has(state) && state !== 'blocked', `bad starting state: ${state}`)
+  const starts = STATE_SET.has(state) && state !== 'blocked' && state !== 'done'
+  need(starts, `bad starting state: ${state}`)
+  const allocated = allocatedSprintOf(board, goal)
+  need(allocated === undefined || sprint === allocated,
+    `${goal} belongs to sprint ${allocated}'s allocation; it stays there`)
   const next = structuredClone(board)
   if (sprint !== '') need(next.sprints[sprint] !== undefined, `unknown sprint: ${sprint}`)
   for (const row of Object.values(next.sprints)) {
@@ -99,6 +131,8 @@ export function addGoal(board, { goal, title, sprint = '', state = 'backlog', at
 /** Moves a goal to a new state. Forward by one step, or to `blocked`, or back from `blocked`. */
 export function moveGoal(board, { goal, state, at }) {
   need(isGoalId(goal) && board.goals[goal] !== undefined, `goal is not on the board: ${goal}`)
+  need(state !== 'done' || !everAllocated(board, goal),
+    `${goal} is in a sprint's allocation: only its team lead's sign-off marks it done`)
   need(STATE_SET.has(state), `unknown state: ${state}`)
   const row = board.goals[goal]
   const from = row.state
@@ -107,6 +141,8 @@ export function moveGoal(board, { goal, state, at }) {
   if (from === 'blocked') {
     need(state === row.blocked_from, `a blocked goal resumes at ${row.blocked_from}, not ${state}`)
   } else if (state === 'blocked') {
+    need(from !== 'done',
+      `${goal} is done: only a lead's sign-off makes it done, and it stays done`)
     target.blocked_from = from
   } else {
     const forward = GOAL_STATES.indexOf(state) === GOAL_STATES.indexOf(from) + 1

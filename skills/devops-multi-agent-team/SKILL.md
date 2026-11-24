@@ -84,9 +84,20 @@ security-checks or QAs their own change **or their pod's change**,
 including after being reallocated
 ([department-pods.md](references/department-pods.md), Multiple teams).
 
-**Team sizing and rotation.** One team per work item, 2 to 3 seats of
-each of Researcher, Coder, Reviewer, QA and Security (10 to 15 per
-team, a ceiling not a quota; cost and conflicts decide). A seat that
+**Team sizing and rotation.** No fixed sizes: the Orchestrator first
+runs an allocation research step (at least one researcher), plans the
+teams and seats from it (`allocation_plan`), spins up the board
+(`board_spin_up`) and hands each team lead its Sprint Planning
+([allocation-research.md](references/allocation-research.md),
+[scrum-meetings.md](references/scrum-meetings.md)). Every team lead,
+whatever the team's job, runs its team's meetings and signs its tasks
+off as done (`goal_signoff`), reporting to the Orchestrator, who reports
+to the person; the person's typed `/devops push-ok` is the real final
+sign-off before any push. A one-file fix gets
+one Coder and one Reviewer, QA and Security, each on its own team that
+wrote nothing. The
+ceiling is 2 to 3 seats of each of Researcher, Coder, Reviewer, QA and
+Security per team (a ceiling not a quota; cost and conflicts decide). A seat that
 finished its role may take another job on a *different* item, keeping
 its agent hash; it never judges what it wrote, fixed, briefed, or what
 its **pod** authored (the Orchestrator judges "briefed" from the
@@ -325,8 +336,11 @@ e.g. `[Planner]`; a spawned seat adds both, e.g.
 
 ## Orchestrator loop (async pods)
 
-Staff each item's pods with 2 to 3 subagents per function and
-rebalance idle seats to busy functions by seat rotation
+Research the allocation first, then staff each team from the plan, up
+to 2 to 3 subagents per function
+([allocation-research.md](references/allocation-research.md)); the team
+leads run the sprint's Scrum meetings
+([scrum-meetings.md](references/scrum-meetings.md)). Rebalance idle seats to busy functions by seat rotation
 ([department-pods.md](references/department-pods.md)). The
 Orchestrator spawns waves, keeps `team-board.md` and
 `seat-registry.md` current, integrates approved items by cherry-pick

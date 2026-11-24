@@ -214,15 +214,17 @@ The states, and which seat may make each transition:
 | in_qa | in_progress | the QA seat (triage send-back, with blame) |
 | in_security | ready_for_human | the security seat (`Handoff` sign-off clear) |
 | in_security | in_progress | the security seat (send-back, with blame) |
-| ready_for_human | done | the person only, by typed push-ok, after QA PASS and Security CLEAR on the exact tree; nothing overrides them |
+| ready_for_human | done | the team lead (manager), who signs it off for the team and reports to Orchestration, which reports to the person; the person's typed push-ok on the exact tree, after QA PASS and Security CLEAR, is the real final sign-off; nothing overrides them |
 | blocked | in_progress | the assigned seat, after the blocker is cleared (`Unblock`) |
 | failed | queued | manager (retry decision, counted against max attempts) |
 | any | blocked | the manager (escalation) |
 
 Every transition is an event. A transition not in this table is refused,
-and the refusal is logged. `ready_for_human` is not `done`: a push
-still needs the person's push-ok. It also needs QA PASS and Security CLEAR
-on the exact tree; nothing overrides them.
+and the refusal is logged. `ready_for_human` is not `done`: the team lead
+signs the item off as done and reports it up; Orchestration reports to the
+person. The person gives the real final sign-off before the push: a typed
+push-ok on the exact tree, after QA PASS and Security CLEAR; nothing
+overrides them.
 
 The item state names extend the existing goal states; they do not replace
 them. A goal's state is derived from its items: a goal is `done` when all
@@ -479,7 +481,7 @@ stateDiagram-v2
   in_qa --> in_progress: triage (blame)
   in_security --> ready_for_human: sign-off clear
   in_security --> in_progress: send-back (blame)
-  ready_for_human --> done: human push-ok, recorded
+  ready_for_human --> done: team lead sign-off, recorded
   blocked --> in_progress: unblock
   failed --> queued: manager retry
   blocked --> [*]: escalated

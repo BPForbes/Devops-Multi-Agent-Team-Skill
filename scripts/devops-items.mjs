@@ -1,14 +1,13 @@
 // The work item state machine and intake (design: sections 4 and 16).
 // Pure rules: a move either passes or is refused with a reason, and every
 // refusal goes to the caller's onRefuse so it can be logged.
-import { isItemId } from './devops-ids.mjs'
+import { isGoalId, isItemId, isJob } from './devops-ids.mjs'
 
 const SERVER = 'server'
 const ASSIGNEE = 'assignee'
 const REVIEWER = 'reviewer'
 const QA = 'qa'
 const SECURITY = 'security'
-const HUMAN = 'human'
 const MANAGER = 'manager'
 
 // Every state the manager may escalate to blocked from (design: "any").
@@ -43,7 +42,7 @@ const MOVES = Object.freeze(withEscalation({
   in_review: { in_qa: [REVIEWER], in_progress: [REVIEWER] },
   in_qa: { in_security: [QA], in_progress: [QA] },
   in_security: { ready_for_human: [SECURITY], in_progress: [SECURITY] },
-  ready_for_human: { done: [HUMAN] },
+  ready_for_human: { done: [MANAGER] },
   done: {},
 }))
 
@@ -100,6 +99,8 @@ export function securitySignOff(item, { agent, role }) {
 export function checkIntake(body) {
   const errors = []
   if (!isItemId(body?.item)) errors.push('item must look like item-<hex>')
+  if (!isGoalId(body?.goal)) errors.push('goal must look like goal-<hex>')
+  if (!isJob(body?.job)) errors.push('job must be one of the team jobs')
   const criteria = body?.acceptance
   if (!Array.isArray(criteria) || criteria.length === 0) {
     errors.push('acceptance needs at least one criterion')

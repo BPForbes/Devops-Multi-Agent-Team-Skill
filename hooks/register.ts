@@ -124,6 +124,11 @@ async function publishDenial($: EngineInterface, what: string): Promise<string |
 
 /** GitHub tools that only read; every other GitHub tool is a write and is gated. */
 const GITHUB_READ = /^(?:get_|list_|search_)|_read$|^run_secret_scanning$/
+/** GitHub write tools publish too: they need the same push-ok and QA check. */
+const GITHUB_WRITES = [
+  'create_pull_request', 'merge_pull_request', 'push_files', 'create_or_update_file', 'delete_file',
+  'update_pull_request_branch', 'enable_pr_auto_merge', 'create_branch',
+] as const
 
 /**
  * GitHub tools refused outright: they write file content that is not the
@@ -413,6 +418,18 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // The person's chat message "push" (or "push it") authorizes one push on
+  // the current tree, as /devops push-ok does. Other messages pass unchanged.
+  on('prompt.submit', async ($, e, next) => {
+    const message = e as { text?: unknown; origin?: { kind?: unknown } }
+    const kind = typeof message.origin?.kind === 'string' ? message.origin.kind : undefined
+    if (typeof message.text === 'string' && chatAuthorizesPush(message.text, kind)) {
+      const tree = await headTree($)
+      if (tree !== undefined) await $.state.set(PUSH_KEY, tree)
+    }
+    return next(e)
+  })
+
   on('command.run', { command: 'devops' }, async ($, e) => {
     const split = splitArgs(e.args)
     if (isPersonOnly(split.word, split.rest) && !isHuman(e)) {
@@ -551,6 +568,16 @@ export const register: Register = on => {
     if (ran.deny === undefined) await $.state.set(PUSH_KEY, false)
     return ran
   })
+
+  for (const tool of GITHUB_WRITES) {
+    on('tool.call', { tool: `mcp__github__${tool}` }, async ($, e, next) => {
+      const denied = await publishDenial($, `GitHub ${tool}`)
+      if (denied !== undefined) return { deny: denied }
+      const ran = await next(e)
+      if (ran.deny === undefined) await $.state.set(PUSH_KEY, false)
+      return ran
+    })
+  }
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const gatesOn = ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true) !== false

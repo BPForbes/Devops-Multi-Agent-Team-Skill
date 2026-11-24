@@ -87,7 +87,7 @@ const ATTENTION = Object.freeze({
   blocked: ['blocked', 'unblock it or move it to failed'],
   failed: ['failed', 'send it back to the queue, or close it out'],
   in_security: ['awaiting_signoff', 'security must sign it off before it can be done'],
-  ready_for_human: ['awaiting_human', 'the human marks it done'],
+  ready_for_human: ['awaiting_lead', 'the team lead signs it off as done'],
 })
 
 /**

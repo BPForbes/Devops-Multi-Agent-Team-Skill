@@ -8,7 +8,7 @@ import {
 const ITEM = 'item-3c9e41'
 const SECURITY = { agent: 'agent-s', role: 'security' }
 const itemIn = state => ({ id: ITEM, goal: 'goal-7f0a12', state, points: 3, acceptance: ['ok'] })
-const VALID = { item: ITEM, goal: 'goal-7f0a12', acceptance: ['lint passes'], points: 3 }
+const VALID = { item: ITEM, goal: 'goal-7f0a12', job: 'qa', acceptance: ['lint passes'], points: 3 }
 
 test('an item walks the whole path with the right actor at each step', () => {
   const steps = [
@@ -18,7 +18,7 @@ test('an item walks the whole path with the right actor at each step', () => {
     ['in_qa', 'reviewer'],
     ['in_security', 'qa'],
     ['ready_for_human', 'security'],
-    ['done', 'human'],
+    ['done', 'manager'],
   ]
   let item = itemIn('queued')
   for (const [to, actor] of steps) {
@@ -48,7 +48,7 @@ test('a refused move leaves the item where it was', () => {
 })
 
 test('a move that is not in the table is refused for every actor', () => {
-  const result = transition(itemIn('queued'), 'done', 'human')
+  const result = transition(itemIn('queued'), 'done', 'manager')
   assert.equal(result.ok, false)
   assert.match(result.reason, /queued cannot move to done/)
   assert.deepEqual(allowedActors('queued', 'done'), [])
@@ -121,7 +121,7 @@ test('intake refuses an id that is not item-<hex>', () => {
 test('a refused intake says every problem it found', () => {
   const result = admit({ item: 'nope', acceptance: [], points: 0 })
   assert.equal(result.ok, false)
-  assert.equal(result.errors.length, 3)
+  assert.equal(result.errors.length, 5)
 })
 
 test('a goal is empty, active, or done by its items', () => {
@@ -132,7 +132,7 @@ test('a goal is empty, active, or done by its items', () => {
 
 test('an item needs security sign-off to be done; only security signs off in review', () => {
   const refusals = []
-  const refused = transition(itemIn('ready_for_human'), 'done', 'human', r => refusals.push(r))
+  const refused = transition(itemIn('ready_for_human'), 'done', 'manager', r => refusals.push(r))
   assert.equal(refused.ok, false)
   assert.match(refused.reason, /security sign-off/)
   assert.equal(refusals.length, 1)
@@ -143,7 +143,7 @@ test('an item needs security sign-off to be done; only security signs off in rev
   const signed = securitySignOff(itemIn('in_security'), security)
   assert.equal(signed.ok, true)
   const ready = transition(signed.item, 'ready_for_human', 'security')
-  assert.equal(transition(ready.item, 'done', 'human').ok, true)
+  assert.equal(transition(ready.item, 'done', 'manager').ok, true)
 })
 
 test('rework after a sign-off clears it, so the next review must sign off again', () => {
@@ -164,5 +164,11 @@ test('a sign-off does not survive a detour through blocked and rework', () => {
   ]
   for (const [to, actor] of path) item = transition(item, to, actor).item
   assert.equal(item.security_signoff, undefined)
-  assert.match(transition(item, 'done', 'human').reason, /security sign-off/)
+  assert.match(transition(item, 'done', 'manager').reason, /security sign-off/)
+})
+
+test('an item without a valid goal or job is refused before it is admitted', () => {
+  assert.equal(checkIntake({ ...VALID, goal: 'goal-zz' }).ok, false)
+  assert.equal(checkIntake({ ...VALID, job: 'nonsense' }).ok, false)
+  assert.equal(admit({ ...VALID, job: undefined }).ok, false)
 })

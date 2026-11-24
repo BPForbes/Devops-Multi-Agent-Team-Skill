@@ -135,8 +135,14 @@ helping on another item.
 
 ## Team sizing (per work item)
 
-One **team per work item**. Each team runs **2 to 3 seats of each
-function**: Researcher, Coder, Reviewer, QA and Security. That is
+The Orchestrator does not start from a fixed size: it researches the
+allocation first and staffs each team from that plan
+([allocation-research.md](allocation-research.md)). A one-file fix has
+one Coder and one judge of each kind; only large streams reach the
+ceiling below.
+
+One **team per work item**. Each team runs at most **2 to 3 seats of
+each function**: Researcher, Coder, Reviewer, QA and Security. That is
 **10 to 15 subagents per team** (2 x 5 to 3 x 5; a ceiling, not a
 quota; because seats rotate, one seat often fills two functions over
 an item's life). Across several items the total is the sum of their
