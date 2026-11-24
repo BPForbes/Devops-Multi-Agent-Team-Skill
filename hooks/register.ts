@@ -413,6 +413,18 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // The person's chat message "push" (or "push it") authorizes one push on
+  // the current tree, as /devops push-ok does. Other messages pass unchanged.
+  on('prompt.submit', async ($, e, next) => {
+    const message = e as { text?: unknown; origin?: { kind?: unknown } }
+    const kind = typeof message.origin?.kind === 'string' ? message.origin.kind : undefined
+    if (typeof message.text === 'string' && chatAuthorizesPush(message.text, kind)) {
+      const tree = await headTree($)
+      if (tree !== undefined) await $.state.set(PUSH_KEY, tree)
+    }
+    return next(e)
+  })
+
   on('command.run', { command: 'devops' }, async ($, e) => {
     const split = splitArgs(e.args)
     if (isPersonOnly(split.word, split.rest) && !isHuman(e)) {
@@ -551,6 +563,16 @@ export const register: Register = on => {
     if (ran.deny === undefined) await $.state.set(PUSH_KEY, false)
     return ran
   })
+
+  for (const tool of GITHUB_WRITES) {
+    on('tool.call', { tool: `mcp__github__${tool}` }, async ($, e, next) => {
+      const denied = await publishDenial($, `GitHub ${tool}`)
+      if (denied !== undefined) return { deny: denied }
+      const ran = await next(e)
+      if (ran.deny === undefined) await $.state.set(PUSH_KEY, false)
+      return ran
+    })
+  }
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const gatesOn = ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true) !== false

@@ -67,6 +67,22 @@
     "services.json",
     "skills",
     "templates",
-    "types"
-  ]
+    "types",
+    "scripts/devops-envelopes.mjs",
+    "docs/schemas",
+    "scripts/devops-store.mjs",
+    "scripts/devops-ticks.mjs",
+    "scripts/devops-items.mjs",
+    "scripts/devops-assign.mjs",
+    "scripts/devops-meetings.mjs",
+    "scripts/devops-sprint.mjs",
+    "scripts/devops-help.mjs",
+    "scripts/devops-digest.mjs",
+    "scripts/devops-identity.mjs",
+    "scripts/devops-teams.mjs"
+  ],
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^2.1.1"
+  }
 }

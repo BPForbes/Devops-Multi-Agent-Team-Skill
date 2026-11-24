@@ -10,6 +10,16 @@ const blankQuotes = (command: string): string =>
 
 const isAssignment = (word: string): boolean => /^[A-Za-z_][A-Za-z0-9_]*=/.test(word)
 
+/**
+ * The command's simple commands: quotes blanked, split at the shell operators,
+ * each trimmed, empties dropped.
+ */
+const commandSegments = (command: string): string[] =>
+  blankQuotes(command)
+    .split(/&&|\|\||;|\||\n|\(|\)|`|\$\(/)
+    .map(part => part.trim())
+    .filter(part => part !== '')
+
 function gitSubcommand(words: string[]): { sub: string | undefined; rest: string[] } {
   let i = 1
   while (i < words.length && words[i].startsWith('-')) i += GIT_OPTIONS_WITH_ARGUMENT.has(words[i]) ? 2 : 1

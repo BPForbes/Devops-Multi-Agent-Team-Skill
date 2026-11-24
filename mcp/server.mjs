@@ -7,6 +7,7 @@
 // secret.
 
 import fs from 'node:fs'
+import { UNFENCED, updateJson } from '../scripts/devops-store.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
