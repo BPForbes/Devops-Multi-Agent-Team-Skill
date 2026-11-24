@@ -111,6 +111,44 @@ async function detect($: EngineInterface): Promise<Found[]> {
   }
 }
 
+const PUSH_KEY = { plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const
+const OVERRIDES_KEY = { plugin: 'devops-multi-agent-team', key: 'overrides' } as const
+
+/**
+ * The publish check shared by every path that publishes (git push, GitHub
+ * write tools): the person's push-ok, and the latest QA note. A BLOCKED note
+ * refuses and cannot be overridden. A missing or stale PASS is recorded as the
+ * human override. Returns the refusal, or undefined when the publish may go on.
+ */
+async function publishDenial($: EngineInterface, what: string): Promise<string | undefined> {
+  if (!((await $.state.get(PUSH_KEY)).value ?? false)) {
+    return `${PLUGIN}: ${what} is refused until the person types /devops push-ok.`
+  }
+  const qa = await latestQaVerdict($)
+  if (qa.verdict === 'BLOCKED') {
+    return `${PLUGIN}: ${what} is refused: the latest QA note is BLOCKED.\n` +
+      'Fix the findings. BLOCKED cannot be overridden.'
+  }
+  const tree = await headTree($)
+  if (qa.verdict !== 'PASS' || tree === undefined || qa.tree !== tree) {
+    const override = {
+      tree: tree ?? 'unknown', rule: 'qa-pass', qa: qa.verdict ?? 'none', what,
+      at: new Date().toISOString(),
+    }
+    await $.state.set({ plugin: 'devops-multi-agent-team', key: 'lastOverride' } as const, override)
+    // Every override is kept, not only the latest, for audit.
+    const past = (await $.state.get(OVERRIDES_KEY)).value ?? []
+    await $.state.set(OVERRIDES_KEY, [...past, override])
+  }
+  return undefined
+}
+
+/** GitHub write tools publish too: they need the same push-ok and QA check. */
+const GITHUB_WRITES = [
+  'create_pull_request', 'merge_pull_request', 'push_files', 'create_or_update_file', 'delete_file',
+  'update_pull_request_branch', 'enable_pr_auto_merge', 'create_branch',
+] as const
+
 async function latestQaVerdict($: EngineInterface): Promise<{
   verdict: 'PASS' | 'BLOCKED' | undefined; tree?: string; file?: string
 }> {
@@ -397,6 +435,16 @@ export const register: Register = on => {
     }
   })
 
+  for (const tool of GITHUB_WRITES) {
+    on('tool.call', { tool: `mcp__github__${tool}` }, async ($, e, next) => {
+      const denied = await publishDenial($, `GitHub ${tool}`)
+      if (denied !== undefined) return { deny: denied }
+      const ran = await next(e)
+      if (ran.deny === undefined) await $.state.set(PUSH_KEY, false)
+      return ran
+    })
+  }
+
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const gatesOn = ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true) !== false
     const actions = gatesOn ? classify(e.command) : []
@@ -412,26 +460,9 @@ export const register: Register = on => {
       }
     }
     if (actions.some(action => action.kind === 'publish')) {
-      // Rule 1: only the person's typed /devops push-ok authorizes a push.
-      const what = actions.find(a => a.kind === 'publish')?.what
-      const pushKey = { plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const
-      if (!((await $.state.get(pushKey)).value ?? false)) {
-        return { deny: `${PLUGIN}: ${what} is refused until the person types /devops push-ok.` }
-      }
-      // A human push-ok overrides QA PASS (qa-publish-policy). A missing PASS
-      // on this exact tree is recorded as the override, not silently skipped.
-      const qa = await latestQaVerdict($)
-      const tree = await headTree($)
-      if (qa.verdict !== 'PASS' || tree === undefined || qa.tree !== tree) {
-        const override = {
-          tree: tree ?? 'unknown',
-          rule: 'qa-pass',
-          qa: qa.verdict ?? 'none',
-          at: new Date().toISOString(),
-        }
-        const key = { plugin: 'devops-multi-agent-team', key: 'lastOverride' } as const
-        await $.state.set(key, override)
-      }
+      const what = actions.find(a => a.kind === 'publish')?.what ?? 'push'
+      const denied = await publishDenial($, what)
+      if (denied !== undefined) return { deny: denied }
       consumeAuthorization = true
     }
 

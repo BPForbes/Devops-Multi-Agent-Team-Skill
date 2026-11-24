@@ -10,6 +10,7 @@ const QA_DIR = '/work/devops-skill/thoughts/non-final'
 
 const TREE = 'a'.repeat(40)
 const PASS_NOTE = `Publish gate: PASS\ntree: ${TREE}\n`
+const BLOCKED_NOTE = `Publish gate: BLOCKED\ntree: ${TREE}\n`
 
 function engine(on: any, note: string | undefined) {
   const state = new Map<string, unknown>()
@@ -218,4 +219,38 @@ test('push-ok overrides a missing QA PASS and records the override', async ($, o
   expect(allowed.isError).not.toBe(true)
   expect((state.get('lastOverride') as { tree: string }).tree).toBe(TREE)
   expect(state.get('pushAuthorized')).toBe(false)
+})
+
+test('a BLOCKED QA note refuses even with push-ok, and records no override', async ($, on) => {
+  const state = engine(on, BLOCKED_NOTE)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', true)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push' })
+  expect(refused.isError ?? refused.deny).toBeTruthy()
+  expect(state.get('lastOverride')).toBeUndefined()
+  expect(state.get('pushAuthorized')).toBe(true)
+})
+
+test('a GitHub write tool needs push-ok and the QA check; the grant is consumed', async ($, on) => {
+  const state = engine(on, PASS_NOTE)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const call = { tool: 'mcp__github__create_pull_request', arguments: {} }
+  const first = await $.tool.call(call)
+  expect(first.isError ?? first.deny).toBeTruthy()
+  state.set('pushAuthorized', true)
+  expect((await $.tool.call(call)).deny).toBeUndefined()
+  expect(state.get('pushAuthorized')).toBe(false)
+})
+
+test('every human override is kept, with what was published and the tree', async ($, on) => {
+  const state = engine(on, undefined)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', true)
+  await $.tool.call({ tool: 'Bash', command: 'git push' })
+  state.set('pushAuthorized', true)
+  await $.tool.call({ tool: 'Bash', command: 'git push' })
+  const kept = state.get('overrides') as Array<{ what: string; tree: string }>
+  expect(kept.length).toBe(2)
+  expect(kept[0].tree).toBeTruthy()
+  expect(kept[0].what).toBeTruthy()
 })
