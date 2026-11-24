@@ -7,9 +7,12 @@ declare module 'claude-code' {
       /** Off via `/devops gates off` (or chat equivalent). */
       gates: boolean
       /** Human authorized a push (`/devops push-ok` or chat "push"); consumed by the next allowed push. */
-      pushAuthorized: boolean
+      /** The tree a push-ok was given for; false when none is given. */
+      pushAuthorized: string | false
       /** The last human push that overrode a missing QA PASS: tree, rule, QA verdict, time. */
-      lastOverride?: { tree: string; rule: string; qa: string; at: string }
+      lastOverride?: { tree: string; rule: string; qa: string; what: string; at: string }
+      /** Every human override, kept for audit: tree, rule, QA verdict, what was published, time. */
+      overrides?: Array<{ tree: string; rule: string; qa: string; what: string; at: string }>
       allowedBranches: string[]
       monitor: boolean
       commentAudit: 'warn' | 'strict' | 'off'
