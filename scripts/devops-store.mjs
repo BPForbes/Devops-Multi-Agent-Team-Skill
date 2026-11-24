@@ -59,19 +59,38 @@ export function withLock(file, fn) {
 }
 
 /**
+ * Runs fn under a fence: the leader file's lock is held across fn, and fn runs
+ * only while that file's epoch is still `fence.epoch`. A takeover takes the same
+ * lock, so it cannot land between the check and the write. With no fence, fn
+ * just runs.
+ */
+export function withFence(fence, fn) {
+  if (!fence) return fn()
+  return withLock(fence.leaderFile, () => {
+    const held = fs.existsSync(fence.leaderFile)
+      ? JSON.parse(fs.readFileSync(fence.leaderFile, 'utf8')).epoch
+      : 0
+    if (held !== fence.epoch) {
+      throw new Error(`epoch ${fence.epoch} is fenced out (leader is ${held})`)
+    }
+    return fn()
+  })
+}
+
+/**
  * Reads a JSON file (or `fallback` when it does not exist), passes a copy to
  * `change`, and writes the result back under the lock. If `change` throws,
- * nothing is written.
+ * nothing is written. With `fence`, the write is refused unless the fence holds.
  */
-export function updateJson(file, fallback, change) {
-  return withLock(file, () => {
+export function updateJson(file, fallback, change, fence = null) {
+  return withFence(fence, () => withLock(file, () => {
     const current = fs.existsSync(file)
       ? JSON.parse(fs.readFileSync(file, 'utf8'))
       : structuredClone(fallback)
     const next = change(structuredClone(current))
     writeAtomic(file, `${JSON.stringify(next, null, 2)}\n`)
     return next
-  })
+  }))
 }
 
 /** Reads a JSON Lines event log. A bad line is an error, with its number. */
@@ -98,8 +117,8 @@ const lastLink = events => (events.length === 0 ? 'genesis' : events.at(-1).chai
  * the last stored link, so concurrent writers cannot fork a chain. Returns
  * { appended }.
  */
-export function appendEvent(logFile, event, { link = null } = {}) {
-  return withLock(logFile, () => {
+export function appendEvent(logFile, event, { link = null, fence = null } = {}) {
+  return withFence(fence, () => withLock(logFile, () => {
     const key = keyOf(event)
     const events = readEvents(logFile)
     const existing = events.find(e => keyOf(e) === key)
@@ -111,7 +130,7 @@ export function appendEvent(logFile, event, { link = null } = {}) {
     fs.mkdirSync(path.dirname(logFile), { recursive: true })
     fs.appendFileSync(logFile, `${JSON.stringify(stored)}\n`)
     return { appended: true }
-  })
+  }))
 }
 
 /** Folds events into state with a pure reducer. */
