@@ -187,7 +187,7 @@ not authorize a push either.
    Push JSON `authors` of every cherry-picked SHA, the Orchestrator's
    conflict fixes included; a seat is refused when its seat id or its
    handle is in that set. The Orchestrator pushes when the human
-   authorizes that push (chat "push" = `/devops push-ok`; human word is
+   authorizes that push (`push` in chat or `/devops push-ok` on that tree; the human word is
    final) ([thoughts-layout.md](references/thoughts-layout.md), One
    push). Check `git diff --stat <integration-base>...HEAD` for process
    files after any strip. Do not commit process notes.
