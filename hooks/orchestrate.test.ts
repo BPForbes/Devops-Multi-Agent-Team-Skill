@@ -80,7 +80,8 @@ function wireDocs(on: any) {
   })
 }
 
-function engine(on: any) {
+/** Map-backed plugin state, and the session root (/work) the helpers read files from. */
+function wireState(on: any): Map<string, unknown> {
   const state = new Map<string, unknown>()
   on('state.get', (_: unknown, e: { key: string }) => ({
     value: { value: state.get(e.key), version: 1 },
@@ -89,8 +90,13 @@ function engine(on: any) {
     state.set(e.key, e.value)
     return { value: { isSet: true, version: 2 } }
   })
-  on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: '/work' }))
+  return state
+}
+
+function engine(on: any) {
+  const state = wireState(on)
+  on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
   on('command.register', () => ({ value: { command: 'devops' } }))
   on('tool.register', () => ({ value: { tool: 'mcp__devops-multi-agent-team__devops_brief' } }))
   on('ui.status', () => ({ value: undefined }))
@@ -160,6 +166,20 @@ test('/devops skill modes return orchestration cards with tools', async ($, on) 
   const help = await run('help --mode stage')
   expect(help.text).toContain('CI/CD stages')
   expect(help.text).toContain('research:')
+})
+
+test('/devops help marks gate words as the person\'s and offers no chat push', async ($, on) => {
+  engine(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const help = await $.command.run({
+    command: 'devops', args: 'help --mode gates', origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  expect(help.text).toContain('/devops push-ok      (you) allow ONE push on this tree')
+  expect(help.text).toContain('/devops gates on|off (you)')
+  expect(help.text).toContain('never onto a gate word')
+  expect(help.text).not.toContain('in chat')
+  expect(help.text).not.toContain('| withdraw')
 })
 
 test('only the composer origin may run a gate word', async ($, on) => {
