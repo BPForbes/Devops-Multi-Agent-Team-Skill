@@ -1,6 +1,6 @@
 // The server's tick counter (design: sections 1, 9 and 16.6). Pure rules over
 // a state object; the caller persists it with devops-store.mjs.
-import { updateJson } from './devops-store.mjs'
+import { UNFENCED, updateJson } from './devops-store.mjs'
 
 const ITEMS_PER_TICK = 3
 const MINUTES_PER_TICK = 15
@@ -79,7 +79,7 @@ export function expiredLeases(assignments, tick) {
  * epoch }) the write is refused when that epoch is no longer the leader's.
  * Returns { state, ticked }.
  */
-export function recordCompletionAt(file, { nowMs, config = TICK_CONFIG, fence = null }) {
+export function recordCompletionAt(file, { nowMs, config = TICK_CONFIG, fence }) {
   let ticked = false
   const state = updateJson(file, initialTicks(nowMs), current => {
     const result = recordCompletion(current, { nowMs, config })
@@ -105,7 +105,7 @@ export function acquireLeader(file, owner, nowMs, leaseMs) {
     const epoch = current.owner === owner ? current.epoch : current.epoch + 1
     result = { acquired: true, epoch }
     return { owner, epoch, expires_ms: nowMs + leaseMs }
-  })
+  }, UNFENCED) // the election creates the epoch, so it cannot be fenced
   return result
 }
 
@@ -115,6 +115,6 @@ export function fenceOk(file, epoch) {
   updateJson(file, { owner: null, epoch: 0, expires_ms: 0 }, current => {
     ok = current.epoch === epoch
     return current
-  })
+  }, UNFENCED)
   return ok
 }
