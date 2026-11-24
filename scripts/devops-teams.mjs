@@ -12,6 +12,11 @@ export const MEMBER_ROLES = Object.freeze([
 const roleOf = (board, caller) => board.members.find(m => m.agent === caller)?.role ?? null
 const notOn = (board, caller) => ({ ok: false, reason: `${caller} is not on ${board.team}` })
 
+/** A refused action: its reason, and the record the board keeps for audit. */
+function refused(board, caller, action, reason, detail = {}) {
+  return { ok: false, reason, refusal: { action, by: caller, reason, ...detail } }
+}
+
 /** Opens a team's board. The members must name a lead (a manager). */
 export function openBoard({ team, members }) {
   if (!Array.isArray(members) || !members.some(m => m.role === LEAD_ROLE)) {
@@ -23,18 +28,28 @@ export function openBoard({ team, members }) {
   if (new Set(agents).size !== agents.length) {
     return { ok: false, reason: 'a member is listed twice' }
   }
-  const board = { team, members: members.map(({ agent, role }) => ({ agent, role })), items: [] }
+  const board = {
+    team,
+    members: members.map(({ agent, role }) => ({ agent, role })),
+    items: [],
+    refusals: [],
+  }
   return { ok: true, board }
+}
+
+/** Returns the board with one refused action appended, so the refusal is kept. */
+export function recordRefusal(board, refusal) {
+  return { ...board, refusals: [...(board.refusals ?? []), refusal] }
 }
 
 /** Adds a work item to this team's board. The caller must be a member. */
 export function teamIntake(board, caller, body) {
   if (roleOf(board, caller) === null) return notOn(board, caller)
   const admitted = admit(body)
-  if (!admitted.ok) return { ok: false, reason: admitted.errors.join('; ') }
+  if (!admitted.ok) return refused(board, caller, 'intake', admitted.errors.join('; '))
   const { item } = admitted
   if (board.items.some(i => i.id === item.id)) {
-    return { ok: false, reason: `${item.id} is already on ${board.team}` }
+    return refused(board, caller, 'intake', `${item.id} is already on ${board.team}`)
   }
   const placed = { ...item, team: board.team }
   return { ok: true, board: { ...board, items: [...board.items, placed] }, item: placed.id }
@@ -45,9 +60,11 @@ export function teamMove(board, caller, { item, to }) {
   const role = roleOf(board, caller)
   if (role === null) return notOn(board, caller)
   const current = board.items.find(i => i.id === item)
-  if (current === undefined) return { ok: false, reason: `${item} is not on ${board.team}` }
+  if (current === undefined) {
+    return refused(board, caller, 'unknown-item', `${item} is not on ${board.team}`, { item })
+  }
   const moved = transition(current, to, role)
-  if (!moved.ok) return { ok: false, reason: moved.reason }
+  if (!moved.ok) return refused(board, caller, 'move', moved.reason, { item, to })
   const items = board.items.map(i => (i.id === item ? moved.item : i))
   return { ok: true, board: { ...board, items } }
 }
@@ -57,9 +74,11 @@ export function teamSignOff(board, caller, { item }) {
   const role = roleOf(board, caller)
   if (role === null) return notOn(board, caller)
   const current = board.items.find(i => i.id === item)
-  if (current === undefined) return { ok: false, reason: `${item} is not on ${board.team}` }
+  if (current === undefined) {
+    return refused(board, caller, 'unknown-item', `${item} is not on ${board.team}`, { item })
+  }
   const signed = securitySignOff(current, { agent: caller, role })
-  if (!signed.ok) return { ok: false, reason: signed.reason }
+  if (!signed.ok) return refused(board, caller, 'signoff', signed.reason, { item })
   const items = board.items.map(i => (i.id === item ? signed.item : i))
   return { ok: true, board: { ...board, items } }
 }

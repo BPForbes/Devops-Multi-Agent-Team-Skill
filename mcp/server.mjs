@@ -33,7 +33,7 @@ import {
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 import { isTeamId } from '../scripts/devops-ids.mjs'
 import {
-  needsAttention, openBoard, teamIntake, teamMove, teamSignOff,
+  needsAttention, openBoard, recordRefusal, teamIntake, teamMove, teamSignOff,
 } from '../scripts/devops-teams.mjs'
 
 const PKG = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'))
@@ -172,6 +172,13 @@ function teamChange(args, change) {
     return board
   }, UNFENCED)
   return result
+}
+
+/** A team write that keeps a refusal: the board is saved, then the refusal is reported. */
+function teamAction(args, change) {
+  const out = teamChange(args, change)
+  if (out.error !== undefined) throw new Error(out.error)
+  return out
 }
 
 function readTeam(args) {
@@ -1001,7 +1008,7 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => teamChange(args, current => {
+    run: args => teamAction(args, current => {
       if (current !== null) throw new Error(`${args.team} already has a board`)
       const opened = openBoard({ team: args.team, members: args.members })
       if (!opened.ok) throw new Error(opened.reason)
@@ -1029,7 +1036,7 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => teamChange(args, current => {
+    run: args => teamAction(args, current => {
       const body = {
         item: args.item,
         goal: args.goal,
@@ -1037,8 +1044,9 @@ const TOOLS = [
         acceptance: args.acceptance,
         points: args.points,
       }
-      const result = teamIntake(boardOrThrow(current, args.team), args.caller, body)
-      if (!result.ok) throw new Error(result.reason)
+      const board = boardOrThrow(current, args.team)
+      const result = teamIntake(board, args.caller, body)
+      if (!result.ok) return { board: recordRefusal(board, result.refusal), error: result.reason }
       return { board: result.board, item: result.item }
     }),
   },
@@ -1058,9 +1066,10 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => teamChange(args, current => {
-      const result = teamMove(boardOrThrow(current, args.team), args.caller, args)
-      if (!result.ok) throw new Error(result.reason)
+    run: args => teamAction(args, current => {
+      const board = boardOrThrow(current, args.team)
+      const result = teamMove(board, args.caller, args)
+      if (!result.ok) return { board: recordRefusal(board, result.refusal), error: result.reason }
       return { board: result.board, item: args.item, to: args.to }
     }),
   },
@@ -1076,9 +1085,10 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => teamChange(args, current => {
-      const result = teamSignOff(boardOrThrow(current, args.team), args.caller, args)
-      if (!result.ok) throw new Error(result.reason)
+    run: args => teamAction(args, current => {
+      const board = boardOrThrow(current, args.team)
+      const result = teamSignOff(board, args.caller, args)
+      if (!result.ok) return { board: recordRefusal(board, result.refusal), error: result.reason }
       return { board: result.board, item: args.item, signedOff: true }
     }),
   },
