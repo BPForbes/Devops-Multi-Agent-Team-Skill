@@ -1,12 +1,13 @@
+import { execFileSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import {
   agentsOnJob,
   freeAgents,
   independenceOk,
   isAgentId,
-  isHex6,
   isItemId,
   isJob,
   isTeamId,
@@ -23,8 +24,6 @@ test('minted ids match the team/agent/item forms', () => {
   assert.ok(isItemId(mintItemId()))
   assert.equal(isTeamId('agent-0a0a0a'), false)
   assert.equal(isAgentId('team-0a0a0a'), false)
-  assert.equal(isHex6('0a0a0a'), true)
-  assert.equal(isHex6('0A0A0A'), false)
 })
 
 test('jobs are the closed vocabulary', () => {
@@ -105,6 +104,27 @@ test('freeAgents and agentsOnJob support allocation', () => {
     agentsOnJob(registry, 'coder').map(r => r.agent),
     ['agent-bbbbbb'],
   )
+})
+
+test('free --want returns agents on that job through the CLI', () => {
+  const registry = JSON.stringify([
+    { agent: 'agent-aaaaaa', team: 'team-1', initial_job: 'coder', current_job: 'coder' },
+    { agent: 'agent-bbbbbb', team: 'team-2', initial_job: 'reviewer', current_job: 'reviewer' },
+  ])
+  const script = fileURLToPath(new URL('./devops-ids.mjs', import.meta.url))
+  const out = execFileSync(process.execPath, [
+    script, 'free', '--registry', registry, '--want', 'coder',
+  ], { encoding: 'utf8' })
+  assert.deepEqual(JSON.parse(out).map(r => r.agent), ['agent-aaaaaa'])
+})
+
+test('the CLI mints and checks goal hashes', () => {
+  const script = fileURLToPath(new URL('./devops-ids.mjs', import.meta.url))
+  const run = (...args) => execFileSync(process.execPath, [script, ...args], { encoding: 'utf8' })
+  const goal = run('mint', 'goal').trim()
+  assert.match(goal, /^goal-[0-9a-f]{6}$/)
+  assert.doesNotThrow(() => run('check', 'goal', goal))
+  assert.throws(() => run('check', 'goal', 'goal-XYZ'))
 })
 
 test('itemRecord requires notes and a well-formed item id', () => {
