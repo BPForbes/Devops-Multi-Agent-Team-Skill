@@ -58,6 +58,7 @@
     "scripts/devops-ids.mjs",
     "scripts/devops-handoff.mjs",
     "scripts/devops-board.mjs",
+    "scripts/devops-store.mjs",
     "standards.json",
     "services.json",
     "skills",
