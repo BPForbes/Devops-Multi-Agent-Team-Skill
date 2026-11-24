@@ -278,7 +278,11 @@ test('stories through chat: create, link, graph two projects, check, guide', asy
     assert.deepEqual(one.levels[0], ['CLI-01'])
     const both = (await c.call('story_graph', { dests: [root, other] })).json()
     assert.ok(both.stories === 3 && both.crossProject.some(e => e.from === 'CLI-02' && e.to === 'SRV-01'))
-    assert.ok(both.problems.some(p => p.startsWith('inverse-missing')), 'SRV-01 depends on CLI-02, but CLI-02 does not list it as needed by')
+    assert.ok(
+      both.problems.some(p => p.startsWith('inverse-missing')),
+      'SRV-01 depends on CLI-02, but CLI-02 does not list it as needed by; graph: '
+        + JSON.stringify({ problems: both.problems, warnings: both.warnings }),
+    )
     const parsed = (await c.call('story_parse', { text: '> **Catalog entry SRV-22** · project: **SERVER · C**\n| **Status** | PROPOSED |\n| **Depends on** | CLI-02 |', title: 'SRV-22: x' })).json()
     assert.deepEqual([parsed.id, parsed.status, parsed.dependsOn], ['SRV-22', 'PROPOSED', ['CLI-02']])
     assert.equal((await c.call('story_check', { dest: root, id: 'CLI-01' })).json().ok, false)
