@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 
 import {
-  appendEvent, readEvents, replay, updateJson, writeAtomic,
+  appendEvent, readEvents, replay, UNFENCED, updateJson, writeAtomic,
 } from './devops-store.mjs'
 
 const STORE = fileURLToPath(new URL('./devops-store.mjs', import.meta.url))
@@ -28,9 +28,12 @@ test('a write replaces the file and leaves no temp file behind', () => {
 test('a read-modify-write saves the change and a failing change writes nothing', () => {
   const dir = scratch()
   const file = path.join(dir, 'counter.json')
-  updateJson(file, { n: 0 }, state => ({ n: state.n + 1 }))
+  updateJson(file, { n: 0 }, state => ({ n: state.n + 1 }), UNFENCED)
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).n, 1)
-  assert.throws(() => updateJson(file, { n: 0 }, () => { throw new Error('refused') }), /refused/)
+  assert.throws(
+    () => updateJson(file, { n: 0 }, () => { throw new Error('refused') }, UNFENCED),
+    /refused/,
+  )
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).n, 1)
   assert.equal(fs.existsSync(`${file}.lock`), false, 'the lock is released after a failure')
 })
@@ -39,7 +42,8 @@ test('a lock left by a crashed writer is never broken; the error names it', () =
   const dir = scratch()
   const file = path.join(dir, 'counter.json')
   fs.writeFileSync(`${file}.lock`, JSON.stringify({ pid: 999999, at: Date.now() - 60000 }))
-  assert.throws(() => updateJson(file, { n: 0 }, state => state), /remove .*counter\.json\.lock/)
+  const held = () => updateJson(file, { n: 0 }, state => state, UNFENCED)
+  assert.throws(held, /remove .*counter\.json\.lock/)
   assert.equal(fs.existsSync(`${file}.lock`), true, 'the lock is left for a person to remove')
 })
 
@@ -54,9 +58,9 @@ test('three processes updating one file lose no update', async () => {
   const dir = scratch()
   const file = path.join(dir, 'counter.json')
   const script = `
-    import { updateJson } from ${JSON.stringify(STORE)}
+    import { updateJson, UNFENCED } from ${JSON.stringify(STORE)}
     for (let i = 0; i < 25; i += 1) {
-      updateJson(${JSON.stringify(file)}, { n: 0 }, s => ({ n: s.n + 1 }))
+      updateJson(${JSON.stringify(file)}, { n: 0 }, s => ({ n: s.n + 1 }), UNFENCED)
     }`
   await Promise.all([runChild(script), runChild(script), runChild(script)])
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).n, 75)
@@ -67,8 +71,8 @@ test('an event is appended once; the same event again is a no-op', () => {
   const log = path.join(dir, 'events.jsonl')
   const from = { agent: 'agent-0c0c0c', role: 'manager' }
   const event = { id: 'work-3c9e41', from, kind: 'work.item' }
-  assert.equal(appendEvent(log, event).appended, true)
-  assert.equal(appendEvent(log, event).appended, false)
+  assert.equal(appendEvent(log, event, { fence: UNFENCED }).appended, true)
+  assert.equal(appendEvent(log, event, { fence: UNFENCED }).appended, false)
   assert.equal(readEvents(log).length, 1)
 })
 
@@ -77,9 +81,9 @@ test('the same (agent, id) with different content is refused as a conflict', () 
   const log = path.join(dir, 'events.jsonl')
   const from = { agent: 'agent-0c0c0c', role: 'manager' }
   const first = { id: 'work-3c9e41', from, kind: 'work.item' }
-  appendEvent(log, first)
+  appendEvent(log, first, { fence: UNFENCED })
   const forged = { ...first, kind: 'work.accept' }
-  assert.throws(() => appendEvent(log, forged), /different content/)
+  assert.throws(() => appendEvent(log, forged, { fence: UNFENCED }), /different content/)
 })
 
 test('a corrupt line in the log is an error that names the line', () => {
@@ -93,12 +97,12 @@ test('three processes appending through a link lose no event and fork no chain',
   const dir = scratch()
   const log = path.join(dir, 'events.jsonl')
   const script = `
-    import { appendEvent } from ${JSON.stringify(STORE)}
+    import { appendEvent, UNFENCED } from ${JSON.stringify(STORE)}
     const link = (prev, event) => ({ ...event, prev, chain: event.id })
     const tag = process.argv[1]
     for (let i = 0; i < 15; i += 1) {
       const event = { id: \`\${tag}-\${i}\`, from: { agent: tag }, kind: 'x' }
-      appendEvent(${JSON.stringify(log)}, event, { link })
+      appendEvent(${JSON.stringify(log)}, event, { link, fence: UNFENCED })
     }`
   await Promise.all(['a', 'b', 'c'].map(tag => new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--input-type=module', '-e', script, tag])
@@ -122,6 +126,7 @@ test('a fenced write is refused for a stale epoch and passes for the current one
   const stale = { leaderFile: leader, epoch: 1 }
   const current = { leaderFile: leader, epoch: 2 }
   assert.throws(() => updateJson(board, { n: 0 }, s => ({ n: s.n + 1 }), stale), /fenced out/)
+  assert.throws(() => updateJson(board, { n: 0 }, s => s), /declares its fence/)
   assert.equal(fs.existsSync(board), false, 'the stale write left the board alone')
   const fencedAppend = () => appendEvent(log, { id: 'a', from: { agent: 'x' } }, { fence: stale })
   assert.throws(fencedAppend, /fenced out/)
