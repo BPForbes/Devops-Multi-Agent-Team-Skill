@@ -365,7 +365,8 @@ export const register: Register = on => {
           `gates: ${gates ? 'on' : 'OFF'}`,
           `check monitor: ${((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) ? 'on' : 'OFF'}; failing checks now: ${Object.entries((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const)).value ?? {}).map(([k, n]) => `${k} x${n}`).join(', ') || 'none'}`,
           `latest QA note: ${qa.verdict ?? 'none'}${qa.file ? ` (${qa.file.split('/').pop()})` : ''}`,
-          `push authorized (typed /devops push-ok, this tree): ${authorized ? 'yes (one push)' : 'no'}`,
+          `push authorized (typed /devops push-ok, this tree): `
+            + (authorized ? 'yes (one push)' : 'no'),
           `branches allowed: ${branches.length === 0 ? 'none' : branches.join(', ')}`,
         ].join('\n'),
       }
