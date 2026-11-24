@@ -10,22 +10,36 @@ const QA_DIR = '/work/devops-skill/thoughts/non-final'
 
 const TREE = 'a'.repeat(40)
 const PASS_NOTE = `Publish gate: PASS\ntree: ${TREE}\n`
+const BLOCKED_NOTE = `Publish gate: BLOCKED\ntree: ${TREE}\n`
 
-/** Map-backed plugin state, and the session root (/work) the helpers read files from. */
-function wireState(on: any): Map<string, unknown> {
+const CLEAR_NOTE = `Security: CLEAR\ntree: ${TREE}\n`
+const SEC_FILE = '/work/devops-skill/thoughts/non-final/security-sec-0a0a0a.md'
+
+/** The QA and security notes the fake folder holds, and what each one reads as. */
+function noteFiles(on: any, note: string | undefined, security: string | undefined) {
+  const entry = (name: string) => ({ name, kind: 'file', size: 1, mtimeMs: 1, isLink: false })
+  on('fs.list', (_: unknown, e: { path?: string }) => ({
+    value: e.path === QA_DIR
+      ? [
+        ...(note !== undefined ? [entry('qa-qa-0e0e0e.md')] : []),
+        ...(security !== undefined ? [entry('security-sec-0a0a0a.md')] : []),
+      ]
+      : [],
+  }))
+  on('fs.read', (_: unknown, e: { path?: string }) => ({
+    value: e.path === SEC_FILE ? (security ?? '') : (note ?? ''),
+  }))
+}
+
+function engine(on: any, note: string | undefined, security?: string) {
   const state = new Map<string, unknown>()
   on('state.get', (_: unknown, e: { key: string }) => ({ value: { value: state.get(e.key), version: 1 } }))
   on('state.set', (_: unknown, e: { key: string; value: unknown }) => {
     state.set(e.key, e.value)
     return { value: { isSet: true, version: 2 } }
   })
-  on('session.root', () => ({ value: '/work' }))
-  return state
-}
-
-function engine(on: any, note: string | undefined) {
-  const state = wireState(on)
   on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
+  on('session.root', () => ({ value: '/work' }))
   on('command.register', () => ({ value: { command: 'devops' } }))
   on('tool.register', () => ({ value: { tool: 'mcp__devops-multi-agent-team__devops_brief' } }))
   on('ui.status', () => ({ value: undefined }))
@@ -34,10 +48,7 @@ function engine(on: any, note: string | undefined) {
     : { exitCode: 0, stdout: JSON.stringify([{
       id: 'rust', name: 'Rust', layers: ['systems'], evidence: ['Cargo.toml'],
     }]), stderr: '' } }))
-  on('fs.list', (_: unknown, e: { path?: string }) => ({
-    value: note !== undefined && e.path === QA_DIR ? [{ name: 'qa-qa-0e0e0e.md', kind: 'file', size: 1, mtimeMs: 1, isLink: false }] : [],
-  }))
-  on('fs.read', () => ({ value: note ?? '' }))
+  noteFiles(on, note, security)
   on('fs.exists', () => ({ value: false }))
   on('tool.call', () => ({ result: {} }))
   return state
@@ -53,13 +64,13 @@ test('a push is refused when no QA note exists', async ($, on) => {
 })
 
 test('a PASS on this tree and push-ok allow one push; the grant is consumed', async ($, on) => {
-  const state = engine(on, PASS_NOTE)
+  const state = engine(on, PASS_NOTE, CLEAR_NOTE)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
 
   const before = await $.tool.call({ tool: 'Bash', command: 'git push' })
   expect(before.isError ?? before.deny).toBeTruthy()
 
-  state.set('pushAuthorized', true)
+  state.set('pushAuthorized', TREE)
   const allowed = await $.tool.call({ tool: 'Bash', command: 'git push' })
   expect(allowed.isError).not.toBe(true)
   expect(state.get('pushAuthorized')).toBe(false)
@@ -81,8 +92,14 @@ test('branch creation is refused until the person allows that name, and reads pa
 })
 
 function engineWithChecks(on: any, results: { isError: boolean }[]) {
-  const state = wireState(on)
+  const state = new Map<string, unknown>()
   const written: string[] = []
+  on('state.get', (_: unknown, e: { key: string }) => ({ value: { value: state.get(e.key), version: 1 } }))
+  on('state.set', (_: unknown, e: { key: string; value: unknown }) => {
+    state.set(e.key, e.value)
+    return { value: { isSet: true, version: 2 } }
+  })
+  on('session.root', () => ({ value: '/work' }))
   on('fs.exists', () => ({ value: true }))
   on('fs.read', (_: unknown, e: { path: string }) => {
     if (e.path.endsWith('languages.json')) return { value: JSON.stringify({ languages: [{ validate: ['cargo test --locked', 'npm run lint', 'pytest -q'] }] }) }
@@ -126,8 +143,14 @@ test('commands that are not known checks are left alone, and the monitor can be 
 })
 
 function engineWithAudit(on: any, audit: { blocking: number; nonBlocking: number; findings: { file: string; line: number; remark: string }[] }) {
-  const state = wireState(on)
+  const state = new Map<string, unknown>()
   const calls: string[][] = []
+  on('state.get', (_: unknown, e: { key: string }) => ({ value: { value: state.get(e.key), version: 1 } }))
+  on('state.set', (_: unknown, e: { key: string; value: unknown }) => {
+    state.set(e.key, e.value)
+    return { value: { isSet: true, version: 2 } }
+  })
+  on('session.root', () => ({ value: '/work' }))
   on('fs.exists', () => ({ value: false }))
   on('fs.read', () => { throw new Error('missing') })
   on('process.run', (_: unknown, e: { argv: string[] }) => {
@@ -205,11 +228,70 @@ test('a project\'s own wording replaces the default sentence', async ($, on) => 
 })
 
 test('push-ok overrides a missing QA PASS and records the override', async ($, on) => {
-  const state = engine(on, `Publish gate: PASS\ntree: ${'b'.repeat(40)}\n`)
+  const state = engine(on, `Publish gate: PASS\ntree: ${'b'.repeat(40)}\n`, CLEAR_NOTE)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  state.set('pushAuthorized', true)
+  state.set('pushAuthorized', TREE)
   const allowed = await $.tool.call({ tool: 'Bash', command: 'git push' })
   expect(allowed.isError).not.toBe(true)
   expect((state.get('lastOverride') as { tree: string }).tree).toBe(TREE)
   expect(state.get('pushAuthorized')).toBe(false)
+})
+
+test('a BLOCKED QA note refuses even with push-ok, and records no override', async ($, on) => {
+  const state = engine(on, BLOCKED_NOTE, CLEAR_NOTE)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push' })
+  expect(refused.isError ?? refused.deny).toBeTruthy()
+  expect(state.get('lastOverride')).toBeUndefined()
+  expect(state.get('pushAuthorized')).toBe(TREE)
+})
+
+test('a GitHub write tool needs push-ok and the QA check; the grant is consumed', async ($, on) => {
+  const state = engine(on, PASS_NOTE, CLEAR_NOTE)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const call = { tool: 'mcp__github__create_pull_request', arguments: {} }
+  const first = await $.tool.call(call)
+  expect(first.isError ?? first.deny).toBeTruthy()
+  state.set('pushAuthorized', TREE)
+  expect((await $.tool.call(call)).deny).toBeUndefined()
+  expect(state.get('pushAuthorized')).toBe(false)
+})
+
+test('every human override is kept, with what was published and the tree', async ($, on) => {
+  const state = engine(on, undefined, CLEAR_NOTE)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  await $.tool.call({ tool: 'Bash', command: 'git push' })
+  state.set('pushAuthorized', TREE)
+  await $.tool.call({ tool: 'Bash', command: 'git push' })
+  const kept = state.get('overrides') as Array<{ what: string; tree: string }>
+  expect(kept.length).toBe(2)
+  expect(kept[0].tree).toBeTruthy()
+  expect(kept[0].what).toBeTruthy()
+})
+
+test('push-ok given for another tree does not allow this push', async ($, on) => {
+  const state = engine(on, PASS_NOTE, CLEAR_NOTE)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', 'b'.repeat(40))
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push' })
+  expect(refused.isError ?? refused.deny).toBeTruthy()
+})
+
+test('a push with no security note is refused, even with a PASS and push-ok', async ($, on) => {
+  const state = engine(on, PASS_NOTE, undefined)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push' })
+  expect(refused.isError ?? refused.deny).toBeTruthy()
+})
+
+test('a BLOCKED security note refuses the push, with no override', async ($, on) => {
+  const state = engine(on, PASS_NOTE, `Security: BLOCKED\ntree: ${TREE}\n`)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push' })
+  expect(refused.isError ?? refused.deny).toBeTruthy()
+  expect(state.get('lastOverride')).toBeUndefined()
 })
