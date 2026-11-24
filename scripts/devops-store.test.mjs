@@ -113,6 +113,25 @@ test('three processes appending through a link lose no event and fork no chain',
   }
 })
 
+test('a fenced write is refused for a stale epoch and passes for the current one', () => {
+  const dir = scratch()
+  const leader = path.join(dir, 'leader.json')
+  const board = path.join(dir, 'board.json')
+  const log = path.join(dir, 'events.jsonl')
+  fs.writeFileSync(leader, JSON.stringify({ owner: 'b', epoch: 2 }))
+  const stale = { leaderFile: leader, epoch: 1 }
+  const current = { leaderFile: leader, epoch: 2 }
+  assert.throws(() => updateJson(board, { n: 0 }, s => ({ n: s.n + 1 }), stale), /fenced out/)
+  assert.equal(fs.existsSync(board), false, 'the stale write left the board alone')
+  const fencedAppend = () => appendEvent(log, { id: 'a', from: { agent: 'x' } }, { fence: stale })
+  assert.throws(fencedAppend, /fenced out/)
+  assert.equal(fs.existsSync(log), false, 'the stale write appended nothing')
+  updateJson(board, { n: 0 }, s => ({ n: s.n + 1 }), current)
+  appendEvent(log, { id: 'a', from: { agent: 'x' } }, { fence: current })
+  assert.equal(JSON.parse(fs.readFileSync(board, 'utf8')).n, 1)
+  assert.equal(readEvents(log).length, 1)
+})
+
 test('replaying the same events always gives the same state', () => {
   const events = [{ n: 1 }, { n: 2 }, { n: 3 }]
   const reduce = (state, event) => ({ total: state.total + event.n })
