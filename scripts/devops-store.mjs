@@ -59,13 +59,27 @@ export function withLock(file, fn) {
 }
 
 /**
+ * The fence for a write that is not a leader's, so no epoch applies. Every
+ * write must name its fence; a write without one is refused, so an unchecked
+ * leader write cannot happen by omission.
+ */
+export const UNFENCED = Object.freeze({ unfenced: true })
+
+function requireFence(fence) {
+  if (fence === undefined) {
+    throw new TypeError('every write declares its fence: pass { leaderFile, epoch } or UNFENCED')
+  }
+  return fence
+}
+
+/**
  * Runs fn under a fence: the leader file's lock is held across fn, and fn runs
  * only while that file's epoch is still `fence.epoch`. A takeover takes the same
  * lock, so it cannot land between the check and the write. With no fence, fn
  * just runs.
  */
 export function withFence(fence, fn) {
-  if (!fence) return fn()
+  if (fence === UNFENCED) return fn()
   return withLock(fence.leaderFile, () => {
     const held = fs.existsSync(fence.leaderFile)
       ? JSON.parse(fs.readFileSync(fence.leaderFile, 'utf8')).epoch
@@ -82,8 +96,8 @@ export function withFence(fence, fn) {
  * `change`, and writes the result back under the lock. If `change` throws,
  * nothing is written. With `fence`, the write is refused unless the fence holds.
  */
-export function updateJson(file, fallback, change, fence = null) {
-  return withFence(fence, () => withLock(file, () => {
+export function updateJson(file, fallback, change, fence) {
+  return withFence(requireFence(fence), () => withLock(file, () => {
     const current = fs.existsSync(file)
       ? JSON.parse(fs.readFileSync(file, 'utf8'))
       : structuredClone(fallback)
@@ -117,8 +131,8 @@ const lastLink = events => (events.length === 0 ? 'genesis' : events.at(-1).chai
  * the last stored link, so concurrent writers cannot fork a chain. Returns
  * { appended }.
  */
-export function appendEvent(logFile, event, { link = null, fence = null } = {}) {
-  return withFence(fence, () => withLock(logFile, () => {
+export function appendEvent(logFile, event, { link = null, fence } = {}) {
+  return withFence(requireFence(fence), () => withLock(logFile, () => {
     const key = keyOf(event)
     const events = readEvents(logFile)
     const existing = events.find(e => keyOf(e) === key)
