@@ -58,6 +58,10 @@ exist; the real branch stays clean until the work is approved.
    one-release-file-per-PR rule, fold the duplicates into the single PR-owned
    file (the profile's "Release rules").
 
+Goal hashes travel with the virtual PR: each commit in a seat's
+worktree ends with a `Goal: goal-<hex>` trailer, and the Push JSON has
+a `goal` field ([goal-hashes.md](goal-hashes.md), Virtual git).
+
 ## Invariants (a reviewer or QA seat can check each one)
 
 - No ref was added or moved since spawn except the local PR branch the

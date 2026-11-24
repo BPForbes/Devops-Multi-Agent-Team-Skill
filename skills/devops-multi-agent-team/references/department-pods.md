@@ -107,6 +107,9 @@ helping on another item.
   (`node scripts/devops-ids.mjs free --registry '…' --initial coder`).
   Prefer free agents whose initial job matches; otherwise rotate an
   idle agent and set `current_job`.
+- **Goal hashes.** Each goal gets a `goal-<hex>` hash and a pod in
+  the goal memory file, and seats carry that hash while they work
+  ([goal-hashes.md](goal-hashes.md)).
 - **Allocate goals.** Before spawning a stage, run `/devops allocate`
   (or `/devops goal --mode allocate`): one `goal-team-<hex>.md` per
   pod and one `goal-agent-<hex>.md` per seat from the parent goal.
