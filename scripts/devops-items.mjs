@@ -71,11 +71,29 @@ export function transition(item, to, actor, onRefuse = () => {}) {
     onRefuse({ item: item.id, from: item.state, to, actor, reason })
     return { ok: false, reason }
   }
+  if (to === 'done' && !item.security_signoff) {
+    const reason = `${item.id} needs security sign-off before it can be done`
+    onRefuse({ item: item.id, from: item.state, to, actor, reason })
+    return { ok: false, reason }
+  }
   const next = { ...item, state: to }
-  // Rework sends the item back to implementation: an earlier sign-off no longer
-  // covers the work, so it must be given again in the next review.
-  if (item.state === 'in_security' && to !== 'ready_for_human') delete next.security_signoff
+  // A sign-off covers the work it reviewed only on the way out: in_security,
+  // ready_for_human, done. Any other move (rework, blocked) may change the
+  // work, so the next review must sign off again.
+  if (to !== 'ready_for_human' && to !== 'done') delete next.security_signoff
   return { ok: true, item: next }
+}
+
+/**
+ * Records security's sign-off on an item in security review. Only a security
+ * member may sign off, and only in in_security. Returns { ok, item | reason }.
+ */
+export function securitySignOff(item, { agent, role }) {
+  if (role !== 'security') return { ok: false, reason: 'only a security member may sign off' }
+  if (item.state !== 'in_security') {
+    return { ok: false, reason: `sign-off is given in in_security, not ${item.state}` }
+  }
+  return { ok: true, item: { ...item, security_signoff: { by: agent, role } } }
 }
 
 /** Checks a work item before it joins the board. Returns { ok, errors }. */

@@ -2,10 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  admit, allowedActors, checkIntake, goalState, transition,
+  admit, allowedActors, checkIntake, goalState, securitySignOff, transition,
 } from './devops-items.mjs'
 
 const ITEM = 'item-3c9e41'
+const SECURITY = { agent: 'agent-s', role: 'security' }
 const itemIn = state => ({ id: ITEM, goal: 'goal-7f0a12', state, points: 3, acceptance: ['ok'] })
 const VALID = { item: ITEM, goal: 'goal-7f0a12', acceptance: ['lint passes'], points: 3 }
 
@@ -21,6 +22,7 @@ test('an item walks the whole path with the right actor at each step', () => {
   ]
   let item = itemIn('queued')
   for (const [to, actor] of steps) {
+    if (to === 'ready_for_human') item = securitySignOff(item, SECURITY).item
     const result = transition(item, to, actor)
     assert.equal(result.ok, true, `${to} by ${actor}: ${result.reason}`)
     item = result.item
@@ -126,4 +128,41 @@ test('a goal is empty, active, or done by its items', () => {
   assert.equal(goalState([]), 'empty')
   assert.equal(goalState([itemIn('done'), itemIn('queued')]), 'active')
   assert.equal(goalState([itemIn('done'), itemIn('done')]), 'done')
+})
+
+test('an item needs security sign-off to be done; only security signs off in review', () => {
+  const refusals = []
+  const refused = transition(itemIn('ready_for_human'), 'done', 'human', r => refusals.push(r))
+  assert.equal(refused.ok, false)
+  assert.match(refused.reason, /security sign-off/)
+  assert.equal(refusals.length, 1)
+  const coder = { agent: 'agent-c', role: 'coder' }
+  const security = { agent: 'agent-s', role: 'security' }
+  assert.equal(securitySignOff(itemIn('in_security'), coder).ok, false)
+  assert.equal(securitySignOff(itemIn('in_review'), security).ok, false)
+  const signed = securitySignOff(itemIn('in_security'), security)
+  assert.equal(signed.ok, true)
+  const ready = transition(signed.item, 'ready_for_human', 'security')
+  assert.equal(transition(ready.item, 'done', 'human').ok, true)
+})
+
+test('rework after a sign-off clears it, so the next review must sign off again', () => {
+  const signed = securitySignOff(itemIn('in_security'), { agent: 'agent-s', role: 'security' })
+  const back = transition(signed.item, 'in_progress', 'security')
+  assert.equal(back.ok, true)
+  assert.equal(back.item.security_signoff, undefined)
+  const again = transition(back.item, 'in_review', 'assignee')
+  assert.equal(again.ok, true)
+})
+
+test('a sign-off does not survive a detour through blocked and rework', () => {
+  const signed = securitySignOff(itemIn('in_security'), SECURITY).item
+  let item = transition(signed, 'ready_for_human', 'security').item
+  const path = [
+    ['blocked', 'manager'], ['in_progress', 'assignee'], ['in_review', 'assignee'],
+    ['in_qa', 'reviewer'], ['in_security', 'qa'], ['ready_for_human', 'security'],
+  ]
+  for (const [to, actor] of path) item = transition(item, to, actor).item
+  assert.equal(item.security_signoff, undefined)
+  assert.match(transition(item, 'done', 'human').reason, /security sign-off/)
 })
