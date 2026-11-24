@@ -418,15 +418,19 @@ export const register: Register = on => {
       if (!((await $.state.get(pushKey)).value ?? false)) {
         return { deny: `${PLUGIN}: ${what} is refused until the person types /devops push-ok.` }
       }
-      // A human push authorization overrides QA PASS (qa-publish-policy). A missing
-      // PASS on this exact tree is recorded as the override, not silently skipped.
+      // A human push-ok overrides QA PASS (qa-publish-policy). A missing PASS
+      // on this exact tree is recorded as the override, not silently skipped.
       const qa = await latestQaVerdict($)
       const tree = await headTree($)
       if (qa.verdict !== 'PASS' || tree === undefined || qa.tree !== tree) {
         const override = {
-          tree: tree ?? 'unknown', rule: 'qa-pass', qa: qa.verdict ?? 'none', at: new Date().toISOString(),
+          tree: tree ?? 'unknown',
+          rule: 'qa-pass',
+          qa: qa.verdict ?? 'none',
+          at: new Date().toISOString(),
         }
-        await $.state.set({ plugin: 'devops-multi-agent-team', key: 'lastOverride' } as const, override)
+        const key = { plugin: 'devops-multi-agent-team', key: 'lastOverride' } as const
+        await $.state.set(key, override)
       }
       consumeAuthorization = true
     }
