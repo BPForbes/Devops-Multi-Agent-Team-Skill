@@ -2,6 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  acceptWork,
+  assignWork,
+  completeWork,
+  workInbox,
   ackHandoff,
   addGoal,
   allowSameTeam,
@@ -13,8 +17,10 @@ import {
   inboxFor,
   moveGoal,
   backlogView,
+  markThreadRead,
   openThread,
   replyThread,
+  unreadThreads,
   resolveThread,
   routeHandoff,
   sendHandoff,
@@ -381,6 +387,108 @@ test('an exception covers only its goal and its team', () => {
   const reviewed = coderToReview(board).board
   const allowed = allowSameTeam(reviewed, { goal: GOAL, team: T_QA, reason: 'Other pod', at: AT })
   assert.throws(() => reviewToQa(allowed, { qaTeam: T_CODER }), /authored this goal/)
+})
+
+const T_SEC = 'team-9a8b7c'
+const SEC_SEAT = 'agent-0d0d0d'
+
+test('work is assigned to a seat with a description, and the seat sees it', () => {
+  const { board } = withGoal()
+  const made = assignWork(board, {
+    goal: GOAL, job: 'coder', agent: CODER, team: T_CODER,
+    description: 'Fix the lint gate on the parser', by: QA, at: AT, mint: () => '666666',
+  })
+  assert.equal(made.id, 'work-666666')
+  assert.equal(workInbox(made.board, CODER).length, 1)
+  assert.equal(workInbox(made.board, SEC_SEAT).length, 0)
+  assert.equal(workInbox(made.board, CODER)[0].description, 'Fix the lint gate on the parser')
+})
+
+test('assigned work needs a goal on the board, a job, a team, and a description', () => {
+  const { board } = withGoal()
+  const base = {
+    goal: GOAL, job: 'coder', agent: CODER, team: T_CODER,
+    description: 'Do it', by: QA, at: AT,
+  }
+  assert.throws(() => assignWork(board, { ...base, goal: 'goal-999999' }), /not on the board/)
+  assert.throws(() => assignWork(board, { ...base, job: 'pizza' }), /not a job/)
+  assert.throws(() => assignWork(board, { ...base, team: 'pod-1' }), /not a team hash/)
+  assert.throws(() => assignWork(board, { ...base, description: ' ' }), /needs a description/)
+})
+
+test('a judging job may not go to a team that authored the goal', () => {
+  const { board } = withGoal()
+  const reviewed = sendHandoff(board, {
+    payload: makeHandoff('coder-to-review', {
+      item: 'item-3c9e41', goal: GOAL, signedBy: CODER, fromAgent: CODER, fromTeam: T_CODER,
+      toAgent: '', toTeam: T_REVIEW, created: AT,
+    }),
+    caller: CODER, at: AT, mint: () => '777777',
+  }).board
+  assert.throws(
+    () => assignWork(reviewed, {
+      goal: GOAL, job: 'reviewer', agent: 'agent-0b0b0b', team: T_CODER,
+      description: 'Review it', by: QA, at: AT,
+    }),
+    /authored this goal/,
+  )
+  const ok = assignWork(reviewed, {
+    goal: GOAL, job: 'reviewer', agent: 'agent-0b0b0b', team: T_SEC,
+    description: 'Review it', by: QA, at: AT,
+  })
+  assert.equal(ok.board.assignments[ok.id].state, 'assigned')
+})
+
+test('only the assigned seat accepts, and it completes only after accepting', () => {
+  const { board } = withGoal()
+  const made = assignWork(board, {
+    goal: GOAL, job: 'security', agent: SEC_SEAT, team: T_SEC,
+    description: 'Scan the parser', by: QA, at: AT, mint: () => '888888',
+  })
+  const wrongSeat = () => acceptWork(made.board, { id: made.id, agent: CODER, at: AT })
+  assert.throws(wrongSeat, /only the assigned/)
+  const early = () => completeWork(made.board, { id: made.id, agent: SEC_SEAT, at: AT })
+  assert.throws(early, /accepted before/)
+  const acc = acceptWork(made.board, { id: made.id, agent: SEC_SEAT, at: AT })
+  assert.equal(acc.assignments[made.id].state, 'accepted')
+  const done = completeWork(acc, { id: made.id, agent: SEC_SEAT, at: AT })
+  assert.equal(done.assignments[made.id].state, 'done')
+  assert.deepEqual(workInbox(done, SEC_SEAT), [], 'done work leaves the inbox')
+})
+
+test('a thread reaches the goal authors and its opener, and their unread counts', () => {
+  const { board } = withGoal()
+  const reviewed = coderToReview(board).board
+  const opened = openThread(reviewed, {
+    goal: GOAL, item: 'item-3c9e41', topic: 'Repro fails', agent: QA, team: T_QA,
+    body: 'Step 3 gives exit 2', at: AT, mint: () => 'a1b2c3',
+  })
+  assert.deepEqual(opened.board.threads[opened.id].participants.sort(), [CODER, QA].sort())
+  assert.deepEqual(unreadThreads(opened.board, CODER), [
+    { id: opened.id, goal: GOAL, topic: 'Repro fails', unread: 1 },
+  ])
+  assert.deepEqual(unreadThreads(opened.board, QA), [], 'the opener has read its own thread')
+  assert.deepEqual(unreadThreads(opened.board, REVIEWER_SEAT), [], 'not a participant')
+})
+
+test('a reply makes the thread unread for the others, and a read clears it', () => {
+  const { board } = withGoal()
+  const reviewed = coderToReview(board).board
+  const opened = openThread(reviewed, {
+    goal: GOAL, item: 'item-3c9e41', topic: 'Repro fails', agent: QA, team: T_QA,
+    body: 'Step 3 gives exit 2', at: AT, mint: () => 'd4e5f6',
+  })
+  const replied = replyThread(opened.board, {
+    thread: opened.id, agent: CODER, team: T_CODER, body: 'Which image?', at: AT,
+  })
+  assert.equal(unreadThreads(replied, QA)[0].unread, 1)
+  assert.deepEqual(unreadThreads(replied, CODER), [], 'the replier has read its own reply')
+  const read = markThreadRead(replied, { thread: opened.id, agent: QA })
+  assert.deepEqual(unreadThreads(read, QA), [])
+  assert.throws(
+    () => markThreadRead(read, { thread: opened.id, agent: REVIEWER_SEAT }),
+    /only a participant/,
+  )
 })
 
 test('a blocked goal can only resume at the state it was blocked from', () => {
