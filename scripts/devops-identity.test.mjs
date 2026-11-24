@@ -2,8 +2,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  checkArtifactPath, checkRoute, checkSender, chainEvents, roleMayUse, verifyChain,
+  checkArtifactPath, checkRoute, checkSender, chainEvents, chainLinker, roleMayUse, verifyChain,
 } from './devops-identity.mjs'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { appendEvent, readEvents } from './devops-store.mjs'
 
 const KEY = 'server-secret'
 const envelope = (kind, agent) => ({ kind, from: { agent, role: 'manager' } })
@@ -60,4 +64,13 @@ test('a chained log verifies, and a tampered or reordered log fails', () => {
   const reordered = [log[1], log[0], log[2]]
   assert.equal(verifyChain(reordered, KEY), false)
   assert.equal(verifyChain(log, 'other-key'), false)
+})
+
+test('events appended under the log lock through the linker form one verifiable chain', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dmat-chain-'))
+  const log = path.join(dir, 'events.jsonl')
+  for (let i = 0; i < 5; i += 1) {
+    appendEvent(log, { id: `ev-${i}`, from: { agent: 'agent-m' }, kind: 'x' }, { link: chainLinker(KEY) })
+  }
+  assert.equal(verifyChain(readEvents(log), KEY), true)
 })

@@ -88,6 +88,14 @@ const chainOf = (key, prev, event) => crypto.createHmac('sha256', key)
   .update(`${prev}\n${JSON.stringify(event)}`)
   .digest('hex')
 
+/**
+ * A link function for appendEvent: (previousLink, event) => the stored event
+ * with its chain link. The store calls it under the log's lock.
+ */
+export function chainLinker(key) {
+  return (prev, event) => ({ ...event, chain: chainOf(key, prev, event) })
+}
+
 /** Adds a hash-chain link to each event, keyed by the server's secret. */
 export function chainEvents(events, key) {
   let prev = 'genesis'
