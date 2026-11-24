@@ -29,6 +29,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+      - name: Install dependencies
+        run: npm ci
       - name: Language and standards data
         run: node scripts/check-languages.mjs
       - name: Rule files match their references
