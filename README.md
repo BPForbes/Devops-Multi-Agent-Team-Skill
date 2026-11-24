@@ -12,7 +12,7 @@ commands, plus:
    adds a free-form `/devops` command with skill modes (`question`, `mind-map`,
    `clean`, `goal`, …) that drive MCP tools instead of plain-text dumps, and refuses
    `git push`, `gh pr create|merge` and git-branch creation until *you* authorize
-   (chat `push` = `/devops push-ok`). Human wording is final; `/devops` does not stop
+   (say `push` or `push it` in chat, or type `/devops push-ok`, to allow one push on the current tree). `/devops` does not stop
    development.
 
 ## What is in it
@@ -322,7 +322,7 @@ skill, agents, commands and MCP server. The shell form is
 | `session.start` | Runs `devops-setup detect --json`, shows `devops: rust+typescript` in the status line, registers `/devops` and the `devops_brief` tool, and reads the project's standards into one line. |
 | `tool.run` `devops_brief` | The model reads the skill in pieces: no input gives the index (about 8 KB instead of 250 KB), `topic` the one best section (usually 1 to 4 KB), `role` a seat's brief. Role files rank below the references for a topic, since `role` serves them. |
 | `command.run` `/devops` | Gates (`status`, `push-ok`, `allow-branch`, …) plus **skill modes** (`help`, `question`, `mind-map`, `clean`, `stage`/`ci`, `allocate`, `goal`, `story`, …) with `--mode` orchestration cards that name MCP tools. Trigger one CI/CD pod (`stage --mode research`) or allocate pod/agent goals. Seats use the same modes. Chat aliases (`push` → `push-ok`; "run research" → `stage`). Does not stop development. |
-| `tool.call` Bash | Refuses `git push`, `gh pr create\|merge\|ready\|edit\|close\|reopen`, `gh release create` unless you authorized a push (`/devops push-ok` or chat "push"; consumed by that push; human word is final and does not require QA PASS). Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>`. Detached worktrees and reads pass. If the check itself fails, it refuses. |
+| `tool.call` Bash | Refuses `git push`, `gh pr create\|merge\|ready\|edit\|close\|reopen`, `gh release create` unless you said `push` in chat or typed `/devops push-ok` for the current tree (consumed by that push; human word is final and does not require QA PASS). Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>`. Detached worktrees and reads pass. If the check itself fails, it refuses. |
 | `prompt.compose` | Adds one short section (under 1,200 characters): the languages, `devops_brief` instead of reading the skill whole, the profile, the lint gate and config tools, the standards in effect (line lengths, function limits, allowed numbers), the push gate and the lint mode. An agent starts with what it needs and fetches the rest by piece. |
 
 Limits, stated plainly:
@@ -330,7 +330,7 @@ Limits, stated plainly:
 - It guards the **Bash tool**. GitHub MCP tools (`create_pull_request`,
   `push_files`, `merge_pull_request`, ...) are not gated by it; use your
   permission settings for those.
-- A push needs your authorization: say `push` in chat or `/devops push-ok`
+- A push needs your authorization: say `push` in chat, or type `/devops push-ok`, on the current tree
   (same meaning). That grant is final and is consumed by one push.
 - Shell parsing is by words, with quoted text ignored. A command built
   through `eval` or a script that itself pushes is not seen; the skill's

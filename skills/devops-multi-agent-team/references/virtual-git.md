@@ -81,4 +81,4 @@ a `goal` field ([goal-hashes.md](goal-hashes.md), Virtual git).
 
 The Claude mod enforces the mechanical part at the tool layer: it refuses
 `git push`, `gh pr create|merge`, and branch creation until the human
-authorizes (`/devops push-ok` or chat "push"; same meaning).
+authorizes (`push` in chat or `/devops push-ok` on that tree).
