@@ -4,6 +4,8 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
+import { UNFENCED } from './devops-store.mjs'
+
 import {
   acquireLeader, advanceTick, expiredLeases, fenceOk, initialTicks, openSprint, recordCompletion,
   recordCompletionAt, TICK_CONFIG, wallClockOf,
@@ -61,9 +63,9 @@ test('leases that ended before the tick are expired, the rest are not', () => {
 test('a tick counter persists under the store and counts across calls', () => {
   const dir = scratch()
   const file = path.join(dir, 'ticks.json')
-  recordCompletionAt(file, { nowMs: T0 })
-  recordCompletionAt(file, { nowMs: T0 })
-  const third = recordCompletionAt(file, { nowMs: T0 })
+  recordCompletionAt(file, { nowMs: T0, fence: UNFENCED })
+  recordCompletionAt(file, { nowMs: T0, fence: UNFENCED })
+  const third = recordCompletionAt(file, { nowMs: T0, fence: UNFENCED })
   assert.equal(third.ticked, true)
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).tick, 1)
 })
