@@ -1,4 +1,4 @@
-// Atomic writes, locks and an idempotent event log. See the design, sections 4.3 and 9.
+// Atomic writes, locks and an idempotent event log (design: sections 4.3, 9).
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -7,9 +7,10 @@ const LOCK_WAIT_MS = 5000
 const LOCK_STALE_MS = 10000
 const RETRY_MS = 20
 const UUID_BYTES = 4
+const INT32_BYTES = 4
 
 function sleep(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(INT32_BYTES)), 0, 0, ms)
 }
 
 /** Writes text to a temp file beside `file`, then renames it over `file`. */
