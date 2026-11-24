@@ -7,7 +7,7 @@
 // secret.
 
 import fs from 'node:fs'
-import { updateJson } from '../scripts/devops-store.mjs'
+import { UNFENCED, updateJson } from '../scripts/devops-store.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -154,7 +154,7 @@ function boardChange(args, change) {
     const { board, ...rest } = change(normalizeBoard(current))
     result = rest
     return board
-  })
+  }, UNFENCED)
   return result
 }
 
