@@ -210,6 +210,20 @@ test('a thread needs a goal on the board, an item hash, a topic and a message', 
   assert.throws(() => openThread(board, { ...base, body: '' }), /first message/)
 })
 
+test('a thread is written only by a valid agent hash and team hash', () => {
+  const { board } = withGoal()
+  const base = {
+    goal: GOAL, item: 'item-3c9e41', topic: 'T', agent: QA, team: T_QA, body: 'B', at: AT,
+  }
+  assert.throws(() => openThread(board, { ...base, agent: '../../etc' }), /not an agent hash/)
+  assert.throws(() => openThread(board, { ...base, team: 42 }), /not a team hash/)
+  const opened = openThread(board, { ...base, mint: () => '222bbb' })
+  const reply = { thread: opened.id, agent: CODER, team: T_CODER, body: 'ok', at: AT }
+  const badAgent = { ...reply, agent: '../../etc' }
+  assert.throws(() => replyThread(opened.board, badAgent), /not an agent hash/)
+  assert.throws(() => replyThread(opened.board, { ...reply, team: 42 }), /not a team hash/)
+})
+
 const REVIEWER_SEAT = 'agent-0b0b0b'
 const T_REVIEW = 'team-7a8b9c'
 
@@ -279,6 +293,87 @@ test('Orchestration can allow one same-team review, with a reason, and it is kep
   assert.equal(allowed.exceptions.length, 1)
   const qa = reviewToQa(allowed, { qaTeam: T_CODER })
   assert.equal(qa.board.handoffs[qa.id].payload.to.team, T_CODER)
+})
+
+/** A review-to-qa hand-off to one QA seat of `qaTeam`. */
+function reviewToSeat(board, { qaTeam, qaSeat, mint }) {
+  const payload = makeHandoff('review-to-qa', {
+    item: 'item-3c9e41', goal: GOAL, signedBy: REVIEWER_SEAT, fromAgent: REVIEWER_SEAT,
+    fromTeam: T_REVIEW, toAgent: qaSeat, toTeam: qaTeam, created: AT,
+  })
+  return sendHandoff(board, { payload, caller: REVIEWER_SEAT, at: AT, mint: () => mint })
+}
+
+/** The exception for T_CODER on GOAL, after one coder-to-review. */
+function allowedBoard() {
+  const reviewed = coderToReview(withGoal().board).board
+  return allowSameTeam(reviewed, { goal: GOAL, team: T_CODER, reason: 'One QA seat free', at: AT })
+}
+
+test('a same-team exception binds to the first judging seat; another seat is refused', () => {
+  const first = reviewToSeat(allowedBoard(), { qaTeam: T_CODER, qaSeat: QA, mint: 'aaa111' })
+  assert.equal(first.board.exceptions[0].used_by, first.id)
+  assert.equal(first.board.exceptions[0].judge, QA)
+  const again = reviewToSeat(first.board, { qaTeam: T_CODER, qaSeat: QA, mint: 'aaa222' })
+  assert.equal(again.board.handoffs[again.id].state, 'sent')
+  const otherSeat = { qaTeam: T_CODER, qaSeat: 'agent-0e0e0e', mint: 'aaa333' }
+  const other = () => reviewToSeat(first.board, otherSeat)
+  assert.throws(other, /authored this goal/)
+})
+
+test('the excepted seat can send its item back, not only pass it', () => {
+  const seat = { qaTeam: T_CODER, qaSeat: QA, mint: 'bbb111' }
+  const received = reviewToSeat(allowedBoard(), seat).board
+  const payload = triagePayload({ fromTeam: T_CODER, toTeam: T_REVIEW })
+  const sent = sendHandoff(received, { payload, caller: QA, at: AT, mint: () => 'bbb222' })
+  assert.equal(sent.board.handoffs[sent.id].payload.kind, 'triage')
+})
+
+test('one allowance covers one review: not a second job, not a second item', () => {
+  const seat = { qaTeam: T_CODER, qaSeat: QA, mint: 'eee111' }
+  const received = reviewToSeat(allowedBoard(), seat).board
+  const toSecurity = seat => makeHandoff('qa-to-security', {
+    item: 'item-3c9e41', goal: GOAL, signedBy: QA, fromAgent: QA, fromTeam: T_CODER,
+    toAgent: seat, toTeam: T_CODER, created: AT,
+  })
+  const send = payload => sendHandoff(received, {
+    payload, caller: QA, at: AT, mint: () => 'eee222',
+  })
+  assert.throws(() => send(toSecurity(QA)), /cannot hand judging work to itself/)
+  assert.throws(() => send(toSecurity('agent-0e0e0e')), /authored this goal/)
+  const otherItem = makeHandoff('review-to-qa', {
+    item: 'item-4d4d4d', goal: GOAL, signedBy: REVIEWER_SEAT, fromAgent: REVIEWER_SEAT,
+    fromTeam: T_REVIEW, toAgent: QA, toTeam: T_CODER, created: AT,
+  })
+  const second = () => sendHandoff(received, {
+    payload: otherItem, caller: REVIEWER_SEAT, at: AT, mint: () => 'eee333',
+  })
+  assert.throws(second, /authored this goal/)
+})
+
+test('an unrouted hand-off to the excepted team can still be routed to one of its seats', () => {
+  const sent = reviewToSeat(allowedBoard(), { qaTeam: T_CODER, qaSeat: '', mint: 'ccc111' })
+  assert.equal(sent.board.exceptions[0].used_at, undefined, 'no seat is named yet')
+  const routed = routeHandoff(sent.board, { id: sent.id, agent: QA, team: T_CODER, at: AT })
+  assert.equal(routed.handoffs[sent.id].state, 'sent')
+  assert.equal(routed.exceptions[0].judge, QA)
+})
+
+test('routing a same-team judge through an exception uses it up', () => {
+  const { board } = withGoal()
+  const reviewed = coderToReview(board).board
+  const allowance = { goal: GOAL, team: T_CODER, reason: 'One QA seat', at: AT }
+  const allowed = allowSameTeam(reviewed, allowance)
+  const payload = makeHandoff('review-to-qa', {
+    item: 'item-3c9e41', goal: GOAL, signedBy: REVIEWER_SEAT, fromAgent: REVIEWER_SEAT,
+    fromTeam: T_REVIEW, toAgent: '', toTeam: T_QA, created: AT,
+  })
+  const sent = sendHandoff(allowed, {
+    payload, caller: REVIEWER_SEAT, at: AT, mint: () => '555555',
+  })
+  assert.equal(sent.board.exceptions[0].used_at, undefined, 'another team judges until routed')
+  const routed = routeHandoff(sent.board, { id: sent.id, agent: QA, team: T_CODER, at: AT })
+  assert.equal(routed.exceptions[0].used_by, sent.id)
 })
 
 test('an exception covers only its goal and its team', () => {

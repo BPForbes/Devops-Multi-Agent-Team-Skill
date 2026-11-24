@@ -42,7 +42,15 @@ A team never judges an item it authored. The board enforces this:
 
 When resources are low, Orchestration may allow one same-team review with
 `board_allow_same_team`, which records a reason. The allowance covers only
-that goal and that team. It does not change the authors.
+that goal and that team, and only one review: the first seat of that
+authoring team that judges the goal through it, in one job, on one item,
+uses it up (`used_at`, `used_by`, `judge`, `job`, `item` on the
+exception). That seat may finish its review: receive the work, pass it on
+or send it back. Another seat, another job (QA cannot also be Security)
+or another item needs a second allowance, and no seat may hand judging
+work to itself. An unrouted hand-off names no seat yet, so it
+uses nothing until it is routed. It
+does not change the authors.
 
 ## Blame
 

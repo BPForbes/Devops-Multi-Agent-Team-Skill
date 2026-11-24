@@ -116,25 +116,63 @@ export function backlogView(board) {
     .map(([goal, g]) => ({ goal, title: g.title, state: g.state }))
 }
 
-/** The team that judges this hand-off's item: '' when no judge is named yet. */
-function judgeTeamOf(payload) {
-  if (FORWARD_JUDGING.has(payload.kind)) return payload.to.team
-  if (JUDGING.has(payload.kind)) return payload.from.team
-  return ''
+/** The job that judges the item in each judging hand-off. */
+const JUDGE_JOB = Object.freeze({
+  'coder-to-review': 'reviewer', 'review-to-qa': 'qa', 'qa-to-security': 'security',
+  'triage': 'qa', 'review-send-back': 'reviewer', 'security-send-back': 'security',
+  'security-signoff': 'security',
+})
+
+/** Who judges this hand-off's item: team, seat, job and item; team and seat '' if unnamed. */
+function judgeOf(payload) {
+  const review = { job: JUDGE_JOB[payload.kind] ?? '', item: payload.item }
+  const side = FORWARD_JUDGING.has(payload.kind) ? payload.to
+    : JUDGING.has(payload.kind) ? payload.from : { team: '', agent: '' }
+  return { team: side.team, agent: side.agent, ...review }
 }
 
-function isExempt(board, goal, team) {
-  const exceptions = normalizeBoard(board).exceptions
-  return team !== '' && exceptions.some(e => e.goal === goal && e.team === team)
+/** True when the exception was used by this same seat, in this same job, on this same item. */
+function sameReview(e, judge) {
+  return judge.agent !== '' && e.judge === judge.agent && e.job === judge.job
+    && (e.item === undefined || judge.item === undefined || e.item === judge.item)
+}
+
+/** The exception that lets `judge` judge `goal`: an unused one, or the one this review used. */
+function exceptionFor(board, goal, judge) {
+  if (judge.team === '') return undefined
+  return normalizeBoard(board).exceptions
+    .find(e => e.goal === goal && e.team === judge.team && (!e.used_at || sameReview(e, judge)))
+}
+
+function isExempt(board, goal, judge) {
+  return exceptionFor(board, goal, judge) !== undefined
+}
+
+/**
+ * Binds the exception, in `next`, to one review: the first seat of the authoring
+ * team that judges through it, in that job, on that item. That seat may finish
+ * the review (receive the work, pass it on or send it back); any other seat,
+ * job or item needs a new allowance. An unrouted hand-off names no seat yet, so
+ * it uses nothing.
+ */
+function useException(next, goal, judge, { at, by }) {
+  if (judge.agent === '' || !(next.goals[goal]?.authors ?? []).includes(judge.team)) return
+  const row = exceptionFor(next, goal, judge)
+  if (row === undefined) return
+  if (!row.used_at) {
+    Object.assign(row, { used_at: at, used_by: by, judge: judge.agent, job: judge.job })
+  }
+  if (row.item === undefined && judge.item !== undefined) row.item = judge.item
 }
 
 /** Refuses a judge from a team that authored this goal, unless Orchestration allowed it. */
 function assertIndependent(board, payload, judge) {
-  if (judge === '' || isExempt(board, payload.goal, judge)) return
+  if (judge.team === '' || isExempt(board, payload.goal, judge)) return
   const authors = normalizeBoard(board).goals[payload.goal]?.authors ?? []
   need(
-    !authors.includes(judge),
-    `team ${judge} authored this goal: another team must judge it, unless Orchestration allows it`,
+    !authors.includes(judge.team),
+    `team ${judge.team} authored this goal: another team must judge it, `
+      + 'unless Orchestration allows it',
   )
 }
 
@@ -144,8 +182,12 @@ function assertIndependent(board, payload, judge) {
  */
 export function sendHandoff(board, { payload, caller, at, mint }) {
   need(caller === payload.from.agent, 'only the sending seat can send its handoff')
+  need(
+    !JUDGING.has(payload.kind) || payload.to.agent !== payload.from.agent,
+    'a seat cannot hand judging work to itself',
+  )
   need(board.goals[payload.goal] !== undefined, `goal is not on the board: ${payload.goal}`)
-  const judge = judgeTeamOf(payload)
+  const judge = judgeOf(payload)
   assertIndependent(board, payload, judge)
   const check = validateHandoff(payload, { allowSameTeam: isExempt(board, payload.goal, judge) })
   need(check.ok, `handoff refused: ${check.errors.join('; ')}`)
@@ -156,6 +198,7 @@ export function sendHandoff(board, { payload, caller, at, mint }) {
   }
   const id = mintId('handoff', next.handoffs, mint)
   need(HANDOFF_RE.test(id), 'bad handoff id')
+  useException(next, payload.goal, judge, { at, by: id })
   if (payload.blame) {
     next.blame.push({
       at, goal: payload.goal, item: payload.item, kind: payload.kind,
@@ -184,11 +227,13 @@ export function routeHandoff(board, { id, agent, team, at }) {
   const payload = structuredClone(board.handoffs[id].payload)
   payload.to.agent = agent
   payload.to.team = team
-  const judge = judgeTeamOf(payload)
+  need(payload.to.agent !== payload.from.agent, 'a seat cannot hand judging work to itself')
+  const judge = judgeOf(payload)
   assertIndependent(board, payload, judge)
   const check = validateHandoff(payload, { allowSameTeam: isExempt(board, payload.goal, judge) })
   need(check.ok, `handoff refused: ${check.errors.join('; ')}`)
-  const next = structuredClone(board)
+  const next = normalizeBoard(structuredClone(board))
+  useException(next, payload.goal, judge, { at, by: id })
   next.handoffs[id].payload = payload
   next.handoffs[id].payload.to.agent = agent
   next.handoffs[id].state = 'sent'
@@ -260,6 +305,8 @@ export function openThread(board, { goal, item, topic, agent, team, body, at, mi
   need(isItemId(item), `not an item hash: ${item}`)
   need(String(topic ?? '').trim() !== '', 'a thread needs a topic')
   need(String(body ?? '').trim() !== '', 'a thread needs a first message')
+  need(isAgentId(agent), `not an agent hash: ${agent}`)
+  need(isTeamId(team), `not a team hash: ${team}`)
   const next = normalizeBoard(structuredClone(board))
   const id = mintId('thread', next.threads, mint)
   next.threads[id] = {
@@ -280,6 +327,8 @@ export function replyThread(board, { thread, agent, team, body, at }) {
   need(row !== undefined, `unknown thread: ${thread}`)
   need(row.state === 'open', `thread ${thread} is resolved`)
   need(String(body ?? '').trim() !== '', 'a reply needs a message')
+  need(isAgentId(agent), `not an agent hash: ${agent}`)
+  need(isTeamId(team), `not a team hash: ${team}`)
   const next = normalizeBoard(structuredClone(board))
   next.threads[thread].messages.push({ agent, team, at, body: body.trim() })
   return next
