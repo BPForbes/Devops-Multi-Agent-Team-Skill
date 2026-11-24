@@ -38,6 +38,10 @@ and [version-tags.md](../skills/devops-multi-agent-team/references/version-tags.
 `/goal` · `/code-review` (inspect) · `/repro` · `/create-subagent`
 · `/docs-canvas` · `/canvas` · `/browser-automation`.
 
+**Seat `/devops` methods** (same cards as the human; call the tools):
+`/devops question` · `/devops mind-map` · `/devops reuse` ·
+`/devops stage --mode research` · `/devops story --mode research`.
+
 0. **Documentation first, always.** Read the repository's documentation before
    any code search: Markdown, LaTeX, reStructuredText, ADRs, runbooks, schema
    and API files, then the documentation inside the code (module headers, doc

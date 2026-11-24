@@ -113,7 +113,7 @@ and the residual risk.
 
 ```markdown
 ## SOC 2 review
-Scope: <diff, commit, files>   Authors: <seat ids>   Reviewer: <security seat id>
+Scope: <diff, commit, files>   Authors: <agent hashes>   Teams: <team hashes>   Reviewer: <security agent hash>
 Analysis: <tool per language: ran locally | CI check on <sha>: pass/fail | NOT RUN (why)>; findings n (gate n); not analysed: <languages>
 | Criterion | Status | Evidence |
 |-----------|--------|----------|

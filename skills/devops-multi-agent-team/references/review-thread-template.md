@@ -1,15 +1,17 @@
 # Review thread template
 
-Copy to `devops-skill/thoughts/non-final/review-<seat-id>.md`.
+Copy to `devops-skill/thoughts/non-final/review-agent-<hex>.md`.
 Local only; do not commit. After QA PASS, move to `final/`.
 See [thoughts-layout.md](thoughts-layout.md).
 
 ```markdown
 # Review: <topic>
 
+**Item:** item-<6 hex> · **Notes:** <one line>
 **Branch:** <shared checkout; do not invent a real git branch>
 **Side-branch:** `side/<dept>-<topic>` (`side-<dept>.md`)
-**Authors:** <coder-id>[, <researcher-id>]   **Reviewers:** <reviewer-id>[, ...]
+**Authors:** <agent-hash>[, …]   **Teams:** <team-hash>[, …]
+**Reviewers:** <agent-hash>[, …] (must not share an Authors team hash)
 **Status:** In review | Changes requested | Satisfied — ready for security | Closed
 **Push policy:** Only QA may give the OK to push (review-bot feedback fixes: qa-publish-policy.md).
 
@@ -18,7 +20,7 @@ See [thoughts-layout.md](thoughts-layout.md).
 - … · | URL | Takeaway |
 
 ## Push JSON
-- Latest: `devops-skill/thoughts/non-final/push-<seat-id>.json`
+- Latest: `devops-skill/thoughts/non-final/push-agent-<hex>.json`
 - The Coder (`seat`) writes this **before the first review**. Reviewers compare
   it to the side-branch tree vs `<integration-base>`.
 
