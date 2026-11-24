@@ -141,6 +141,7 @@ export function moveGoal(board, { goal, state, at }) {
   if (from === 'blocked') {
     need(state === row.blocked_from, `a blocked goal resumes at ${row.blocked_from}, not ${state}`)
   } else if (state === 'blocked') {
+    need(from !== 'done', `${goal} is done: only a lead's sign-off makes it done, and it stays done`)
     target.blocked_from = from
   } else {
     const forward = GOAL_STATES.indexOf(state) === GOAL_STATES.indexOf(from) + 1

@@ -8,7 +8,7 @@ import {
 const ITEM = 'item-3c9e41'
 const SECURITY = { agent: 'agent-s', role: 'security' }
 const itemIn = state => ({ id: ITEM, goal: 'goal-7f0a12', state, points: 3, acceptance: ['ok'] })
-const VALID = { item: ITEM, goal: 'goal-7f0a12', acceptance: ['lint passes'], points: 3 }
+const VALID = { item: ITEM, goal: 'goal-7f0a12', job: 'qa', acceptance: ['lint passes'], points: 3 }
 
 test('an item walks the whole path with the right actor at each step', () => {
   const steps = [
@@ -121,7 +121,7 @@ test('intake refuses an id that is not item-<hex>', () => {
 test('a refused intake says every problem it found', () => {
   const result = admit({ item: 'nope', acceptance: [], points: 0 })
   assert.equal(result.ok, false)
-  assert.equal(result.errors.length, 3)
+  assert.equal(result.errors.length, 5)
 })
 
 test('a goal is empty, active, or done by its items', () => {
@@ -165,4 +165,10 @@ test('a sign-off does not survive a detour through blocked and rework', () => {
   for (const [to, actor] of path) item = transition(item, to, actor).item
   assert.equal(item.security_signoff, undefined)
   assert.match(transition(item, 'done', 'manager').reason, /security sign-off/)
+})
+
+test('an item without a valid goal or job is refused before it is admitted', () => {
+  assert.equal(checkIntake({ ...VALID, goal: 'goal-zz' }).ok, false)
+  assert.equal(checkIntake({ ...VALID, job: 'nonsense' }).ok, false)
+  assert.equal(admit({ ...VALID, job: undefined }).ok, false)
 })

@@ -1,7 +1,7 @@
 // The work item state machine and intake (design: sections 4 and 16).
 // Pure rules: a move either passes or is refused with a reason, and every
 // refusal goes to the caller's onRefuse so it can be logged.
-import { isItemId } from './devops-ids.mjs'
+import { isGoalId, isItemId, isJob } from './devops-ids.mjs'
 
 const SERVER = 'server'
 const ASSIGNEE = 'assignee'
@@ -99,6 +99,8 @@ export function securitySignOff(item, { agent, role }) {
 export function checkIntake(body) {
   const errors = []
   if (!isItemId(body?.item)) errors.push('item must look like item-<hex>')
+  if (!isGoalId(body?.goal)) errors.push('goal must look like goal-<hex>')
+  if (!isJob(body?.job)) errors.push('job must be one of the team jobs')
   const criteria = body?.acceptance
   if (!Array.isArray(criteria) || criteria.length === 0) {
     errors.push('acceptance needs at least one criterion')
