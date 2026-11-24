@@ -35,12 +35,12 @@ test('a read-modify-write saves the change and a failing change writes nothing',
   assert.equal(fs.existsSync(`${file}.lock`), false, 'the lock is released after a failure')
 })
 
-test('a lock left by a crashed writer is broken, not waited on forever', () => {
+test('a lock left by a crashed writer is never broken; the error names it', () => {
   const dir = scratch()
   const file = path.join(dir, 'counter.json')
   fs.writeFileSync(`${file}.lock`, JSON.stringify({ pid: 999999, at: Date.now() - 60000 }))
-  updateJson(file, { n: 0 }, state => ({ n: state.n + 5 }))
-  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).n, 5)
+  assert.throws(() => updateJson(file, { n: 0 }, state => state), /remove .*counter\.json\.lock/)
+  assert.equal(fs.existsSync(`${file}.lock`), true, 'the lock is left for a person to remove')
 })
 
 function runChild(script) {
