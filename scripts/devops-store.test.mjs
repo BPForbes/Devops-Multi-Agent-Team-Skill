@@ -89,6 +89,30 @@ test('a corrupt line in the log is an error that names the line', () => {
   assert.throws(() => readEvents(log), /line 2/)
 })
 
+test('three processes appending through a link lose no event and fork no chain', async () => {
+  const dir = scratch()
+  const log = path.join(dir, 'events.jsonl')
+  const script = `
+    import { appendEvent } from ${JSON.stringify(STORE)}
+    const link = (prev, event) => ({ ...event, prev, chain: event.id })
+    const tag = process.argv[1]
+    for (let i = 0; i < 15; i += 1) {
+      const event = { id: \`\${tag}-\${i}\`, from: { agent: tag }, kind: 'x' }
+      appendEvent(${JSON.stringify(log)}, event, { link })
+    }`
+  await Promise.all(['a', 'b', 'c'].map(tag => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script, tag])
+    child.on('exit', code => (code === 0 ? resolve() : reject(new Error(`child exited ${code}`))))
+  })))
+  const events = readEvents(log)
+  assert.equal(events.length, 45)
+  let prev = 'genesis'
+  for (const event of events) {
+    assert.equal(event.prev, prev, 'each event links to the stored event before it')
+    prev = event.id
+  }
+})
+
 test('replaying the same events always gives the same state', () => {
   const events = [{ n: 1 }, { n: 2 }, { n: 3 }]
   const reduce = (state, event) => ({ total: state.total + event.n })

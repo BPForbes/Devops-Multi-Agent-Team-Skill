@@ -89,17 +89,27 @@ export function readEvents(logFile) {
 
 const keyOf = event => `${event.from?.agent}/${event.id}`
 
-/** Appends an event unless the log already holds it. Returns { appended }. */
-export function appendEvent(logFile, event) {
+const bare = ({ chain, ...rest }) => rest
+const lastLink = events => (events.length === 0 ? 'genesis' : events.at(-1).chain ?? 'genesis')
+
+/**
+ * Appends an event unless the log already holds it. With `link`, the stored
+ * event is link(previousLink, event): the link is computed under the lock, from
+ * the last stored link, so concurrent writers cannot fork a chain. Returns
+ * { appended }.
+ */
+export function appendEvent(logFile, event, { link = null } = {}) {
   return withLock(logFile, () => {
     const key = keyOf(event)
-    const existing = readEvents(logFile).find(e => keyOf(e) === key)
+    const events = readEvents(logFile)
+    const existing = events.find(e => keyOf(e) === key)
     if (existing !== undefined) {
-      if (JSON.stringify(existing) === JSON.stringify(event)) return { appended: false }
+      if (JSON.stringify(bare(existing)) === JSON.stringify(event)) return { appended: false }
       throw new Error(`event ${key} already exists with different content`)
     }
+    const stored = link ? link(lastLink(events), event) : event
     fs.mkdirSync(path.dirname(logFile), { recursive: true })
-    fs.appendFileSync(logFile, `${JSON.stringify(event)}\n`)
+    fs.appendFileSync(logFile, `${JSON.stringify(stored)}\n`)
     return { appended: true }
   })
 }
