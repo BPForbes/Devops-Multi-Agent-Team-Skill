@@ -7,8 +7,8 @@ import {
 import { initialTicks } from './devops-ticks.mjs'
 
 const seats = [
-  { agent: 'agent-a', capacity_points: 5 },
-  { agent: 'agent-b', capacity_points: 3 },
+  { agent: 'agent-a', jobs: ['coder'], capacity_points: 5 },
+  { agent: 'agent-b', jobs: ['coder'], capacity_points: 3 },
 ]
 
 test('commitments stay within each seat capacity and refuse the rest', () => {
@@ -56,6 +56,26 @@ test('the review splits committed work into finished and slipped, per seat', () 
   assert.deepEqual(review.finished, ['item-1', 'item-3'])
   assert.deepEqual(review.slipped, ['item-2'])
   assert.deepEqual(review.perSeat['agent-a'], { committed: 2, done: 1 })
+})
+
+test('a retro item gets a routable job and a valid id, minted when the action has none', () => {
+  const result = retroActionItems({
+    actions: [{ text: 'add lint to CI', owner: 'agent-a' }],
+    goal: 'goal-7f0a12',
+    seats,
+  })
+  assert.equal(result.items.length, 1)
+  assert.match(result.items[0].id, /^item-[0-9a-f]{6}$/)
+  assert.equal(result.items[0].job, 'coder')
+})
+
+test('a retro action whose owner has no job is refused', () => {
+  const noJob = [{ agent: 'agent-c', jobs: [], capacity_points: 3 }]
+  const result = retroActionItems({
+    actions: [{ text: 'x', owner: 'agent-c' }], goal: 'goal-7f0a12', seats: noJob,
+  })
+  assert.equal(result.items.length, 0)
+  assert.match(result.refused[0].reason, /no job/)
 })
 
 test('a retro action without an owner is refused, an owned one is queued', () => {
