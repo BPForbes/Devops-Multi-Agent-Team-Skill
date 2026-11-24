@@ -87,6 +87,7 @@ export function admit(body) {
   const item = {
     id: body.item,
     goal: body.goal,
+    job: body.job,
     state: 'queued',
     points: body.points,
     acceptance: [...body.acceptance],
