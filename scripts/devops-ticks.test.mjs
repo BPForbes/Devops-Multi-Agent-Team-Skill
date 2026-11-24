@@ -85,6 +85,25 @@ test('a takeover after the lease expires bumps the epoch and fences the old lead
   assert.equal(fenceOk(file, 2), true)
 })
 
+test('a write fenced by an old epoch is refused, and the board is left as it was', () => {
+  const dir = scratch()
+  const leader = path.join(dir, 'leader.json')
+  const ticks = path.join(dir, 'ticks.json')
+  assert.deepEqual(acquireLeader(leader, 'server-a', T0, 30000), { acquired: true, epoch: 1 })
+  recordCompletionAt(ticks, { nowMs: T0, fence: { leaderFile: leader, epoch: 1 } })
+  const takeover = acquireLeader(leader, 'server-b', T0 + 60000, 30000)
+  assert.deepEqual(takeover, { acquired: true, epoch: 2 })
+  const before = fs.readFileSync(ticks, 'utf8')
+  assert.throws(
+    () => recordCompletionAt(ticks, { nowMs: T0 + 61000, fence: { leaderFile: leader, epoch: 1 } }),
+    /fenced out/,
+  )
+  assert.equal(fs.readFileSync(ticks, 'utf8'), before)
+  const fence = { leaderFile: leader, epoch: 2 }
+  const after = recordCompletionAt(ticks, { nowMs: T0 + 61000, fence })
+  assert.equal(after.state.completed_since_tick, 2, 'the first write and the new leader\'s write')
+})
+
 test('the same leader renewing keeps its epoch', () => {
   const dir = scratch()
   const file = path.join(dir, 'leader.json')
