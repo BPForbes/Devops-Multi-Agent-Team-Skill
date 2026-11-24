@@ -14,7 +14,6 @@ import {
   PACKAGE_ROOT, addLocalLanguage, checkToolchain, detectLanguages, detectServices, ensureGitignore, install,
   loadLanguages, loadServices, renderProfile, resolveDest, sandboxArgv, status,
 } from '../scripts/devops-setup.mjs'
-import { UNFENCED, updateJson } from '../scripts/devops-store.mjs'
 import { commentAudit } from '../scripts/devops-comments.mjs'
 import { parseStatement, scanProject, snapshot } from '../scripts/devops-cleanup.mjs'
 import { formalCheck } from '../scripts/devops-formal.mjs'

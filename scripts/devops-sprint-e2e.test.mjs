@@ -32,7 +32,7 @@ const PATH_TO_DONE = [
   ['in_qa', 'reviewer'],
   ['in_security', 'qa'],
   ['ready_for_human', 'security'],
-  ['done', 'human'],
+  ['done', 'manager'],
 ]
 
 function walk(item, steps) {
