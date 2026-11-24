@@ -2,16 +2,43 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Found } from '../types'
 import {
-  branchNameOf, classify, classifySegments, commitInfo, shellWords, splitArgs, verdictOf,
+  branchNameOf, classify, classifySegments, commitInfo, interpretDevopsIntent, isSingleCommand,
+  namesPush, securityVerdictOf, shellWords, splitArgs, treeOf, verdictOf,
 } from './guard'
+import {
+  interpretSkillIntent, isGateWord, isSkillWord, orchestrationCard, parseSkillMode,
+  scriptArgsFor, scriptNameFor, skillWords, type SkillMode,
+} from './modes'
 import { BRIEF_SPEC, BRIEF_TOOL, briefFor, card, readStandards, setupClaude } from './orchestrate'
 
 const PLUGIN = 'devops-multi-agent-team'
 const SCRIPT_TIMEOUT_MS = 20000
-const CONFIG_WRITES = ['set', 'unset', 'add', 'remove', 'rule']
 const THOUGHT_DIRS = ['devops-skill/thoughts/non-final', 'devops-skill/thoughts/final']
 const LANGUAGES_REF = { plugin: 'devops-multi-agent-team', key: 'languages' } as const
 const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
+
+// Words that change what may be pushed, or switch a check off. Only the
+// person may run them.
+const HUMAN_ONLY_WORDS = new Set([
+  'push-ok', 'push-reset', 'gates', 'allow-branch', 'comments', 'monitor',
+])
+// `config` reads are open to every seat; these subcommands write.
+const CONFIG_WRITES = new Set(['set', 'unset', 'add', 'remove', 'rule'])
+
+function isPersonOnly(word: string, rest: string): boolean {
+  if (HUMAN_ONLY_WORDS.has(word)) return true
+  if (word === 'config') return CONFIG_WRITES.has(shellWords(rest)[0] ?? '')
+  return word === 'setup' && rest.split(/\s+/)[0] === 'claude'
+}
+
+function personOnlyText(word: string): string {
+  return `/devops ${word} changes a gate, so only the person can run it by typing it; `
+    + 'an agent cannot.'
+}
+
+function isHuman(e: unknown): boolean {
+  return (e as { origin?: { kind?: unknown } }).origin?.kind === 'composer'
+}
 const LINT_MODE_REF = { plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const
 const BRIEFED_REF = { plugin: 'devops-multi-agent-team', key: 'briefed' } as const
 const STANDARDS_REF = { plugin: 'devops-multi-agent-team', key: 'standards' } as const
@@ -42,16 +69,31 @@ const HELP = [
   '/devops setup claude [--dry-run] [--share-config] (you) set this project up for Claude Code:',
   '                     only .devops/ and the thought folders; the plugin supplies the rest',
   '/devops brief [TOPIC | role NAME]  one section of the skill, or a seat\'s brief',
-  '/devops push-ok      (you) allow ONE push once QA has recorded PASS',
+  '/devops push-ok      (you) allow ONE push on this tree after QA PASS and Security CLEAR',
   '/devops push-reset   (you) withdraw that permission',
   '/devops allow-branch NAME   (you) allow creating that git branch',
-  '/devops gates on|off (you) turn the push and branch gates on or off',
+  '/devops gates on|off (you) turn the branch gate on or off; the push check is always on',
   '/devops monitor on|off (you) turn the failed-check monitor on or off',
   '/devops comments warn|strict|off (you) lint gate on git commit (comment and code rules): ' +
     'warn (default), refuse a commit with blocking findings, or off',
   '/devops config [show|get PATH] read the project standards (line length, limits, lint rules)',
   '/devops config set|unset|add|remove PATH [VALUE] | rule RULE error|off (you) change ' +
     '.devops/standards.json; checked before it is written',
+  '/devops help [--mode all|gates|skills|stage]   catalog of gates and skill modes',
+  '/devops question [--mode overview|tree|symbol|search|…] QUERY',
+  '                     answer from mindmap_* (project-mindmap); no team',
+  '/devops mind-map [--mode overview|build|status|tree|query|note] …',
+  '                     repository mind map via mindmap_* / devops-mindmap.mjs',
+  '/devops clean [--mode brief|scan|plan|run] STATEMENT',
+  '                     cleanup_brief / cleanup_scan + devops-cleanup skill',
+  '/devops stage|ci|pipeline [--mode research|…|qa|docs|full|loop] [GOAL]',
+  '                     one CI/CD pod, or full loop until Clear+PASS then notify human',
+  '/devops allocate [--mode pod|agent|job|board] [GOAL]',
+  '                     Orchestrator assigns goals to pods and each agent',
+  '/devops goal|story|repro|triage|review|reuse|tags [--mode …] …',
+  '                     skill modes: structured tools + orchestration card',
+  'Free-form phrases map onto these skill modes, never onto a gate word. Call the named',
+  'tools; keep large file bodies out of chat. Keep development running.',
 ].join('\n')
 
 async function mindmapText($: EngineInterface, root: string): Promise<Record<string, string>> {
@@ -84,23 +126,192 @@ async function detect($: EngineInterface): Promise<Found[]> {
   }
 }
 
-async function latestQaVerdict($: EngineInterface): Promise<{ verdict: 'PASS' | 'BLOCKED' | undefined; file?: string }> {
+const PUSH_KEY = { plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const
+
+/**
+ * The publish check shared by every path that publishes (git push, GitHub
+ * write tools). All three must hold on this exact tree, and nothing overrides
+ * any of them: a latest QA note of PASS, a latest security note of CLEAR, and
+ * the person's /devops push-ok. Returns the refusal, or undefined.
+ */
+async function publishDenial($: EngineInterface, what: string): Promise<string | undefined> {
+  const tree = await headTree($)
+  if (tree === undefined) return `${PLUGIN}: ${what} is refused: the tree cannot be read.`
+  const qa = await latestQaVerdict($)
+  if (qa.verdict !== 'PASS' || qa.tree !== tree) {
+    const other = qa.tree !== undefined && qa.tree !== tree ? ', for another tree' : ''
+    return `${PLUGIN}: ${what} is refused. Only QA may give the OK to push: the latest QA `
+      + `note must say "Publish gate: PASS" for tree ${tree.slice(0, 12)} `
+      + `(latest: ${qa.verdict ?? 'none'}${other}).`
+  }
+  const security = await latestSecurityVerdict($)
+  if (security.verdict !== 'CLEAR' || security.tree !== tree) {
+    return `${PLUGIN}: ${what} is refused: Security must be CLEAR on this tree. `
+      + 'Write the security note with "Security: CLEAR" and the tree.'
+  }
+  const granted = (await $.state.get(PUSH_KEY)).value
+  if (granted !== tree) {
+    return `${PLUGIN}: ${what} is refused: QA PASS and Security CLEAR are recorded, but the `
+      + 'person has not authorized this push. Ask them to type /devops push-ok on the current tree.'
+  }
+  return undefined
+}
+
+/** GitHub tools that only read; every other GitHub tool is a write and is gated. */
+const GITHUB_READ = /^(?:get_|list_|search_)|_read$|^run_secret_scanning$/
+
+/**
+ * GitHub tools refused outright: they write file content that is not the
+ * checked HEAD, or merge, which is the person's to do on GitHub.
+ */
+const GITHUB_REFUSED = new Set([
+  'push_files', 'create_or_update_file', 'delete_file',
+  'merge_pull_request', 'enable_pr_auto_merge', 'update_pull_request_branch',
+])
+
+/** Any GitHub MCP server's tools, whatever the server is named. */
+const GITHUB_TOOL = /^mcp__.*github.*__.+$/i
+
+/** `owner/repo` of a remote URL (https, ssh or a proxy path), lower-cased. */
+function repoOf(url: string): string | undefined {
+  const match = /([^/:]+)\/([^/]+?)(?:\.git)?\/?$/.exec(url.trim())
+  return match === null ? undefined : `${match[1]}/${match[2]}`.toLowerCase()
+}
+
+/** Refuses a GitHub tool that writes content, or one aimed at another repository than origin. */
+async function githubTargetDenial(
+  $: EngineInterface, tool: string, owner: unknown, repo: unknown,
+): Promise<string | undefined> {
+  if (GITHUB_REFUSED.has(tool)) {
+    return `${PLUGIN}: GitHub ${tool} is refused: it writes files that are not the checked HEAD, `
+      + 'or merges. Push HEAD with git push <remote> HEAD; the person merges on GitHub.'
+  }
+  return repoDenial($, `GitHub ${tool}`, `${String(owner ?? '')}/${String(repo ?? '')}`)
+}
+
+/** Refuses a write aimed at another repository than this checkout's origin. */
+async function repoDenial(
+  $: EngineInterface, what: string, target: string,
+): Promise<string | undefined> {
+  const origin = await gitOut($, await $.session.root(), ['remote', 'get-url', 'origin'])
+  const home = origin === undefined ? undefined : repoOf(origin)
+  if (home !== undefined && home === target.toLowerCase()) return undefined
+  return `${PLUGIN}: ${what} is refused: it names ${target}, `
+    + `not this checkout's origin (${home ?? 'none'}).`
+}
+
+/** The newest note whose name starts with `prefix`, read from the thought folders. */
+async function newestNote(
+  $: EngineInterface, prefix: string,
+): Promise<{ text: string; file: string } | undefined> {
   const root = await $.session.root()
   const notes: { path: string; mtimeMs: number }[] = []
   for (const dir of THOUGHT_DIRS) {
     const entries = await $.fs.list(`${root}/${dir}`).catch(() => [])
     for (const entry of entries) {
-      if (entry.kind === 'file' && entry.name.startsWith('qa-') && entry.name.endsWith('.md')) {
+      if (entry.kind === 'file' && entry.name.startsWith(prefix) && entry.name.endsWith('.md')) {
         notes.push({ path: `${root}/${dir}/${entry.name}`, mtimeMs: entry.mtimeMs })
       }
     }
   }
   const newest = notes.sort((a, b) => b.mtimeMs - a.mtimeMs)[0]
-  if (newest === undefined) return { verdict: undefined }
-  const text = await $.fs.read(newest.path).catch(() => '')
-  return { verdict: verdictOf(text), file: newest.path }
+  if (newest === undefined) return undefined
+  return { text: await $.fs.read(newest.path).catch(() => ''), file: newest.path }
 }
 
+async function latestQaVerdict($: EngineInterface): Promise<{
+  verdict: 'PASS' | 'BLOCKED' | undefined; tree?: string; file?: string
+}> {
+  const note = await newestNote($, 'qa-')
+  if (note === undefined) return { verdict: undefined }
+  return { verdict: verdictOf(note.text), tree: treeOf(note.text), file: note.file }
+}
+
+async function latestSecurityVerdict($: EngineInterface): Promise<{
+  verdict: 'CLEAR' | 'BLOCKED' | undefined; tree?: string
+}> {
+  const note = await newestNote($, 'security-')
+  if (note === undefined) return { verdict: undefined }
+  return { verdict: securityVerdictOf(note.text), tree: treeOf(note.text) }
+}
+
+const GIT_TIMEOUT_MS = 10000
+
+/** How the status line shows the grant: it counts only for the current tree. */
+function grantText(granted: string | false, tree: string | undefined): string {
+  if (granted === false) return 'no'
+  return granted === tree ? 'yes (one push)' : 'no (the grant is for another tree)'
+}
+
+/** git's output in `dir`, trimmed, or undefined when git fails. */
+async function gitOut(
+  $: EngineInterface, dir: string, args: string[],
+): Promise<string | undefined> {
+  const argv = ['git', '-C', dir, ...args]
+  const ran = await $.process.run(argv, { timeoutMs: GIT_TIMEOUT_MS }).catch(() => undefined)
+  return ran?.exitCode === 0 ? ran.stdout.trim() : undefined
+}
+
+/** The tree the push would send: HEAD^{tree}, or undefined when git cannot say. */
+async function headTree($: EngineInterface): Promise<string | undefined> {
+  const hash = await gitOut($, await $.session.root(), ['rev-parse', 'HEAD^{tree}']) ?? ''
+  return /^[0-9a-f]{40}$/.test(hash) ? hash : undefined
+}
+
+/** Settings that make `git push <remote> HEAD` send tags, submodules or every ref as well. */
+const WIDENING_SETTINGS = '^(push\\.followtags|push\\.recursesubmodules|remote\\..*\\.mirror)$'
+
+/** True for a `key value` line of a setting that widens a push. */
+function widens(line: string): boolean {
+  const [key = '', value = ''] = line.toLowerCase().split(/ (.*)/)
+  if (key === 'push.recursesubmodules') return !['no', 'false', 'off', '0', 'check'].includes(value)
+  return ['true', 'yes', 'on', '1'].includes(value)
+}
+
+/**
+ * Refuses a push the gate cannot match to the checked tree: the shell is in
+ * another checkout than the session's (the tree is read in the session's), or
+ * a git setting would send more than HEAD.
+ */
+async function pushSetupDenial($: EngineInterface, what: string): Promise<string | undefined> {
+  const root = await $.session.root()
+  const cwd = await $.session.cwd()
+  const home = await gitOut($, root, ['rev-parse', '--show-toplevel'])
+  if (home === undefined || await gitOut($, cwd, ['rev-parse', '--show-toplevel']) !== home) {
+    return `${PLUGIN}: ${what} is refused: run it from the session's checkout (${home ?? root}); `
+      + `the shell is in ${cwd}.`
+  }
+  const settings = (await gitOut($, root, ['config', '--get-regexp', WIDENING_SETTINGS]) ?? '')
+    .split('\n').filter(widens)
+  if (settings.length > 0) {
+    return `${PLUGIN}: ${what} is refused: ${settings.join(', ')} would send more than HEAD.`
+  }
+  return undefined
+}
+
+/**
+ * The git aliases this command uses whose body pushes or runs a shell
+ * command, directly or through another alias. git matches alias names
+ * without regard to case, and so does this.
+ */
+async function pushAliasesIn($: EngineInterface, command: string): Promise<string[]> {
+  const words = command.replace(/[\\'"]/g, '').toLowerCase().split(/[^\w.-]+/)
+  if (!words.includes('git')) return []
+  const cwd = await $.session.cwd()
+  const config = await gitOut($, cwd, ['config', '--get-regexp', '^alias\\.']) ?? ''
+  const aliases = new Map(config.split('\n').flatMap(line => {
+    const match = /^alias\.(\S+) (.*)$/.exec(line)
+    return match === null ? [] : [[match[1].toLowerCase(), match[2]] as const]
+  }))
+  const pushes = (name: string, seen: Set<string>): boolean => {
+    const body = aliases.get(name)
+    if (body === undefined || seen.has(name)) return false
+    seen.add(name)
+    if (body.startsWith('!') || namesPush(body)) return true
+    return pushes(body.trim().split(/\s+/)[0]?.toLowerCase() ?? '', seen)
+  }
+  return [...new Set(words.filter(word => pushes(word, new Set())))]
+}
 
 const CHECK_BINARIES = new Set([
   'make', 'cmake', 'ctest', 'npm', 'npx', 'pnpm', 'yarn', 'pytest', 'ruff', 'mypy', 'pyright', 'bundle', 'rubocop', 'composer',
@@ -190,13 +401,43 @@ function auditContext(audit: AuditSummary): string {
   return `${PLUGIN} lint: ${counts}. ${advice} ${first}`
 }
 
+function resolveSkill(word: string, rest: string, raw: string): SkillMode | undefined {
+  if (isSkillWord(word)) return parseSkillMode(word, rest)
+  if (isGateWord(word) || interpretDevopsIntent(raw) !== undefined) return undefined
+  return interpretSkillIntent(raw)
+}
+
+async function runPluginScript(
+  $: EngineInterface,
+  script: string,
+  args: string[],
+): Promise<string | undefined> {
+  const root = await $.session.root()
+  const command = ['node', `${$.plugin.root}/scripts/${script}`, ...args, '--dest', root]
+  const ran = await $.process
+    .run(command, { timeoutMs: SCRIPT_TIMEOUT_MS })
+    .catch(() => undefined)
+  if (ran === undefined) return undefined
+  const out = `${ran.stdout}${ran.stderr}`.trim()
+  return out === '' ? undefined : out
+}
+
+async function runSkillMode($: EngineInterface, skill: SkillMode): Promise<string> {
+  const cardText = orchestrationCard(skill)
+  const script = scriptNameFor(skill)
+  const args = scriptArgsFor(skill)
+  if (script === undefined || args === undefined) return cardText
+  const out = await runPluginScript($, script, args)
+  if (out === undefined) return cardText
+  return `${cardText}\n\n--- tool output ---\n${out}`
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'devops',
-      description: 'DevOps multi-agent team: languages, gates, QA verdict',
-      argumentHint: '[languages|setup [claude]|brief [TOPIC|role NAME]|push-ok|push-reset|' +
-        'allow-branch NAME|gates on|off|monitor on|off|comments warn|strict|off|config ...]',
+      description: 'DevOps multi-agent team: gates, skill modes (question, mind-map, clean, …)',
+      argumentHint: '[status|question|mind-map|clean|goal|story|…|--mode MODE|push-ok|config …]',
     })
     await $.tool.register(BRIEF_SPEC).catch(() => undefined)
     await currentStandards($, await $.session.root())
@@ -208,25 +449,36 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'devops' }, async ($, e) => {
-    const { word, rest } = splitArgs(e.args)
-    const isPerson = e.origin?.kind === 'composer'
-    const personOnly = (): { text: string } | undefined =>
-      isPerson ? undefined : { text: `/devops ${word} changes a gate, so only you can run it by typing it; an agent cannot.` }
+    const split = splitArgs(e.args)
+    if (isPersonOnly(split.word, split.rest) && !isHuman(e)) {
+      return { text: personOnlyText(split.word) }
+    }
+    const skill = resolveSkill(split.word, split.rest, e.args)
+    if (skill !== undefined) return { text: await runSkillMode($, skill) }
+
+    const mapped = isGateWord(split.word)
+      ? split
+      : (interpretDevopsIntent(e.args) ?? split)
+    const { word, rest } = mapped
+    if (isPersonOnly(word, rest) && !isHuman(e)) return { text: personOnlyText(word) }
 
     if (word === '' || word === 'status') {
       const gates = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true
-      const authorized = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const)).value ?? false
+      const authorized = (await $.state.get(PUSH_KEY)).value ?? false
+      const tree = await headTree($)
+      const security = await latestSecurityVerdict($)
       const branches = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'allowedBranches' } as const)).value ?? []
       const languages = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'languages' } as const)).value ?? []
       const qa = await latestQaVerdict($)
       return {
         text: [
           `languages: ${languages.length === 0 ? '(none detected)' : languages.join(', ')}`,
-          `gates: ${gates ? 'on' : 'OFF'}`,
+          `branch gate: ${gates ? 'on' : 'OFF'}; push check: always on`,
           `check monitor: ${((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) ? 'on' : 'OFF'}; failing checks now: ${Object.entries((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const)).value ?? {}).map(([k, n]) => `${k} x${n}`).join(', ') || 'none'}`,
           `latest QA note: ${qa.verdict ?? 'none'}${qa.file ? ` (${qa.file.split('/').pop()})` : ''}`,
-          `push authorized by you: ${authorized ? 'yes (one push)' : 'no'}`,
-          `branches you allowed: ${branches.length === 0 ? 'none' : branches.join(', ')}`,
+          `latest security note: ${security.verdict ?? 'none'}`,
+          `push authorized (you typed /devops push-ok, this tree): ${grantText(authorized, tree)}`,
+          `branches allowed: ${branches.length === 0 ? 'none' : branches.join(', ')}`,
         ].join('\n'),
       }
     }
@@ -239,8 +491,6 @@ export const register: Register = on => {
       }
     }
     if (word === 'setup' && rest.split(/\s+/)[0] === 'claude') {
-      const refused = personOnly()
-      if (refused) return refused
       return { text: await setupClaude($, rest.split(/\s+/).slice(1)) }
     }
     if (word === 'brief') {
@@ -264,20 +514,20 @@ export const register: Register = on => {
       }
     }
     if (word === 'push-ok') {
-      const refused = personOnly()
-      if (refused) return refused
-      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const, true)
-      return { text: 'One push is allowed once the latest QA note says "Publish gate: PASS". It is consumed by that push.' }
+      // The grant names the tree it was given for: a later commit voids it.
+      const tree = await headTree($)
+      if (tree === undefined) return { text: 'The tree cannot be read; no push is allowed.' }
+      await $.state.set(PUSH_KEY, tree)
+      return {
+        text: `One push is allowed on tree ${tree.slice(0, 12)}. A new commit voids it. `
+          + 'It is consumed by that push. Keep development running.',
+      }
     }
     if (word === 'push-reset') {
-      const refused = personOnly()
-      if (refused) return refused
-      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const, false)
+      await $.state.set(PUSH_KEY, false)
       return { text: 'Push permission withdrawn.' }
     }
     if (word === 'allow-branch') {
-      const refused = personOnly()
-      if (refused) return refused
       const name = branchNameOf(rest)
       if (name === undefined) return { text: 'Usage: /devops allow-branch NAME (letters, digits, . _ / -).' }
       const current = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'allowedBranches' } as const)).value ?? []
@@ -285,18 +535,12 @@ export const register: Register = on => {
       return { text: `Creating the git branch "${name}" is allowed.` }
     }
     if (word === 'comments') {
-      const refused = personOnly()
-      if (refused) return refused
       if (rest !== 'warn' && rest !== 'strict' && rest !== 'off') return { text: 'Usage: /devops comments warn|strict|off' }
       await $.state.set({ plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const, rest)
       return { text: `Comment audit on commit: ${rest}.` }
     }
     if (word === 'config') {
       const args = shellWords(rest)
-      if (CONFIG_WRITES.includes(args[0] ?? '')) {
-        const refused = personOnly()
-        if (refused) return refused
-      }
       const root = await $.session.root()
       const script = `${$.plugin.root}/scripts/devops-config.mjs`
       const command = ['node', script, ...(args.length > 0 ? args : ['show']), '--dest', root]
@@ -307,28 +551,48 @@ export const register: Register = on => {
       return { text: `${ran.stdout}${ran.stderr}`.trim() || 'devops-config printed nothing.' }
     }
     if (word === 'monitor') {
-      const refused = personOnly()
-      if (refused) return refused
       if (rest !== 'on' && rest !== 'off') return { text: 'Usage: /devops monitor on|off' }
       await $.state.set({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const, rest === 'on')
       return { text: `Check monitor ${rest}.` }
     }
     if (word === 'gates') {
-      const refused = personOnly()
-      if (refused) return refused
       if (rest !== 'on' && rest !== 'off') return { text: 'Usage: /devops gates on|off' }
       await $.state.set({ plugin: 'devops-multi-agent-team', key: 'gates' } as const, rest === 'on')
-      return { text: `Gates ${rest}.` }
+      return { text: `Branch gate ${rest}. The push check is always on.` }
     }
-    return { text: HELP }
+    const fallback = interpretSkillIntent(e.args)
+    if (fallback !== undefined) return { text: await runSkillMode($, fallback) }
+    return {
+      text: [
+        'Unrecognized /devops wording. Prefer a skill mode so tools run instead of plain text:',
+        `  ${skillWords().join(', ')}`,
+        'Example: /devops question --mode symbol total',
+        '          /devops mind-map --mode build',
+        '          /devops clean --mode brief "split functions over 40 lines in src"',
+        'Free-form wording never changes a gate: map it to a skill mode and keep working.',
+        HELP,
+      ].join('\n'),
+    }
+  })
+
+  on('tool.call', { tool: GITHUB_TOOL }, async ($, e, next) => {
+    const tool = e.tool.split('__').pop() ?? e.tool
+    if (GITHUB_READ.test(tool)) return next(e)
+    const input = e as { owner?: unknown; repo?: unknown }
+    const denied = await githubTargetDenial($, tool, input.owner, input.repo)
+      ?? await publishDenial($, `GitHub ${tool}`)
+    if (denied !== undefined) return { deny: denied }
+    const ran = await next(e)
+    if (ran.deny === undefined) await $.state.set(PUSH_KEY, false)
+    return ran
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const gatesOn = ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true) !== false
-    const actions = gatesOn ? classify(e.command) : []
+    const actions = classify(e.command)
     let consumeAuthorization = false
 
-    for (const action of actions) {
+    for (const action of gatesOn ? actions : []) {
       if (action.kind === 'branch') {
         const allowed = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'allowedBranches' } as const)).value ?? []
         if (action.name !== undefined && allowed.includes(action.name)) continue
@@ -337,15 +601,30 @@ export const register: Register = on => {
         }
       }
     }
-    if (actions.some(action => action.kind === 'publish')) {
-      const authorized = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const)).value ?? false
-      const qa = await latestQaVerdict($)
-      if (qa.verdict !== 'PASS') {
-        return { deny: `${PLUGIN}: ${actions.find(a => a.kind === 'publish')?.what} is refused. Only QA may give the OK to push: no qa-*.md note under devops-skill/thoughts says "Publish gate: PASS" (latest: ${qa.verdict ?? 'none'}).` }
+    const aliases = await pushAliasesIn($, e.command)
+    if (aliases.length > 0) {
+      const names = aliases.join(', ')
+      return { deny: `${PLUGIN}: git alias ${names} is refused: it pushes or runs a shell.` }
+    }
+    const publish = actions.filter(action => action.kind === 'publish')
+    if (publish.length > 0) {
+      if (!isSingleCommand(e.command)) {
+        return {
+          deny: `${PLUGIN}: run the push as a command of its own. A step before it in the same `
+            + 'command could move HEAD to a tree that QA and Security never checked.',
+        }
       }
-      if (!authorized) {
-        return { deny: `${PLUGIN}: QA recorded PASS, but the person has not authorized a push. Ask them to type /devops push-ok.` }
+      const scoped = publish.find(a => a.kind === 'publish' && a.problem !== undefined)
+      if (scoped?.kind === 'publish') {
+        return { deny: `${PLUGIN}: ${scoped.what} is refused: ${scoped.problem}.` }
       }
+      const first = publish[0].kind === 'publish' ? publish[0] : undefined
+      const what = first?.what ?? 'push'
+      const target = first?.repo
+      const denied = await pushSetupDenial($, what)
+        ?? (target === undefined ? undefined : await repoDenial($, what, target))
+        ?? await publishDenial($, what)
+      if (denied !== undefined) return { deny: denied }
       consumeAuthorization = true
     }
 
@@ -358,7 +637,7 @@ export const register: Register = on => {
     if (audit !== undefined && ran.deny === undefined && audit.blocking + audit.nonBlocking > 0) {
       return { ...ran, context: [...(ran.context ?? []), auditContext(audit)] }
     }
-    if (consumeAuthorization && ran.deny === undefined) await $.state.set({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const, false)
+    if (consumeAuthorization && ran.deny === undefined) await $.state.set(PUSH_KEY, false)
     if (ran.deny !== undefined || ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) === false) return ran
 
     const check = await checkRunBy($, e.command)

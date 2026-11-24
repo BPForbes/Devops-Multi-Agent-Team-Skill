@@ -4,10 +4,13 @@ declare module 'claude-code' {
   interface PluginState {
     'devops-multi-agent-team': {
       languages: string[]
-      /** Off only by the person typing `/devops gates off`. */
+      /** The branch gate; off via `/devops gates off`, typed by the person. The push check stays on. */
       gates: boolean
-      /** The person ran `/devops push-ok`; consumed by the next allowed push. */
-      pushAuthorized: boolean
+      /**
+       * Human authorized a push (typed /devops push-ok); consumed by the next allowed push.
+       * Holds the tree the push-ok was given for; false when none is given.
+       */
+      pushAuthorized: string | false
       allowedBranches: string[]
       monitor: boolean
       commentAudit: 'warn' | 'strict' | 'off'

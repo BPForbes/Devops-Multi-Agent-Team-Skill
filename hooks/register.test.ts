@@ -8,7 +8,52 @@ const assert = {
 
 const QA_DIR = '/work/devops-skill/thoughts/non-final'
 
-function engine(on: any, note: string | undefined) {
+const TREE = 'a'.repeat(40)
+const PASS_NOTE = `Publish gate: PASS\ntree: ${TREE}\n`
+const BLOCKED_NOTE = `Publish gate: BLOCKED\ntree: ${TREE}\n`
+
+const CLEAR_NOTE = `Security: CLEAR\ntree: ${TREE}\n`
+const SEC_FILE = '/work/devops-skill/thoughts/non-final/security-sec-0a0a0a.md'
+
+/** The QA and security notes the fake folder holds, and what each one reads as. */
+function noteFiles(on: any, note: string | undefined, security: string | undefined) {
+  const entry = (name: string) => ({ name, kind: 'file', size: 1, mtimeMs: 1, isLink: false })
+  on('fs.list', (_: unknown, e: { path?: string }) => ({
+    value: e.path === QA_DIR
+      ? [
+        ...(note !== undefined ? [entry('qa-qa-0e0e0e.md')] : []),
+        ...(security !== undefined ? [entry('security-sec-0a0a0a.md')] : []),
+      ]
+      : [],
+  }))
+  on('fs.read', (_: unknown, e: { path?: string }) => ({
+    value: e.path === SEC_FILE ? (security ?? '') : (note ?? ''),
+  }))
+}
+
+/** What the fake git prints for each call; a test may replace any of them (undefined: git fails). */
+const GIT_OUTPUT: Record<string, string | undefined> = {
+  'rev-parse HEAD^{tree}': TREE,
+  'rev-parse --show-toplevel': '/work',
+  'remote get-url origin': 'https://github.com/o/r.git',
+  'config --get-regexp': undefined,
+}
+
+function fakeGit(argv: string[], git: Record<string, string | undefined>) {
+  const call = argv.join(' ')
+  const key = Object.keys(git).find(k => call.includes(k))
+    ?? Object.keys(GIT_OUTPUT).find(k => call.includes(k))
+  if (key === undefined) return undefined
+  const out = key in git ? git[key] : GIT_OUTPUT[key]
+  if (out === undefined) return { exitCode: 1, stdout: '', stderr: '' }
+  return { exitCode: 0, stdout: `${out}\n`, stderr: '' }
+}
+
+/** The fake session's notes and git output; a test sets only what it needs. */
+interface Setup { security?: string; git?: Record<string, string | undefined>; cwd?: string | null }
+
+function engine(on: any, note: string | undefined, setup: Setup = {}) {
+  const { security, git = {}, cwd = '/work' } = setup
   const state = new Map<string, unknown>()
   on('state.get', (_: unknown, e: { key: string }) => ({ value: { value: state.get(e.key), version: 1 } }))
   on('state.set', (_: unknown, e: { key: string; value: unknown }) => {
@@ -17,14 +62,21 @@ function engine(on: any, note: string | undefined) {
   })
   on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: '/work' }))
+  on('session.cwd', () => {
+    if (cwd === null) throw new Error('no cwd')
+    return { value: cwd }
+  })
   on('command.register', () => ({ value: { command: 'devops' } }))
   on('tool.register', () => ({ value: { tool: 'mcp__devops-multi-agent-team__devops_brief' } }))
   on('ui.status', () => ({ value: undefined }))
-  on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify([{ id: 'rust', name: 'Rust', layers: ['systems'], evidence: ['Cargo.toml'] }]), stderr: '' } }))
-  on('fs.list', (_: unknown, e: { path?: string }) => ({
-    value: note !== undefined && e.path === QA_DIR ? [{ name: 'qa-qa-0e0e0e.md', kind: 'file', size: 1, mtimeMs: 1, isLink: false }] : [],
+  on('process.run', (_: unknown, e: { argv?: string[] }) => ({
+    value: (e.argv?.[0] === 'git' ? fakeGit(e.argv, git) : undefined) ?? {
+      exitCode: 0, stdout: JSON.stringify([{
+        id: 'rust', name: 'Rust', layers: ['systems'], evidence: ['Cargo.toml'],
+      }]), stderr: '',
+    },
   }))
-  on('fs.read', () => ({ value: note ?? '' }))
+  noteFiles(on, note, security)
   on('fs.exists', () => ({ value: false }))
   on('tool.call', () => ({ result: {} }))
   return state
@@ -39,19 +91,19 @@ test('a push is refused when no QA note exists', async ($, on) => {
   expect(noQa.isError ?? noQa.deny).toBeTruthy()
 })
 
-test('with PASS recorded the person still has to authorize, and the grant is consumed', async ($, on) => {
-  const state = engine(on, 'Publish gate: PASS\n')
+test('a PASS on this tree and push-ok allow one push; the grant is consumed', async ($, on) => {
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
 
-  const before = await $.tool.call({ tool: 'Bash', command: 'git push' })
+  const before = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
   expect(before.isError ?? before.deny).toBeTruthy()
 
-  state.set('pushAuthorized', true)
-  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push' })
+  state.set('pushAuthorized', TREE)
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
   expect(allowed.isError).not.toBe(true)
   expect(state.get('pushAuthorized')).toBe(false)
 
-  const again = await $.tool.call({ tool: 'Bash', command: 'git push' })
+  const again = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
   expect(again.isError ?? again.deny).toBeTruthy()
 })
 
@@ -76,6 +128,7 @@ function engineWithChecks(on: any, results: { isError: boolean }[]) {
     return { value: { isSet: true, version: 2 } }
   })
   on('session.root', () => ({ value: '/work' }))
+  on('session.cwd', () => ({ value: '/work' }))
   on('fs.exists', () => ({ value: true }))
   on('fs.read', (_: unknown, e: { path: string }) => {
     if (e.path.endsWith('languages.json')) return { value: JSON.stringify({ languages: [{ validate: ['cargo test --locked', 'npm run lint', 'pytest -q'] }] }) }
@@ -127,6 +180,7 @@ function engineWithAudit(on: any, audit: { blocking: number; nonBlocking: number
     return { value: { isSet: true, version: 2 } }
   })
   on('session.root', () => ({ value: '/work' }))
+  on('session.cwd', () => ({ value: '/work' }))
   on('fs.exists', () => ({ value: false }))
   on('fs.read', () => { throw new Error('missing') })
   on('process.run', (_: unknown, e: { argv: string[] }) => {
@@ -144,9 +198,10 @@ test('a commit is audited: the finding is added to the result, and the staged di
   const ran = await $.tool.call({ tool: 'Bash', command: 'git commit -m "x"' })
   assert.ok(String(ran.context).includes('lint: 1 blocking'))
   assert.ok(String(ran.context).includes('a.ts:3'))
-  assert.ok(calls[0].includes('--staged'))
+  const audits = () => calls.filter(argv => argv[0] !== 'git')
+  assert.ok(audits()[0].includes('--staged'))
   await $.tool.call({ tool: 'Bash', command: 'git commit -am "x"' })
-  assert.ok(!calls[1].includes('--staged'))
+  assert.ok(!audits()[1].includes('--staged'))
 })
 
 test('strict mode refuses a commit with blocking findings; off and clean commits pass', async ($, on) => {
@@ -170,6 +225,7 @@ const PACKAGE_TEXT = JSON.stringify({ text: { chatPrompt: 'DEFAULT PROMPT: use m
 function engineWithMindmap(on: any, overview: string | undefined, projectText?: string) {
   on('state.get', () => ({ value: { value: undefined, version: 1 } }))
   on('session.root', () => ({ value: '/work' }))
+  on('session.cwd', () => ({ value: '/work' }))
   on('fs.exists', () => ({ value: false }))
   on('fs.read', (_: unknown, e: { path: string }) => {
     if (overview !== undefined && e.path === '/work/.devops/mindmap/OVERVIEW.md') return { value: overview }
@@ -201,4 +257,225 @@ test('a project\'s own wording replaces the default sentence', async ($, on) => 
   const section = (await $.prompt.compose(COMPOSE)).sections.find(s => s.id === 'devops-multi-agent-team:mindmap')
   assert.ok(String(section?.text).startsWith('Carte du projet : répondez à partir de ceci.'))
   assert.ok(!String(section?.text).includes('DEFAULT PROMPT'))
+})
+
+test('a BLOCKED QA note refuses even with push-ok', async ($, on) => {
+  const state = engine(on, BLOCKED_NOTE, { security: CLEAR_NOTE })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(refused.isError ?? refused.deny).toBeTruthy()
+  expect(state.get('pushAuthorized')).toBe(TREE)
+})
+
+test('a GitHub write tool needs push-ok and the QA check; the grant is consumed', async ($, on) => {
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const call = { tool: 'mcp__github__create_pull_request', owner: 'o', repo: 'r' }
+  const first = await $.tool.call(call)
+  expect(first.isError ?? first.deny).toBeTruthy()
+  state.set('pushAuthorized', TREE)
+  expect((await $.tool.call(call)).deny).toBeUndefined()
+  expect(state.get('pushAuthorized')).toBe(false)
+})
+
+test('push-ok given for another tree does not allow this push', async ($, on) => {
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', 'b'.repeat(40))
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(refused.isError ?? refused.deny).toBeTruthy()
+})
+
+test('a push with no security note is refused, even with a PASS and push-ok', async ($, on) => {
+  const state = engine(on, PASS_NOTE)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(refused.isError ?? refused.deny).toBeTruthy()
+})
+
+test('a BLOCKED security note refuses the push', async ($, on) => {
+  const state = engine(on, PASS_NOTE, { security: `Security: BLOCKED\ntree: ${TREE}\n` })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(refused.isError ?? refused.deny).toBeTruthy()
+})
+
+test('push-ok with a QA PASS for another tree is refused, and the grant is kept', async ($, on) => {
+  const otherTree = `Publish gate: PASS\ntree: ${'b'.repeat(40)}\n`
+  const state = engine(on, otherTree, { security: CLEAR_NOTE })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(refused.isError ?? refused.deny).toBeTruthy()
+  expect(state.get('pushAuthorized')).toBe(TREE)
+})
+
+test('push-ok with no QA note is refused', async ($, on) => {
+  const state = engine(on, undefined, { security: CLEAR_NOTE })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(refused.isError ?? refused.deny).toBeTruthy()
+})
+
+test('a GitHub write tool with push-ok but no QA PASS is refused', async ($, on) => {
+  const state = engine(on, undefined, { security: CLEAR_NOTE })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const call = { tool: 'mcp__github__create_pull_request', owner: 'o', repo: 'r' }
+  expect((await $.tool.call(call)).deny).toBeTruthy()
+})
+
+test('a push chained after a step that can move HEAD is refused', async ($, on) => {
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  for (const command of [
+    'git commit -am x && git push origin HEAD',
+    'git reset --hard other; git push origin HEAD',
+    'cd ../other && git push origin HEAD',
+    'bash -c "git push origin HEAD"',
+  ]) {
+    state.set('pushAuthorized', TREE)
+    const refused = await $.tool.call({ tool: 'Bash', command })
+    expect(refused.isError ?? refused.deny).toBeTruthy()
+    expect(state.get('pushAuthorized')).toBe(TREE)
+  }
+})
+
+test('a push from another repository or work tree is refused', async ($, on) => {
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  for (const command of [
+    'git -C ../other push origin HEAD',
+    'git --git-dir=../other/.git push origin HEAD',
+    'git --work-tree ../other push origin HEAD',
+    'GIT_DIR=../other/.git git push origin HEAD',
+  ]) {
+    state.set('pushAuthorized', TREE)
+    const refused = await $.tool.call({ tool: 'Bash', command })
+    expect(refused.isError ?? refused.deny).toBeTruthy()
+  }
+})
+
+test('a push is refused when the shell is in another checkout', async ($, on) => {
+  const git = { '-C /elsewhere rev-parse --show-toplevel': '/elsewhere' }
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, git, cwd: '/elsewhere' })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(refused.deny).toContain('session\'s checkout')
+  expect(state.get('pushAuthorized')).toBe(TREE)
+})
+
+test('a push is refused when a git setting would send more than HEAD', async ($, on) => {
+  const git: Record<string, string | undefined> = {}
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, git })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const settings = [
+    'push.followtags true', 'remote.origin.mirror true', 'push.recursesubmodules on-demand',
+  ]
+  for (const setting of settings) {
+    git['push\\.followtags'] = setting
+    const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+    expect(refused.deny).toContain('would send more than HEAD')
+  }
+})
+
+test('a git alias that pushes or runs a shell is refused, whatever the command', async ($, on) => {
+  const git = { '^alias': 'alias.p push --all\nalias.s !sh -c x' }
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, git })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  for (const command of ['git p origin', 'git s']) {
+    const refused = await $.tool.call({ tool: 'Bash', command })
+    expect(refused.deny).toContain('git alias')
+  }
+  expect(state.get('pushAuthorized')).toBe(TREE)
+})
+
+test('GitHub tools that write files, or name another repo, are refused even so', async ($, on) => {
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  for (const tool of ['push_files', 'create_or_update_file', 'delete_file', 'merge_pull_request']) {
+    const refused = await $.tool.call({ tool: `mcp__github__${tool}`, owner: 'o', repo: 'r' })
+    expect(refused.deny).toContain('not the checked HEAD')
+  }
+  const otherRepo = { tool: 'mcp__github__create_pull_request', owner: 'x', repo: 'y' }
+  const other = await $.tool.call(otherRepo)
+  expect(other.deny).toContain('not this checkout\'s origin')
+  expect(state.get('pushAuthorized')).toBe(TREE)
+})
+
+test('a GitHub server under another name is gated the same way', async ($, on) => {
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const call = { tool: 'mcp__my-github__add_issue_comment', owner: 'o', repo: 'r' }
+  expect((await $.tool.call(call)).deny).toBeTruthy()
+  state.set('pushAuthorized', TREE)
+  expect((await $.tool.call(call)).deny).toBeUndefined()
+  expect(state.get('pushAuthorized')).toBe(false)
+})
+
+test('gates off still checks every push; it only lifts the branch gate', async ($, on) => {
+  const state = engine(on, undefined)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('gates', false)
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(refused.deny).toBeTruthy()
+  const branch = await $.tool.call({ tool: 'Bash', command: 'git checkout -b topic' })
+  expect(branch.deny).toBeUndefined()
+})
+
+test('the status line says when the grant is for another tree', async ($, on) => {
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', 'b'.repeat(40))
+  const status = await $.command.run({
+    command: 'devops', args: '', origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  expect(status.text).toContain('no (the grant is for another tree)')
+})
+
+test('a GitHub read passes untouched, and keeps the grant', async ($, on) => {
+  const state = engine(on, undefined)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const read = await $.tool.call({ tool: 'mcp__github__pull_request_read', owner: 'x', repo: 'y' })
+  expect(read.deny).toBeUndefined()
+  expect(state.get('pushAuthorized')).toBe(TREE)
+})
+
+test('a gh write naming another repository is refused, and keeps the grant', async ($, on) => {
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'gh -R x/y pr create --title t' })
+  expect(refused.deny).toContain('not this checkout\'s origin')
+  expect(state.get('pushAuthorized')).toBe(TREE)
+})
+
+test('git aliases are matched without case and through other aliases', async ($, on) => {
+  const git = { '^alias': 'alias.p push\nalias.aa bb\nalias.bb p' }
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, git })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  for (const command of ['git P origin', 'git aa origin']) {
+    expect((await $.tool.call({ tool: 'Bash', command })).deny).toContain('git alias')
+  }
+})
+
+test('a push is refused when the shell\'s directory cannot be read', async ($, on) => {
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, cwd: null })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(refused.deny).toBeTruthy()
+  expect(state.get('pushAuthorized')).toBe(TREE)
 })
