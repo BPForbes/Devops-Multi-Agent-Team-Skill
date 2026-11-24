@@ -94,6 +94,10 @@ test('intake accepts a complete work item and admits it as queued', () => {
   assert.equal(admitted.item.points, 3)
 })
 
+test('an admitted item keeps the job it needs', () => {
+  assert.equal(admit({ ...VALID, job: 'qa' }).item.job, 'qa')
+})
+
 test('intake refuses an empty or blank acceptance list', () => {
   assert.equal(checkIntake({ ...VALID, acceptance: [] }).ok, false)
   assert.equal(checkIntake({ ...VALID, acceptance: ['  '] }).ok, false)
