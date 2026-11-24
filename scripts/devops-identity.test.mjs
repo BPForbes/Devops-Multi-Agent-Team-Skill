@@ -8,7 +8,7 @@ import {
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { appendEvent, readEvents } from './devops-store.mjs'
+import { appendEvent, readEvents, UNFENCED } from './devops-store.mjs'
 
 const KEY = 'server-secret'
 const envelope = (kind, agent) => ({ kind, from: { agent, role: 'manager' } })
@@ -72,7 +72,7 @@ test('events appended under the log lock through the linker form one verifiable 
   const log = path.join(dir, 'events.jsonl')
   for (let i = 0; i < 5; i += 1) {
     const event = { id: `ev-${i}`, from: { agent: 'agent-m' }, kind: 'x' }
-    appendEvent(log, event, { link: chainLinker(KEY) })
+    appendEvent(log, event, { link: chainLinker(KEY), fence: UNFENCED })
   }
   assert.equal(verifyChain(readEvents(log), KEY), true)
 })
