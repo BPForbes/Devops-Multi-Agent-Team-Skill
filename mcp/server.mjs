@@ -7,6 +7,7 @@
 // secret.
 
 import fs from 'node:fs'
+import { updateJson } from '../scripts/devops-store.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -147,10 +148,13 @@ function readBoard(args) {
 
 /** Applies one change to the board and saves it. `change` returns { board, ...result }. */
 function boardChange(args, change) {
-  const { board, ...result } = change(readBoard(args))
-  const file = boardFile(args)
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, `${JSON.stringify(board, null, 2)}\n`)
+  // Read, change and write happen under one lock, so two servers cannot lose an update.
+  let result
+  updateJson(boardFile(args), emptyBoard(), current => {
+    const { board, ...rest } = change(normalizeBoard(current))
+    result = rest
+    return board
+  })
   return result
 }
 
