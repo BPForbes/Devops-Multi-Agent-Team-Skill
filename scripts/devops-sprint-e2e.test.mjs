@@ -25,7 +25,7 @@ const SEATS = [
   { agent: 'agent-a', jobs: ['coder'], status: 'active', capacity_points: 12 },
   { agent: 'agent-b', jobs: ['coder'], status: 'active', capacity_points: 12 },
 ]
-const OWNERS = { 'item-1': 'agent-a', 'item-2': 'agent-b', 'item-3': 'agent-a' }
+const OWNERS = { 'item-0000a1': 'agent-a', 'item-0000a2': 'agent-b', 'item-0000a3': 'agent-a' }
 const PATH_TO_DONE = [
   ['in_progress', 'assignee'],
   ['in_review', 'assignee'],
@@ -61,7 +61,7 @@ function assignAll(items, tick) {
 }
 
 test('one sprint runs from commitment to a digest with a verifiable log', () => {
-  const admitted = ['item-1', 'item-2', 'item-3'].map(id => admit({
+  const admitted = ['item-0000a1', 'item-0000a2', 'item-0000a3'].map(id => admit({
     item: id, goal: GOAL, job: 'coder', acceptance: ['tests pass'], points: 3,
   }))
   assert.ok(admitted.every(r => r.ok))
@@ -115,7 +115,7 @@ test('one sprint runs from commitment to a digest with a verifiable log', () => 
     retroActions: retro.items.map(i => i.id),
   })
   assert.equal(digestDue({ sprint: 'sprint-1', sentSprints: [] }).due, true)
-  assert.deepEqual(digest.done, ['item-1', 'item-2', 'item-3'])
+  assert.deepEqual(digest.done, ['item-0000a1', 'item-0000a2', 'item-0000a3'])
 
   const events = [
     { id: 'ev-1', from: { agent: 'agent-m', role: 'manager' }, kind: 'server.tick', tick: 0 },
@@ -144,7 +144,7 @@ function verifyLog(events) {
 
 test('a lapsed lease during the sprint returns that item to the queue', () => {
   const { item } = admit({
-    item: 'item-1', goal: GOAL, job: 'coder', acceptance: ['x'], points: 3,
+    item: 'item-0000a1', goal: GOAL, job: 'coder', acceptance: ['x'], points: 3,
   })
   const { items, assignments } = assignAll([item], 0)
   const started = walk(items[0], [['in_progress', 'assignee']])
