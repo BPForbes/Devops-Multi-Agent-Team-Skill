@@ -340,6 +340,7 @@ test('a line comment inside a block comment does not hide its closer', () => {
 })
 
 test('a new doc names its new system with a docs-new marker, no docs row needed', () => {
-  const dir = repo({ 'docs/queue.md': lines('<!-- docs-new: job queue -->', '# Queue', '', 'Workers pull from one queue.') })
+  const body = lines('<!-- docs-new: job queue -->', '# Queue', '', 'Workers pull from one queue.')
+  const dir = repo({ 'docs/queue.md': body })
   assert.ok(!rules(commentAudit(dir, { staged: true })).includes('new-doc'))
 })
