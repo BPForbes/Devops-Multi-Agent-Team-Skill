@@ -87,7 +87,7 @@ integrated tree and not on an authoring **team hash** re-approves it
 Push JSON `authors` / `teams` of every cherry-picked SHA, the
 Orchestrator's conflict fixes included; a seat is refused when its
 agent hash, team hash or handle is in that set), then the Orchestrator
-pushes when the human authorizes (chat "push" = `/devops push-ok`;
+pushes when the human authorizes (`push` in chat or `/devops push-ok` on that tree;
 human word is final).
 (Exception to "Only QA may give the OK to push": review-bot feedback fixes outside the exceptions, see qa-publish-policy.md.)
 
