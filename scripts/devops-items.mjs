@@ -2,11 +2,6 @@
 // Pure rules: a move either passes or is refused with a reason, and every
 // refusal goes to the caller's onRefuse so it can be logged.
 
-export const ITEM_STATES = Object.freeze([
-  'queued', 'assigned', 'in_progress', 'blocked', 'failed', 'in_review',
-  'in_qa', 'in_security', 'ready_for_human', 'done',
-])
-
 const SERVER = 'server'
 const ASSIGNEE = 'assignee'
 const REVIEWER = 'reviewer'
@@ -15,8 +10,25 @@ const SECURITY = 'security'
 const HUMAN = 'human'
 const MANAGER = 'manager'
 
-// from -> to -> the actors allowed to make that move.
-const MOVES = Object.freeze({
+// Every state the manager may escalate to blocked from (design: "any").
+// Done is final, and blocked already is blocked.
+const ESCALATABLE = [
+  'queued', 'assigned', 'in_progress', 'failed', 'in_review', 'in_qa',
+  'in_security', 'ready_for_human',
+]
+
+function withEscalation(moves) {
+  const out = {}
+  for (const from of Object.keys(moves)) out[from] = { ...moves[from] }
+  for (const from of ESCALATABLE) {
+    const held = out[from] ?? {}
+    out[from] = { ...held, blocked: [...new Set([...(held.blocked ?? []), MANAGER])] }
+  }
+  return out
+}
+
+// From -> to -> the actors allowed to make that move.
+const MOVES = Object.freeze(withEscalation({
   queued: { assigned: [SERVER] },
   assigned: { in_progress: [ASSIGNEE], queued: [SERVER], blocked: [MANAGER] },
   in_progress: {
@@ -32,15 +44,15 @@ const MOVES = Object.freeze({
   in_security: { ready_for_human: [SECURITY], in_progress: [SECURITY] },
   ready_for_human: { done: [HUMAN] },
   done: {},
-})
+}))
 
-const ID_SHAPE = /^item-[0-9a-f]+$/
+const ID_SHAPE = /^item-[0-9a-f]{6}$/
 const POINTS_MIN = 1
 const POINTS_MAX = 13
 
 /** The actors allowed to make one move; empty when the move is not in the table. */
 export function allowedActors(from, to) {
-  return MOVES[from]?.[to] ?? []
+  return [...(MOVES[from]?.[to] ?? [])]
 }
 
 function refusalReason(from, to, actor, actors) {
