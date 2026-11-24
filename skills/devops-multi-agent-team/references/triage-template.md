@@ -1,6 +1,7 @@
 # QA triage item
 
-Copy to `devops-skill/thoughts/non-final/triage-agent-<hex>.md`. Same
+Copy to `devops-skill/thoughts/non-final/triage-agent-<hex>.md`. The
+resend payload it carries is [handoff-payloads.md](handoff-payloads.md) (`kind` `triage`). Same
 Handoff + **Q&A** as the review thread. Copy agent hashes into Push
 JSON `qa`. Register an `item-…` hash + notes. `"files"` may be `{}`.
 Do not `git add`. After QA PASS, move to `final/`.
