@@ -20,6 +20,7 @@ function tmp(files = {}) {
 function client({ env = {}, cwd = os.tmpdir(), capabilities = {}, onRequest } = {}) {
   const child = spawn('node', [SERVER], { cwd, env: { PATH: process.env.PATH, ...env }, stdio: ['pipe', 'pipe', 'inherit'] })
   const waiting = new Map()
+  const notes = []
   let buffer = ''
   let id = 0
   child.stdout.setEncoding('utf8')
@@ -31,6 +32,8 @@ function client({ env = {}, cwd = os.tmpdir(), capabilities = {}, onRequest } = 
       buffer = buffer.slice(i + 1)
       if (message.method && message.id !== undefined) {
         child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: onRequest?.(message) ?? {} }) + '\n')
+      } else if (message.method) {
+        notes.push(message)
       } else if (waiting.has(message.id)) {
         waiting.get(message.id)(message)
         waiting.delete(message.id)
@@ -50,7 +53,7 @@ function client({ env = {}, cwd = os.tmpdir(), capabilities = {}, onRequest } = 
   const ready = async () => {
     await rpc('initialize', { protocolVersion: '2025-06-18', capabilities, clientInfo: { name: 'test', version: '0' } })
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
-    return { rpc, call, close: () => child.kill() }
+    return { rpc, call, notes, close: () => child.kill() }
   }
   return ready()
 }
@@ -335,6 +338,72 @@ test('config_set plans by default, writes only with apply, refuses an invalid va
     assert.ok(bad.problems.length > 0)
     assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).defaults.lineLength.code, 120)
   } finally { c.close() }
+})
+
+test('a subscribed seat is pushed on new work, and can read its inbox', async () => {
+  const root = tmp()
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  const seat = 'agent-0a0a0a'
+  const uri = `devops://inbox/${seat}`
+  await c.call('board_add_goal', { goal: 'goal-3c9e41', title: 'Lint gate' })
+  const subscribed = await c.rpc('resources/subscribe', { uri })
+  assert.deepEqual(subscribed.result, {})
+  await c.call('work_assign', {
+    goal: 'goal-3c9e41', job: 'coder', agent: seat, team: 'team-1a2b3c',
+    description: 'Fix the parser', by: 'agent-0c0c0c',
+  })
+  const pushed = () => c.notes.some(
+    n => n.method === 'notifications/resources/updated' && n.params.uri === uri,
+  )
+  const deadline = Date.now() + 8000
+  while (!pushed() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100))
+  assert.ok(pushed(), 'a notification for the subscribed inbox arrived')
+  const readBack = await c.rpc('resources/read', { uri })
+  const read = JSON.parse(readBack.result.contents[0].text)
+  assert.equal(read.work.length, 1)
+  assert.equal(read.work[0].description, 'Fix the parser')
+  c.close()
+})
+
+test('subscribing to something that is not an inbox is refused', async () => {
+  const root = tmp()
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  const response = await c.rpc('resources/subscribe', { uri: 'devops://board' })
+  assert.equal(response.error.code, -32602)
+  c.close()
+})
+
+test('a thread on a goal is pushed to the coder inbox and readable as a resource', async () => {
+  const root = tmp()
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  const coder = 'agent-0a0a0a'
+  const qa = 'agent-0c0c0c'
+  const inboxUri = `devops://inbox/${coder}`
+  await c.call('board_add_goal', { goal: 'goal-3c9e41', title: 'Lint gate' })
+  await c.rpc('resources/subscribe', { uri: inboxUri })
+  await c.call('handoff_send', {
+    caller: coder,
+    payload: {
+      kind: 'coder-to-review', item: 'item-3c9e41', goal: 'goal-3c9e41', signed_by: coder,
+      from: { job: 'coder', agent: coder, team: 'team-1a2b3c' },
+      to: { job: 'reviewer', agent: '', team: 'team-7a8b9c' },
+      reason: '', blame: null, created: '2026-11-23T10:00:00Z',
+    },
+  })
+  await c.call('thread_open', {
+    goal: 'goal-3c9e41', item: 'item-3c9e41', topic: 'Repro fails', agent: qa,
+    team: 'team-4d5e6f', body: 'Step 3 gives exit 2',
+  })
+  const pushed = () => c.notes.some(n => n.method === 'notifications/resources/updated'
+    && n.params.uri === inboxUri)
+  const deadline = Date.now() + 8000
+  while (!pushed() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100))
+  assert.ok(pushed(), 'the coder inbox was pushed')
+  const inbox = await c.rpc('resources/read', { uri: inboxUri })
+  assert.equal(JSON.parse(inbox.result.contents[0].text).threads.length, 1)
+  const threads = await c.rpc('resources/read', { uri: 'devops://threads/goal-3c9e41' })
+  assert.equal(JSON.parse(threads.result.contents[0].text).threads[0].topic, 'Repro fails')
+  c.close()
 })
 
 test('a server bound to a seat refuses to act as another seat', async () => {
