@@ -1,0 +1,1762 @@
+{
+  "$comment": "docs-new: orchestrator envelopes (typed seat messages; JSON Schema), design only.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devops-multi-agent-team/schemas/envelopes.schema.json",
+  "title": "Seat envelopes (version 1)",
+  "description": "Every message between seats and the orchestration server. Unknown versions and unknown kinds are refused. Ids are fixed patterns, so no id can carry a path separator.",
+  "type": "object",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/WorkItem"
+    },
+    {
+      "$ref": "#/$defs/Assignment"
+    },
+    {
+      "$ref": "#/$defs/Heartbeat"
+    },
+    {
+      "$ref": "#/$defs/CheckIn"
+    },
+    {
+      "$ref": "#/$defs/Accept"
+    },
+    {
+      "$ref": "#/$defs/Handoff"
+    },
+    {
+      "$ref": "#/$defs/Tick"
+    },
+    {
+      "$ref": "#/$defs/MeetingInvite"
+    },
+    {
+      "$ref": "#/$defs/MeetingUpdate"
+    },
+    {
+      "$ref": "#/$defs/MeetingSummary"
+    },
+    {
+      "$ref": "#/$defs/Question"
+    },
+    {
+      "$ref": "#/$defs/Answer"
+    },
+    {
+      "$ref": "#/$defs/HumanAnswer"
+    },
+    {
+      "$ref": "#/$defs/Digest"
+    },
+    {
+      "$ref": "#/$defs/HelpRequest"
+    },
+    {
+      "$ref": "#/$defs/HelpAnswer"
+    },
+    {
+      "$ref": "#/$defs/SeatProfile"
+    },
+    {
+      "$ref": "#/$defs/Estimate"
+    },
+    {
+      "$ref": "#/$defs/RunRecord"
+    },
+    {
+      "$ref": "#/$defs/RunAuthorization"
+    }
+  ],
+  "$defs": {
+    "version": {
+      "const": 1
+    },
+    "id": {
+      "description": "Opaque id with a fixed prefix and six lowercase hex characters.",
+      "type": "string",
+      "pattern": "^[a-z]+-[0-9a-f]{6}$"
+    },
+    "agentHash": {
+      "type": "string",
+      "pattern": "^agent-[0-9a-f]{6}$"
+    },
+    "teamHash": {
+      "type": "string",
+      "pattern": "^team-[0-9a-f]{6}$"
+    },
+    "goalHash": {
+      "type": "string",
+      "pattern": "^goal-[0-9a-f]{6}$"
+    },
+    "itemHash": {
+      "type": "string",
+      "pattern": "^item-[0-9a-f]{6}$"
+    },
+    "tick": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "utc": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "role": {
+      "description": "The seat's role. manager is the team lead (plans and coordinates; no approval authority). server counts ticks and routes; it is not a seat. human is the person, reached only through the human channel.",
+      "enum": [
+        "researcher",
+        "coder",
+        "reviewer",
+        "qa",
+        "security",
+        "manager",
+        "server",
+        "human"
+      ]
+    },
+    "job": {
+      "enum": [
+        "researcher",
+        "coder",
+        "reviewer",
+        "qa",
+        "security",
+        "ci",
+        "verifier",
+        "integrator",
+        "communicator",
+        "cleaner",
+        "ticket-lead",
+        "idle"
+      ]
+    },
+    "from": {
+      "description": "Set by the server from the connection identity. An envelope whose from differs from the connection is refused.",
+      "type": "object",
+      "required": [
+        "agent",
+        "role"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "$ref": "#/$defs/agentHash"
+        },
+        "role": {
+          "$ref": "#/$defs/role"
+        }
+      }
+    },
+    "header": {
+      "type": "object",
+      "required": [
+        "v",
+        "kind",
+        "id",
+        "from",
+        "sent_tick"
+      ],
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/version"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "from": {
+          "$ref": "#/$defs/from"
+        },
+        "sent_tick": {
+          "$ref": "#/$defs/tick"
+        },
+        "in_reply_to": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "WorkItem": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "work.item"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "item",
+                "goal",
+                "job",
+                "acceptance",
+                "deps",
+                "priority",
+                "size",
+                "points"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "item": {
+                  "$ref": "#/$defs/itemHash"
+                },
+                "goal": {
+                  "$ref": "#/$defs/goalHash"
+                },
+                "sprint": {
+                  "$ref": "#/$defs/id"
+                },
+                "job": {
+                  "$ref": "#/$defs/job"
+                },
+                "acceptance": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "deps": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/itemHash"
+                  }
+                },
+                "priority": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 13
+                },
+                "created_by": {
+                  "$ref": "#/$defs/agentHash"
+                },
+                "points": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 13,
+                  "description": "Virtual time estimate in points."
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "Assignment": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "work.assignment"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "item",
+                "seat",
+                "job",
+                "role",
+                "lease_id",
+                "lease_expires_tick"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "item": {
+                  "$ref": "#/$defs/itemHash"
+                },
+                "seat": {
+                  "$ref": "#/$defs/agentHash"
+                },
+                "job": {
+                  "$ref": "#/$defs/job"
+                },
+                "role": {
+                  "enum": [
+                    "primary",
+                    "secondary"
+                  ]
+                },
+                "lease_expires_tick": {
+                  "$ref": "#/$defs/tick"
+                },
+                "reason": {
+                  "enum": [
+                    "match",
+                    "reassigned:lease",
+                    "reassigned:failed",
+                    "reassigned:declined",
+                    "reassigned:primary-needed"
+                  ]
+                },
+                "lease_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "temp": {
+                  "type": "object",
+                  "required": [
+                    "job",
+                    "for_item"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "job": {
+                      "const": "researcher"
+                    },
+                    "for_item": {
+                      "$ref": "#/$defs/itemHash"
+                    }
+                  }
+                },
+                "initial_job": {
+                  "$ref": "#/$defs/job"
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "Heartbeat": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "work.heartbeat"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "item",
+                "lease_id"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "item": {
+                  "$ref": "#/$defs/itemHash"
+                },
+                "lease_id": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "CheckIn": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "work.checkin"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "item",
+                "status",
+                "summary",
+                "needs"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "item": {
+                  "$ref": "#/$defs/itemHash"
+                },
+                "status": {
+                  "enum": [
+                    "ok",
+                    "blocked",
+                    "failed",
+                    "done"
+                  ]
+                },
+                "summary": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "needs": {
+                  "enum": [
+                    "none",
+                    "seat",
+                    "manager",
+                    "orchestrator",
+                    "human"
+                  ]
+                },
+                "question": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "Accept": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "work.accept"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "assignment"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "assignment": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "Handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "item",
+        "goal",
+        "signed_by",
+        "from",
+        "to",
+        "reason",
+        "blame",
+        "created"
+      ],
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/version"
+        },
+        "kind": {
+          "enum": [
+            "triage",
+            "review-send-back",
+            "security-send-back",
+            "research-send-back",
+            "research-to-coder",
+            "coder-to-review",
+            "review-to-qa",
+            "qa-to-security",
+            "security-signoff"
+          ],
+          "description": "The existing handoff kind (devops-handoff.mjs), unchanged."
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "item": {
+          "$ref": "#/$defs/itemHash"
+        },
+        "goal": {
+          "$ref": "#/$defs/goalHash"
+        },
+        "signed_by": {
+          "$ref": "#/$defs/agentHash"
+        },
+        "from": {
+          "type": "object",
+          "required": [
+            "job",
+            "agent",
+            "team"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "job": {
+              "$ref": "#/$defs/job"
+            },
+            "agent": {
+              "$ref": "#/$defs/agentHash"
+            },
+            "team": {
+              "$ref": "#/$defs/teamHash"
+            }
+          }
+        },
+        "to": {
+          "type": "object",
+          "required": [
+            "job",
+            "agent",
+            "team"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "job": {
+              "enum": [
+                "researcher",
+                "coder",
+                "reviewer",
+                "qa",
+                "security",
+                "orchestrator"
+              ]
+            },
+            "agent": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/agentHash"
+                },
+                {
+                  "const": ""
+                }
+              ]
+            },
+            "team": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/teamHash"
+                },
+                {
+                  "const": ""
+                }
+              ]
+            }
+          }
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "blame": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "agent",
+                "team"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "agent": {
+                  "$ref": "#/$defs/agentHash"
+                },
+                "team": {
+                  "$ref": "#/$defs/teamHash"
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "enum": [
+            "clear",
+            "blocked"
+          ]
+        },
+        "created": {
+          "$ref": "#/$defs/utc"
+        },
+        "sent_tick": {
+          "$ref": "#/$defs/tick"
+        },
+        "done": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "left": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "artifacts": {
+          "type": "object",
+          "required": [
+            "branch",
+            "commit",
+            "tree",
+            "files"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "branch": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$"
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "tree": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "files": {
+              "type": "array",
+              "maxItems": 500,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_][A-Za-z0-9._/-]*$",
+                "not": {
+                  "pattern": "\\.\\."
+                }
+              }
+            }
+          }
+        },
+        "open_questions": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "tests": {
+          "type": "object",
+          "required": [
+            "command",
+            "exit_code"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "exit_code": {
+              "type": "integer"
+            },
+            "counts": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        },
+        "turn": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Hand-off hops so far in this cycle. A send-back adds one."
+        },
+        "cycle": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Research-to-security passes for this item."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "triage",
+                  "review-send-back",
+                  "security-send-back",
+                  "research-send-back"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "blame": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "security-signoff"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "result"
+            ],
+            "properties": {
+              "result": {
+                "enum": [
+                  "clear",
+                  "blocked"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Tick": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "clock.tick"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "tick",
+                "sprint",
+                "started_utc"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "tick": {
+                  "$ref": "#/$defs/tick"
+                },
+                "sprint": {
+                  "$ref": "#/$defs/id"
+                },
+                "sprint_tick": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "started_utc": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/utc"
+                    },
+                    {
+                      "const": null
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "MeetingInvite": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "meeting.invite"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "meeting",
+                "meeting_kind",
+                "attendees",
+                "agenda",
+                "at_tick",
+                "max_turns",
+                "max_tokens"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "meeting": {
+                  "$ref": "#/$defs/id"
+                },
+                "meeting_kind": {
+                  "enum": [
+                    "standup",
+                    "one_on_one",
+                    "sprint_planning",
+                    "refinement",
+                    "sprint_review",
+                    "retro",
+                    "incident"
+                  ]
+                },
+                "attendees": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "#/$defs/agentHash"
+                  }
+                },
+                "agenda": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                },
+                "at_tick": {
+                  "$ref": "#/$defs/tick"
+                },
+                "max_turns": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20
+                },
+                "max_tokens": {
+                  "type": "integer",
+                  "minimum": 100,
+                  "maximum": 20000
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "MeetingUpdate": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "meeting.update"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "meeting",
+                "did",
+                "will_do",
+                "blocked"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "meeting": {
+                  "$ref": "#/$defs/id"
+                },
+                "did": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                },
+                "will_do": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                },
+                "blocked": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "MeetingSummary": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "meeting.summary"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "meeting",
+                "decisions",
+                "action_items",
+                "next_meeting_tick",
+                "capped"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "meeting": {
+                  "$ref": "#/$defs/id"
+                },
+                "decisions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                },
+                "action_items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "owner",
+                      "text"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "owner": {
+                        "$ref": "#/$defs/agentHash"
+                      },
+                      "text": {
+                        "type": "string",
+                        "maxLength": 300
+                      }
+                    }
+                  }
+                },
+                "next_meeting_tick": {
+                  "$ref": "#/$defs/tick"
+                },
+                "capped": {
+                  "type": "boolean",
+                  "description": "True when the meeting hit its turn or token cap."
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "Question": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "question.ask"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "text",
+                "route",
+                "timeout_ticks"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "item": {
+                  "$ref": "#/$defs/itemHash"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000
+                },
+                "route": {
+                  "enum": [
+                    "docs",
+                    "seat",
+                    "manager",
+                    "orchestrator",
+                    "human"
+                  ]
+                },
+                "to": {
+                  "$ref": "#/$defs/agentHash"
+                },
+                "timeout_ticks": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20
+                },
+                "normalised": {
+                  "type": "string",
+                  "maxLength": 1000
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "Answer": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "question.answer"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "question",
+                "text",
+                "source"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "question": {
+                  "$ref": "#/$defs/id"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                "source": {
+                  "enum": [
+                    "docs",
+                    "seat",
+                    "manager",
+                    "orchestrator"
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "HumanAnswer": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "human.answer"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "question",
+                "text"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "question": {
+                  "$ref": "#/$defs/id"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "Digest": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "human.digest"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "sprint",
+                "done",
+                "slipped",
+                "decisions_needed",
+                "retro_actions"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "sprint": {
+                  "$ref": "#/$defs/id"
+                },
+                "done": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                },
+                "slipped": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                },
+                "decisions_needed": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                },
+                "retro_actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "HelpRequest": {
+      "type": "object",
+      "required": [
+        "v",
+        "kind",
+        "id",
+        "from",
+        "sent_tick",
+        "body"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/version"
+        },
+        "kind": {
+          "const": "help.request"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "from": {
+          "$ref": "#/$defs/from"
+        },
+        "sent_tick": {
+          "$ref": "#/$defs/tick"
+        },
+        "body": {
+          "type": "object",
+          "required": [
+            "item",
+            "step",
+            "question",
+            "online_query",
+            "tried"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "item": {
+              "$ref": "#/$defs/itemHash"
+            },
+            "step": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 6
+            },
+            "question": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "asked_to": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/agentHash"
+                },
+                {
+                  "const": ""
+                }
+              ]
+            },
+            "tried": {
+              "type": "array",
+              "maxItems": 10,
+              "items": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "online_query": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300,
+              "description": "The precise online query used at this step (section 16.13)."
+            }
+          }
+        }
+      }
+    },
+    "HelpAnswer": {
+      "type": "object",
+      "required": [
+        "v",
+        "kind",
+        "id",
+        "from",
+        "sent_tick",
+        "body"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/version"
+        },
+        "kind": {
+          "const": "help.answer"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "from": {
+          "$ref": "#/$defs/from"
+        },
+        "sent_tick": {
+          "$ref": "#/$defs/tick"
+        },
+        "body": {
+          "type": "object",
+          "required": [
+            "request",
+            "text",
+            "verdict",
+            "method",
+            "verifier",
+            "evidence",
+            "closed_tick"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "request": {
+              "$ref": "#/$defs/id"
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "verdict": {
+              "enum": [
+                "PASS",
+                "BLOCKED",
+                "OPEN"
+              ]
+            },
+            "method": {
+              "enum": [
+                "test_run",
+                "source_read",
+                "reproduction",
+                "vendor_docs"
+              ]
+            },
+            "verifier": {
+              "$ref": "#/$defs/agentHash"
+            },
+            "tree": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "evidence": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "command",
+                    "exit_code"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "command": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "exit_code": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "file",
+                    "line"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "file": {
+                      "type": "string",
+                      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9._/-]*$"
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "note"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "note": {
+                      "type": "string",
+                      "maxLength": 500
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "docs",
+                    "version"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "docs": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "version": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  }
+                }
+              ]
+            },
+            "closed_tick": {
+              "$ref": "#/$defs/tick"
+            }
+          }
+        }
+      }
+    },
+    "TaskRef": {
+      "type": "object",
+      "required": [
+        "goal",
+        "job",
+        "role"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "goal": {
+          "$ref": "#/$defs/goalHash"
+        },
+        "item": {
+          "$ref": "#/$defs/itemHash"
+        },
+        "sprint": {
+          "$ref": "#/$defs/id"
+        },
+        "job": {
+          "enum": [
+            "researcher",
+            "coder",
+            "reviewer",
+            "qa",
+            "security",
+            "orchestrator",
+            "idle"
+          ]
+        },
+        "role": {
+          "enum": [
+            "primary",
+            "secondary",
+            "temp"
+          ]
+        }
+      }
+    },
+    "SeatProfile": {
+      "type": "object",
+      "required": [
+        "v",
+        "kind",
+        "id",
+        "from",
+        "sent_tick",
+        "body"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/version"
+        },
+        "kind": {
+          "const": "seat.profile"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "from": {
+          "$ref": "#/$defs/from"
+        },
+        "sent_tick": {
+          "$ref": "#/$defs/tick"
+        },
+        "body": {
+          "type": "object",
+          "required": [
+            "agent",
+            "team",
+            "role",
+            "initial_job",
+            "primary_job",
+            "status",
+            "capacity_points",
+            "key_id",
+            "active_tasks"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "agent": {
+              "$ref": "#/$defs/agentHash"
+            },
+            "team": {
+              "$ref": "#/$defs/teamHash"
+            },
+            "role": {
+              "$ref": "#/$defs/role"
+            },
+            "initial_job": {
+              "$ref": "#/$defs/job"
+            },
+            "primary_job": {
+              "$ref": "#/$defs/job"
+            },
+            "temp_job": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "const": "researcher"
+                }
+              ]
+            },
+            "status": {
+              "enum": [
+                "active",
+                "suspended",
+                "retired"
+              ]
+            },
+            "capacity_points": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "key_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9-]{4,40}$",
+              "description": "Reference to the server-held key. Never the key itself."
+            },
+            "active_tasks": {
+              "type": "array",
+              "maxItems": 50,
+              "items": {
+                "$ref": "#/$defs/TaskRef"
+              }
+            }
+          }
+        }
+      }
+    },
+    "Estimate": {
+      "type": "object",
+      "required": [
+        "v",
+        "kind",
+        "id",
+        "from",
+        "sent_tick",
+        "body"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/version"
+        },
+        "kind": {
+          "const": "work.estimate"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "from": {
+          "$ref": "#/$defs/from"
+        },
+        "sent_tick": {
+          "$ref": "#/$defs/tick"
+        },
+        "body": {
+          "type": "object",
+          "required": [
+            "item",
+            "owner",
+            "points",
+            "value",
+            "urgency",
+            "meeting"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "item": {
+              "$ref": "#/$defs/itemHash"
+            },
+            "owner": {
+              "$ref": "#/$defs/agentHash"
+            },
+            "points": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 13
+            },
+            "value": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "urgency": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "meeting": {
+              "$ref": "#/$defs/id"
+            },
+            "forward_to": {
+              "type": "array",
+              "maxItems": 10,
+              "items": {
+                "$ref": "#/$defs/agentHash"
+              }
+            }
+          }
+        }
+      }
+    },
+    "RunRecord": {
+      "type": "object",
+      "required": [
+        "v",
+        "kind",
+        "id",
+        "from",
+        "sent_tick",
+        "body"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/version"
+        },
+        "kind": {
+          "const": "run.record"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "from": {
+          "$ref": "#/$defs/from"
+        },
+        "sent_tick": {
+          "$ref": "#/$defs/tick"
+        },
+        "body": {
+          "type": "object",
+          "required": [
+            "command",
+            "tree",
+            "exit_code",
+            "authorized_by",
+            "stored"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "tree": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "exit_code": {
+              "type": "integer"
+            },
+            "counts": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "authorized_by": {
+              "const": "human"
+            },
+            "stored": {
+              "const": "local-ai-cache"
+            },
+            "pushed": {
+              "const": false
+            }
+          }
+        }
+      }
+    },
+    "RunAuthorization": {
+      "type": "object",
+      "required": [
+        "v",
+        "kind",
+        "id",
+        "from",
+        "sent_tick",
+        "body"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/version"
+        },
+        "kind": {
+          "const": "run.authorize"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "from": {
+          "$ref": "#/$defs/from"
+        },
+        "sent_tick": {
+          "$ref": "#/$defs/tick"
+        },
+        "body": {
+          "type": "object",
+          "required": [
+            "command",
+            "tree",
+            "origin"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "tree": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "origin": {
+              "const": "composer"
+            }
+          }
+        }
+      }
+    }
+  }
+}
