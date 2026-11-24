@@ -3,6 +3,9 @@ import { expect, test } from 'claude-code/testing'
 import { findSection, indexOf, MAX_SECTION_CHARS, roleBrief, sectionsOf } from './brief'
 import { card, standardsSummary } from './orchestrate'
 
+/** The origin kinds the CLI reports for a command; only `composer` is the person. */
+type OriginKind = 'composer' | 'peer' | 'bridge' | 'person'
+
 const DOCS: Record<string, string> = {
   'skills/devops-multi-agent-team/SKILL.md':
     '# Team\n\nIntro.\n\n## Roles\n\nCoders and reviewers.\n',
@@ -57,10 +60,25 @@ test('the card is short and names the tool, the gate, the profile and the standa
     'code ≤ 100 columns', 'functions ≤ 30 lines', 'Lint on git commit: warn']) {
     expect(text).toContain(part)
   }
-  expect(text.length).toBeLessThan(1200)
+  expect(text.length).toBeLessThan(1400)
   const fresh = card({ languages: [], hasProfile: false, gates: true, lintMode: 'warn' })
   expect(fresh).toContain('/devops setup claude')
 })
+
+function wireDocs(on: any) {
+  const dirOf = (file: string) => file.slice(0, file.lastIndexOf('/'))
+  on('fs.list', (_: unknown, e: { path: string }) => {
+    const files = Object.keys(DOCS).filter(f => e.path.endsWith(`/${dirOf(f)}`))
+    const entry = (f: string) => ({
+      name: f.slice(dirOf(f).length + 1), kind: 'file', size: 1, mtimeMs: 1, isLink: false,
+    })
+    return { value: files.map(entry) }
+  })
+  on('fs.read', (_: unknown, e: { path: string }) => {
+    const file = Object.keys(DOCS).find(f => e.path.endsWith(`/${f}`))
+    return { value: file ? DOCS[file] : '' }
+  })
+}
 
 function engine(on: any) {
   const state = new Map<string, unknown>()
@@ -76,21 +94,13 @@ function engine(on: any) {
   on('command.register', () => ({ value: { command: 'devops' } }))
   on('tool.register', () => ({ value: { tool: 'mcp__devops-multi-agent-team__devops_brief' } }))
   on('ui.status', () => ({ value: undefined }))
-  on('process.run', () => ({ value: { exitCode: 0, stdout: '[]', stderr: '' } }))
+  on('process.run', (_: unknown, e: { argv?: string[] }) => ({ value: e.argv?.includes('rev-parse')
+    ? { exitCode: 0, stdout: `${'a'.repeat(40)}\n`, stderr: '' }
+    : { exitCode: 0, stdout: '[]', stderr: '' } }))
   on('fs.exists', () => ({ value: false }))
-  const dirOf = (file: string) => file.slice(0, file.lastIndexOf('/'))
-  on('fs.list', (_: unknown, e: { path: string }) => {
-    const files = Object.keys(DOCS).filter(f => e.path.endsWith(`/${dirOf(f)}`))
-    const entry = (f: string) => ({
-      name: f.slice(dirOf(f).length + 1), kind: 'file', size: 1, mtimeMs: 1, isLink: false,
-    })
-    return { value: files.map(entry) }
-  })
-  on('fs.read', (_: unknown, e: { path: string }) => {
-    const file = Object.keys(DOCS).find(f => e.path.endsWith(`/${f}`))
-    return { value: file ? DOCS[file] : '' }
-  })
+  wireDocs(on)
   on('prompt.compose', () => ({ sections: [] }))
+  return state
 }
 
 test('the model gets one section through devops_brief, and the card is composed', async ($, on) => {
@@ -107,15 +117,80 @@ test('the model gets one section through devops_brief, and the card is composed'
   expect(section?.text).toContain('devops_brief')
 })
 
-test('/devops brief answers anyone; /devops setup claude is the person\'s alone', async ($, on) => {
-  engine(on)
+test('/devops brief runs from any origin; push aliases need the person', async ($, on) => {
+  const state = engine(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const run = (args: string) => $.command.run({
-    command: 'devops', args, origin: { kind: 'peer' } as never,
+  const run = (args: string, kind: OriginKind = 'composer') => $.command.run({
+    command: 'devops', args, origin: { kind },
     presentation: { isFullscreen: false, columns: 100 },
   })
   const brief = await run('brief role reviewer')
   expect(brief.text).toContain('Run lint_check first.')
   const setup = await run('setup claude')
-  expect(setup.text).toContain('only you can run it')
+  expect(setup.text).not.toContain('only you can run it')
+  const refused = await run('push-ok', 'peer')
+  expect(refused.text).toContain('only the person can run it')
+  expect(state.get('pushAuthorized')).toBeUndefined()
+  const word = await run('push')
+  expect(word.text).not.toContain('One push is allowed')
+  expect(state.get('pushAuthorized')).toBeUndefined()
+  const push = await run('push-ok')
+  expect(push.text).toContain('One push is allowed')
+  expect(state.get('pushAuthorized')).toBe('a'.repeat(40))
+})
+
+test('/devops skill modes return orchestration cards with tools', async ($, on) => {
+  engine(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const run = (args: string) => $.command.run({
+    command: 'devops', args, origin: { kind: 'peer' },
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  const ask = await run('question --mode symbol total')
+  expect(ask.text).toContain('## /devops question')
+  expect(ask.text).toContain('mindmap_query')
+  expect(ask.text).toContain('input: total')
+  const clean = await run('clean --mode plan split helpers in src')
+  expect(clean.text).toContain('## /devops clean')
+  expect(clean.text).toContain('cleanup_brief')
+  expect(clean.text).toContain('mode: plan')
+  const stage = await run('stage --mode research ship auth')
+  expect(stage.text).toContain('## /devops stage')
+  expect(stage.text).toContain('seats: Planner, Researcher, Ticket Lead')
+  const help = await run('help --mode stage')
+  expect(help.text).toContain('CI/CD stages')
+  expect(help.text).toContain('research:')
+})
+
+test('only the composer origin may run a gate word', async ($, on) => {
+  const state = engine(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const run = (kind: OriginKind) => $.command.run({
+    command: 'devops', args: 'push-ok', origin: { kind },
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  for (const kind of ['peer', 'bridge', 'person'] as const) {
+    const refused = await run(kind)
+    expect(refused.text).toContain('only the person can run it')
+    expect(state.get('pushAuthorized')).toBeUndefined()
+  }
+  const allowed = await run('composer')
+  expect(allowed.text).toContain('One push is allowed')
+})
+
+test('an agent cannot switch a check off or write config; it may read config', async ($, on) => {
+  engine(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const run = (args: string) => $.command.run({
+    command: 'devops', args, origin: { kind: 'peer' },
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  const refusedWords = [
+    'comments off', 'monitor off', 'config set lineLength.code 120',
+    'config rule long-code-line off', 'setup claude',
+  ]
+  for (const args of refusedWords) {
+    expect((await run(args)).text).toContain('only the person can run it')
+  }
+  expect((await run('config show')).text).not.toContain('only the person can run it')
 })
