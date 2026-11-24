@@ -1,8 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
-  branchNameOf, classify, commitInfo, interpretDevopsIntent, shellWords, splitArgs, treeOf,
-  verdictOf,
+  branchNameOf, chatAuthorizesPush, classify, commitInfo, interpretDevopsIntent, shellWords,
+  splitArgs, treeOf, verdictOf,
 } from './guard'
 
 test('git push and gh pr publishing are found, however they are spelled', () => {
@@ -83,4 +83,13 @@ test('a push hidden in a shell wrapper, env, xargs or eval is still a push', () 
     expect(classify(command).some(action => action.kind === 'publish')).toBe(true)
   }
   expect(classify('git commit -m "do not git push yet"')).toEqual([])
+})
+
+test('chat "push" authorizes only from the person, and only as the whole message', () => {
+  expect(chatAuthorizesPush('push', 'composer')).toBe(true)
+  expect(chatAuthorizesPush('  Push it ', 'composer')).toBe(true)
+  expect(chatAuthorizesPush('push', 'peer')).toBe(false)
+  expect(chatAuthorizesPush('push', undefined)).toBe(false)
+  expect(chatAuthorizesPush('please push the fix', 'composer')).toBe(false)
+  expect(chatAuthorizesPush('go ahead and push', 'composer')).toBe(false)
 })
