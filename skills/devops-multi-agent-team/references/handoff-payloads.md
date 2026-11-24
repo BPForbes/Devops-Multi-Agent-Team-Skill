@@ -8,11 +8,43 @@ record of who asked for what, for which goal, and which pod.
 
 Read this file. Do not paste it into agent prompts.
 
+## Same-team rule
+
+No item is judged by the team that authored it, and a judging hand-off must
+name a different team from its sender. The board refuses a judge from an
+authoring team. The only exception is one Orchestration allowance for that
+goal and that team, recorded with a reason
+([board.md](board.md), Independence). Use it only when resources are low.
+
+## Transport: the orchestration server
+
+Seats do not message each other, and do not write handoff files for
+each other. Every hand-off goes through the orchestration server, which
+is an MCP server (`mcp/server.mjs`). Its tools are the only writers of the
+goal board ([board.md](board.md)):
+
+| Tool | Who calls it | What it does |
+|------|--------------|--------------|
+| `handoff_send` | the sending seat (`caller` = its agent hash) | checks the payload with the validator and records it on the board |
+| `handoff_route` | Orchestration | picks the receiving seat and its team for an unrouted hand-off |
+| `handoff_inbox` | the receiving seat | lists the handoffs addressed to it that are not done |
+| `handoff_ack` | the addressee | acknowledges a handoff it has read |
+| `handoff_close` | the addressee | marks the handoff done once its work is finished |
+
+The payload is the request body (the DTO). Its tool `inputSchema` is the
+same shape the validator checks, so a malformed payload is refused before it
+is recorded. A handoff's state moves `unrouted` (triage, no seat yet) or
+`sent`, then `acked`, then `done`. Only the sending seat can send, and only
+the addressee can acknowledge or close.
+
 ## Kinds
 
 | `kind` | From (signs) | To | Pod rule |
 |--------|--------------|----|----------|
-| `triage` | QA | Coder who picks it up | the Coder's pod differs from QA's pod |
+| `triage` | QA | Coder who picks it up | the Coder's pod differs from QA's pod; send-back |
+| `review-send-back` | Reviewer | Coder | the pods differ; send-back |
+| `security-send-back` | Security | Coder | the pods differ; send-back |
+| `research-send-back` | Coder | Researcher | same pod; send-back |
 | `research-to-coder` | Researcher | Coder | same pod (research joins its Coder) |
 | `coder-to-review` | Coder | Reviewer | the reviewer's pod differs |
 | `review-to-qa` | Reviewer | QA | QA's pod differs |
@@ -32,6 +64,7 @@ Every payload has these fields, in this order:
   "from": { "job": "qa", "agent": "agent-0c0c0c", "team": "team-4d5e6f" },
   "to": { "job": "coder", "agent": "", "team": "team-1a2b3c" },
   "reason": "The lint gate still fails on the new branch",
+  "blame": { "agent": "agent-0a0a0a", "team": "team-1a2b3c" },
   "created": "2026-11-20T10:00:00Z"
 }
 ```
@@ -47,8 +80,12 @@ Every payload has these fields, in this order:
   hash is **empty** until the receiving seat is chosen. A triage
   usually goes out with `to.agent` empty, because the Coder who picks
   it up is not known yet; Orchestration fills it in and records it.
-- `reason`: one line saying why the item came back. **Required on a
-  triage**, empty elsewhere.
+- `reason`: one line saying why the item came back. **Required on every
+  send-back**, empty elsewhere.
+- `blame`: the author the work goes back to, `{ "agent": "agent-…", "team": "team-…" }`.
+  **Required on every send-back**, `null` elsewhere. It is the agent hash of the
+  coder (or researcher) whose signed virtual push the work came from
+  ([virtual-git.md](virtual-git.md)).
 - `created`: UTC timestamp.
 - `result` (only `security-signoff`): `clear` or `blocked`.
 
@@ -69,8 +106,8 @@ Every payload has these fields, in this order:
 ## Other hand-offs
 
 The same shape carries each hand-off in the loop. Orchestration checks
-it, routes it, and records it in the goal memory file
-([goal-hashes.md](goal-hashes.md)):
+it, routes it, and records it on the board and in the goal memory file
+([board.md](board.md), [goal-hashes.md](goal-hashes.md)):
 
 - research → coder: `research-to-coder`, when a brief is ready;
 - coder → review: `coder-to-review`, with the Push JSON;

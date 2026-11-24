@@ -23,6 +23,12 @@ import { ghasPlan } from '../scripts/devops-ghas.mjs'
 import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, parseStory } from '../scripts/devops-stories.mjs'
 import { buildMindMap, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree } from '../scripts/devops-mindmap.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
+import {
+  allowSameTeam, ackHandoff, addGoal, backlogView, blameFor, closeHandoff, createSprint,
+  emptyBoard, GOAL_STATES, inboxFor,
+  moveGoal, normalizeBoard, openThread, replyThread, resolveThread, routeHandoff, sendHandoff,
+  sprintView, threadsFor,
+} from '../scripts/devops-board.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 
 const PKG = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'))
@@ -51,6 +57,20 @@ const INSTRUCTIONS = [
 ].join(' ') + '\n\n' + SETUP_SCRIPT
 
 let clientRoots = []
+
+// When DEVOPS_SEAT is set, this server acts only for that seat.
+const BOUND_SEAT = process.env.DEVOPS_SEAT
+
+/** Refuses a tool call that names another seat. Returns true when it refused. */
+function refuseForeignSeat(message) {
+  if (message.method !== 'tools/call') return false
+  const args = message.params?.arguments ?? {}
+  const claimed = args.caller ?? args.agent
+  if (!BOUND_SEAT || claimed === undefined || claimed === BOUND_SEAT) return false
+  const error = `this server is bound to ${BOUND_SEAT}; it cannot act as ${claimed}`
+  reply(message.id, { isError: true, content: [{ type: 'text', text: error }] })
+  return true
+}
 
 function allowedRoots() {
   const fromEnv = (process.env.DEVOPS_MCP_ROOTS ?? '').split(path.delimiter).filter(Boolean)
@@ -92,6 +112,48 @@ const text = value => ({ content: [{ type: 'text', text: typeof value === 'strin
 const dest = { type: 'string', description: 'Project folder. Defaults to the first folder the client opened (or DEVOPS_MCP_ROOTS).' }
 const langs = { description: '"auto" (detect) or a list of language ids from list_languages. Layers do not restrict: any id works anywhere.', anyOf: [{ type: 'string', enum: ['auto'] }, { type: 'array', items: { type: 'string' } }] }
 const svcs = { description: '"auto" (detect), "none", or a list of service ids from list_services (docker, ollama, aws, ...).', anyOf: [{ type: 'string', enum: ['auto', 'none'] }, { type: 'array', items: { type: 'string' } }] }
+
+const BOARD_FILE = path.join('devops-skill', 'thoughts', 'non-final', 'board.json')
+const now = () => new Date().toISOString()
+const goalFilter = args => (args.goal === undefined ? {} : { goal: args.goal })
+const GOAL_STATE = {
+  type: 'string', enum: ['backlog', 'ready', 'in_progress', 'review', 'qa', 'security', 'done'],
+}
+
+/**
+ * The board file's path inside the project. Refuses a symbolic link on the way,
+ * so a read or write cannot be redirected outside the project.
+ */
+function boardFile(args) {
+  const root = fs.realpathSync(projectDir(args))
+  let at = root
+  for (const part of BOARD_FILE.split(path.sep)) {
+    at = path.join(at, part)
+    if (fs.existsSync(at) && fs.lstatSync(at).isSymbolicLink()) {
+      throw new Error(`refusing to use a symbolic link for the board: ${at}`)
+    }
+  }
+  return at
+}
+
+function readBoard(args) {
+  try {
+    const text = fs.readFileSync(boardFile(args), 'utf8')
+    return normalizeBoard(JSON.parse(text))
+  } catch (error) {
+    if (error.code === 'ENOENT') return emptyBoard()
+    throw error
+  }
+}
+
+/** Applies one change to the board and saves it. `change` returns { board, ...result }. */
+function boardChange(args, change) {
+  const { board, ...result } = change(readBoard(args))
+  const file = boardFile(args)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, `${JSON.stringify(board, null, 2)}\n`)
+  return result
+}
 
 const TOOLS = [
   {
@@ -617,6 +679,251 @@ const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     run: args => ghasPlan(projectDir(args), { branch: typeof args.branch === 'string' ? args.branch : 'main', apply: optionalBool(args, 'apply', false), force: optionalBool(args, 'force', false), roots: allowedRoots() }),
   },
+  {
+    name: 'board_create_sprint',
+    description: 'Open a sprint on the goal board. Any seat may read the board through board_view.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, name: { type: 'string' } },
+      required: ['name'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => createSprint(board, { name: args.name, at: now() })),
+  },
+  {
+    name: 'board_add_goal',
+    description: 'Put a goal (a goal hash from goal memory) on the board: a sprint or the backlog.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        goal: { type: 'string' },
+        title: { type: 'string' },
+        sprint: { type: 'string' },
+        state: GOAL_STATE,
+      },
+      required: ['goal'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: addGoal(board, {
+        goal: args.goal,
+        title: args.title,
+        sprint: args.sprint ?? '',
+        state: args.state ?? 'backlog',
+        at: now(),
+      }),
+    })),
+  },
+  {
+    name: 'board_move_goal',
+    description: 'Move a goal one step along the board states, or to blocked and back.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        goal: { type: 'string' },
+        state: { type: 'string', enum: [...GOAL_STATES, 'blocked'] },
+      },
+      required: ['goal', 'state'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: moveGoal(board, { goal: args.goal, state: args.state, at: now() }),
+    })),
+  },
+  {
+    name: 'board_view',
+    description: 'Read the goal board: one sprint and its goals, or all sprints.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, sprint: { type: 'string' } },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => {
+      const board = readBoard(args)
+      if (args.sprint !== undefined) return { goals: sprintView(board, args.sprint) }
+      const sprints = Object.keys(board.sprints)
+      return {
+        sprints: Object.fromEntries(sprints.map(id => [id, sprintView(board, id)])),
+        backlog: backlogView(board),
+      }
+    },
+  },
+  {
+    name: 'handoff_send',
+    description: 'Send a handoff payload (see references/handoff-payloads.md).',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, caller: { type: 'string' }, payload: { type: 'object' } },
+      required: ['caller', 'payload'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => sendHandoff(board, {
+      payload: args.payload, caller: args.caller, at: now(),
+    })),
+  },
+  {
+    name: 'handoff_route',
+    description: 'Orchestration picks the receiving seat for an unrouted handoff.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, id: { type: 'string' }, agent: { type: 'string' }, team: { type: 'string' },
+      },
+      required: ['id', 'agent', 'team'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: routeHandoff(board, { id: args.id, agent: args.agent, team: args.team, at: now() }),
+    })),
+  },
+  {
+    name: 'handoff_inbox',
+    description: 'The handoffs addressed to a seat that are not done yet.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, agent: { type: 'string' } },
+      required: ['agent'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => ({ handoffs: inboxFor(readBoard(args), args.agent) }),
+  },
+  {
+    name: 'handoff_ack',
+    description: 'The addressee acknowledges a handoff it has read.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, id: { type: 'string' }, agent: { type: 'string' } },
+      required: ['id', 'agent'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: ackHandoff(board, { id: args.id, agent: args.agent, at: now() }),
+    })),
+  },
+  {
+    name: 'thread_open',
+    description: 'Open a virtual PR thread on a goal item: a question or review point.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        goal: { type: 'string' },
+        item: { type: 'string' },
+        topic: { type: 'string' },
+        agent: { type: 'string' },
+        team: { type: 'string' },
+        body: { type: 'string' },
+      },
+      required: ['goal', 'item', 'topic', 'agent', 'team', 'body'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => openThread(board, { ...args, at: now() })),
+  },
+  {
+    name: 'thread_reply',
+    description: 'Reply to an open thread. Any seat may reply, so questions go back and forth.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        thread: { type: 'string' },
+        agent: { type: 'string' },
+        team: { type: 'string' },
+        body: { type: 'string' },
+      },
+      required: ['thread', 'agent', 'team', 'body'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: replyThread(board, { ...args, at: now() }),
+    })),
+  },
+  {
+    name: 'thread_resolve',
+    description: 'Close a thread. Only the seat that opened it can resolve it.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, thread: { type: 'string' }, agent: { type: 'string' } },
+      required: ['thread', 'agent'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: resolveThread(board, { ...args, at: now() }),
+    })),
+  },
+  {
+    name: 'thread_list',
+    description: 'The threads on a goal, or on every goal when none is given.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, goal: { type: 'string' } },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => ({ threads: threadsFor(readBoard(args), goalFilter(args)) }),
+  },
+  {
+    name: 'blame_list',
+    description: 'The send-backs on record, with the author each one returned work to.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, goal: { type: 'string' } },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => ({ blame: blameFor(readBoard(args), goalFilter(args)) }),
+  },
+  {
+    name: 'handoff_close',
+    description: 'The addressee marks an acknowledged handoff done once its work is finished.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, id: { type: 'string' }, agent: { type: 'string' } },
+      required: ['id', 'agent'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: closeHandoff(board, { id: args.id, agent: args.agent, at: now() }),
+    })),
+  },
+  {
+    name: 'board_allow_same_team',
+    description: 'Orchestration only: let one team judge a goal it authored, if resources are low.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        goal: { type: 'string' },
+        team: { type: 'string' },
+        reason: { type: 'string' },
+      },
+      required: ['goal', 'team', 'reason'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      if (BOUND_SEAT) throw new Error('only Orchestration may allow a same-team review')
+      return boardChange(args, board => ({
+        board: allowSameTeam(board, {
+          goal: args.goal, team: args.team, reason: args.reason, at: now(),
+        }),
+      }))
+    },
+  },
 ]
 
 function gitAllowed() {
@@ -749,7 +1056,7 @@ export function serve(input = process.stdin) {
         fail(null, -32700, 'parse error')
         continue
       }
-      handle(message)
+      if (!refuseForeignSeat(message)) handle(message)
     }
   })
   input.on('end', () => process.exit(0))

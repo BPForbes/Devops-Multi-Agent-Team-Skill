@@ -63,7 +63,7 @@ test('initialize negotiates, lists 34 tools, prompts and resources', async () =>
     for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_overview', 'mindmap_tree', 'mindmap_note', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
     const added = ['lint_check', 'lint_commands', 'config_get', 'config_set']
     for (const name of added) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 38)
+    assert.equal(tools.length, 53)
     const writers = (await c.rpc('tools/list')).result.tools.filter(t => t.name === 'install_devops_team')
     assert.equal(writers[0].annotations.destructiveHint, false)
     assert.ok((await c.rpc('prompts/list')).result.prompts.some(p => p.name === 'setup_project'))
@@ -335,4 +335,36 @@ test('config_set plans by default, writes only with apply, refuses an invalid va
     assert.ok(bad.problems.length > 0)
     assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).defaults.lineLength.code, 120)
   } finally { c.close() }
+})
+
+test('a server bound to a seat refuses to act as another seat', async () => {
+  const root = tmp()
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root, DEVOPS_SEAT: 'agent-0a0a0a' } })
+  const refused = await c.call('handoff_send', { caller: 'agent-0c0c0c', payload: {} })
+  assert.equal(refused.isError, true)
+  assert.match(refused.text, /bound to agent-0a0a0a/)
+  c.close()
+})
+
+test('the board is never written through a symbolic link out of the project', async () => {
+  const root = tmp()
+  const outside = tmp()
+  fs.symlinkSync(outside, path.join(root, 'devops-skill'))
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  const refused = await c.call('board_create_sprint', { name: 'S1' })
+  assert.equal(refused.isError, true)
+  assert.match(refused.text, /symbolic link/)
+  assert.equal(fs.existsSync(path.join(outside, 'thoughts')), false)
+  c.close()
+})
+
+test('only Orchestration, not a bound seat, may allow a same-team review', async () => {
+  const root = tmp()
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root, DEVOPS_SEAT: 'agent-0a0a0a' } })
+  const refused = await c.call('board_allow_same_team', {
+    goal: 'goal-3c9e41', team: 'team-1a2b3c', reason: 'low on resources',
+  })
+  assert.equal(refused.isError, true)
+  assert.match(refused.text, /only Orchestration/)
+  c.close()
 })
