@@ -47,6 +47,7 @@ jobs:
           scripts/devops-store.test.mjs scripts/devops-ticks.test.mjs
           scripts/devops-items.test.mjs scripts/devops-assign.test.mjs
           scripts/devops-meetings.test.mjs scripts/devops-sprint.test.mjs
+          scripts/devops-help.test.mjs
           scripts/devops-board.test.mjs
           scripts/devops-mindmap.test.mjs mcp/server.test.mjs
 
