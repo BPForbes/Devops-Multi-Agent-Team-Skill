@@ -1,6 +1,6 @@
 // The server's tick counter (design: sections 1, 9 and 16.6). Pure rules over
 // a state object; the caller persists it with devops-store.mjs.
-import { updateJson, withFence } from './devops-store.mjs'
+import { updateJson } from './devops-store.mjs'
 
 const ITEMS_PER_TICK = 3
 const MINUTES_PER_TICK = 15
@@ -72,14 +72,6 @@ export function wallClockOf(state, tick) {
 /** Assignments whose lease ended before `tick`. */
 export function expiredLeases(assignments, tick) {
   return assignments.filter(a => a.lease_expires_tick < tick)
-}
-
-/**
- * Runs `write` only while `epoch` is still the leader's epoch. See withFence in
- * devops-store.mjs: the leader lock is held across the write.
- */
-export function fencedWrite(leaderFile, epoch, write) {
-  return withFence({ leaderFile, epoch }, write)
 }
 
 /**
