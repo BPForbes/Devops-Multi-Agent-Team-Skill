@@ -148,7 +148,7 @@ function readBoard(args) {
 
 /** Applies one change to the board and saves it. `change` returns { board, ...result }. */
 function boardChange(args, change) {
-  // Read, change and write happen under one lock, so two servers cannot lose an update.
+  // One lock covers read, change and write: no update is lost between servers.
   let result
   updateJson(boardFile(args), emptyBoard(), current => {
     const { board, ...rest } = change(normalizeBoard(current))

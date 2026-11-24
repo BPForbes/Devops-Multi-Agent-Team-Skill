@@ -65,7 +65,8 @@ test('three processes updating one file lose no update', async () => {
 test('an event is appended once; the same event again is a no-op', () => {
   const dir = scratch()
   const log = path.join(dir, 'events.jsonl')
-  const event = { id: 'work-3c9e41', from: { agent: 'agent-0c0c0c', role: 'manager' }, kind: 'work.item' }
+  const from = { agent: 'agent-0c0c0c', role: 'manager' }
+  const event = { id: 'work-3c9e41', from, kind: 'work.item' }
   assert.equal(appendEvent(log, event).appended, true)
   assert.equal(appendEvent(log, event).appended, false)
   assert.equal(readEvents(log).length, 1)
@@ -74,7 +75,8 @@ test('an event is appended once; the same event again is a no-op', () => {
 test('the same (agent, id) with different content is refused as a conflict', () => {
   const dir = scratch()
   const log = path.join(dir, 'events.jsonl')
-  const first = { id: 'work-3c9e41', from: { agent: 'agent-0c0c0c', role: 'manager' }, kind: 'work.item' }
+  const from = { agent: 'agent-0c0c0c', role: 'manager' }
+  const first = { id: 'work-3c9e41', from, kind: 'work.item' }
   appendEvent(log, first)
   const forged = { ...first, kind: 'work.accept' }
   assert.throws(() => appendEvent(log, forged), /different content/)
