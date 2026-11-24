@@ -34,18 +34,24 @@ export function emptyBoard() {
     exceptions: [],
     assignments: {},
     reads: {},
+    meetings: {},
+    allocations: {},
   }
 }
 
 /** A board saved before blame and threads existed still loads with empty ones. */
 export function normalizeBoard(board) {
-  return { blame: [], threads: {}, exceptions: [], assignments: {}, reads: {}, ...board }
+  return {
+    blame: [], threads: {}, exceptions: [], assignments: {}, reads: {},
+    meetings: {}, allocations: {},
+    ...board,
+  }
 }
 
 const MINT_TRIES = 16
 const HEX_BYTES = 3
 
-function mintId(prefix, existing, mint) {
+export function mintId(prefix, existing, mint) {
   const hex = () => crypto.randomBytes(HEX_BYTES).toString('hex')
   let id = `${prefix}-${(mint ?? hex)()}`
   for (let tries = 0; existing[id] !== undefined; tries += 1) {
@@ -57,17 +63,22 @@ function mintId(prefix, existing, mint) {
   return id
 }
 
-function need(condition, message) {
+export function need(condition, message) {
   if (!condition) throw new Error(message)
 }
 
+/** The longest sprint, in weeks; Scrum sprints run one month at most. */
+export const MAX_SPRINT_WEEKS = 4
+
 /** Opens a sprint. Returns { id, board }. */
-export function createSprint(board, { name, at, mint }) {
+export function createSprint(board, { name, at, mint, weeks = 1 }) {
   need(typeof name === 'string' && name.trim() !== '', 'a sprint needs a name')
+  const runs = Number.isInteger(weeks) && weeks >= 1 && weeks <= MAX_SPRINT_WEEKS
+  need(runs, `a sprint runs 1 to ${MAX_SPRINT_WEEKS} weeks`)
   const next = structuredClone(board)
   const id = mintId('sprint', next.sprints, mint)
   need(SPRINT_RE.test(id), 'bad sprint id')
-  next.sprints[id] = { name: name.trim(), status: 'active', opened: at, goals: [] }
+  next.sprints[id] = { name: name.trim(), status: 'active', opened: at, weeks, goals: [] }
   return { id, board: next }
 }
 

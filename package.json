@@ -61,6 +61,7 @@
     "scripts/devops-store.mjs",
     "scripts/devops-items.mjs",
     "scripts/devops-teams.mjs",
+    "scripts/devops-scrum.mjs",
     "standards.json",
     "services.json",
     "skills",
