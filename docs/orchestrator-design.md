@@ -834,3 +834,15 @@ evidence (a test, a lint, a build). It is a gate, but not the push gate.
 - Seat profile takes over the per-agent data (16.8).
 - Online lookup accompanies every help step; points only; cycles and turns
   defined; owner scoring in meetings; simple key model (16.13).
+
+### 16.16 Human in the loop: plain English
+
+The person never has to type a command to authorize a push or a run. A
+plain-English instruction in the person's own message is the authorization. It
+must name what it covers (a branch, a stack, a tree); if it does not, the
+server asks one question before acting. Each authorization is recorded with the
+person's words, the tree it covers, and the time. Plain English does not
+change gate settings unless the person says so explicitly. This is a change to
+the earlier rule that free-form words never change gate state (rule 3), and it
+is recorded here so the two are not confused.
+

@@ -15,6 +15,13 @@ feedback fix outside the exceptions in "Review-bot feedback" below is
 gated instead by an independent Reviewer's Satisfied, the
 repository's CI and the human's go.
 
+**Human in the loop, plain English.** The person does not have to type a
+command. A plain-English instruction from the person to push (for example
+"push the rebased stack") is the push authorization. It must be clear
+enough to name what is pushed (a branch, a stack, or "this tree"); if it is
+not clear, the orchestrator asks one question before pushing. The authorization
+covers exactly what was named, once.
+
 **Human override.** The human's push authorization overrides every other
 rule, including the QA PASS requirement above. The human may bypass any
 other rule, and a human override is always executed, never refused or paused
