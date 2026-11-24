@@ -13,6 +13,7 @@ import {
   PACKAGE_ROOT, addLocalLanguage, checkToolchain, detectLanguages, detectServices, ensureGitignore, install,
   loadLanguages, loadServices, renderProfile, resolveDest, sandboxArgv, status,
 } from '../scripts/devops-setup.mjs'
+import { UNFENCED, updateJson } from '../scripts/devops-store.mjs'
 import { commentAudit } from '../scripts/devops-comments.mjs'
 import { parseStatement, scanProject, snapshot } from '../scripts/devops-cleanup.mjs'
 import { formalCheck } from '../scripts/devops-formal.mjs'
@@ -147,10 +148,13 @@ function readBoard(args) {
 
 /** Applies one change to the board and saves it. `change` returns { board, ...result }. */
 function boardChange(args, change) {
-  const { board, ...result } = change(readBoard(args))
-  const file = boardFile(args)
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, `${JSON.stringify(board, null, 2)}\n`)
+  // One lock covers read, change and write: no update is lost between servers.
+  let result
+  updateJson(boardFile(args), emptyBoard(), current => {
+    const { board, ...rest } = change(normalizeBoard(current))
+    result = rest
+    return board
+  }, UNFENCED)
   return result
 }
 
