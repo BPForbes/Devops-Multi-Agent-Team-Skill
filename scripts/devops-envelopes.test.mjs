@@ -15,13 +15,16 @@ const VALID = {
     item: 'item-3c9e41', seat: 'agent-0a0a0a', job: 'coder', role: 'primary',
     lease_id: 'lease-3c9e41', lease_expires_tick: 9,
   }),
-  'work.heartbeat': head('work.heartbeat', 'work-5e6f70', { item: 'item-3c9e41', lease_id: 'lease-3c9e41' }),
+  'work.heartbeat': head('work.heartbeat', 'work-5e6f70', {
+    item: 'item-3c9e41', lease_id: 'lease-3c9e41',
+  }),
   'work.checkin': head('work.checkin', 'work-6f7081', {
     item: 'item-3c9e41', status: 'ok', summary: 'Parser half done', needs: 'none',
   }),
   'work.accept': head('work.accept', 'work-708192', { assignment: 'work-4d5e6f' }),
   'work.estimate': head('work.estimate', 'work-8192a3', {
-    item: 'item-3c9e41', owner: 'agent-0a0a0a', points: 3, value: 5, urgency: 4, meeting: 'meeting-3c9e41',
+    item: 'item-3c9e41', owner: 'agent-0a0a0a', points: 3, value: 5, urgency: 4,
+    meeting: 'meeting-3c9e41',
   }),
   'server.tick': head('server.tick', 'tick-3c9e41', {
     tick: 4, sprint: 'sprint-aaaaaa', sprint_tick: 1, started_utc: null,
@@ -43,7 +46,9 @@ const VALID = {
   'question.answer': head('question.answer', 'answer-3c9e41', {
     question: 'question-3c9e41', text: 'Ubuntu 24.04', source: 'docs',
   }),
-  'human.answer': head('human.answer', 'answer-7f0a12', { question: 'question-3c9e41', text: 'Use the default image' }),
+  'human.answer': head('human.answer', 'answer-7f0a12', {
+    question: 'question-3c9e41', text: 'Use the default image',
+  }),
   'human.digest': head('human.digest', 'digest-3c9e41', {
     sprint: 'sprint-aaaaaa', done: ['parser'], slipped: [], decisions_needed: [], retro_actions: [],
   }),
@@ -65,7 +70,8 @@ const VALID = {
   'seat.profile': head('seat.profile', 'seat-3c9e41', {
     agent: 'agent-0a0a0a', team: 'team-1a2b3c', role: 'coder', initial_job: 'coder',
     primary_job: 'coder', temp_job: null, status: 'active', capacity_points: 12,
-    key_id: 'key-3c9e41', active_tasks: [{ goal: 'goal-7f0a12', item: 'item-3c9e41', job: 'coder', role: 'primary' }],
+    key_id: 'key-3c9e41',
+    active_tasks: [{ goal: 'goal-7f0a12', item: 'item-3c9e41', job: 'coder', role: 'primary' }],
   }),
   'handoff.triage': {
     kind: 'triage', item: 'item-3c9e41', goal: 'goal-7f0a12', signed_by: 'agent-0c0c0c',

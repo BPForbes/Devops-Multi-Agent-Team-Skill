@@ -7,6 +7,8 @@ import addFormats from 'ajv-formats'
 
 const SCHEMA_PATH = new URL('../docs/schemas/envelopes.schema.json', import.meta.url)
 
+const KIND_SHAPE = /^[a-z]+\.[a-z.-]+$/
+
 let compiled
 
 function validator() {
@@ -32,7 +34,8 @@ export function envelopeKinds() {
   const walk = node => {
     if (Array.isArray(node)) node.forEach(walk)
     else if (node && typeof node === 'object') {
-      if (typeof node.const === 'string' && /^[a-z]+\.[a-z.-]+$/.test(node.const)) kinds.add(node.const)
+      const kind = node.const
+      if (typeof kind === 'string' && KIND_SHAPE.test(kind)) kinds.add(kind)
       Object.values(node).forEach(walk)
     }
   }
