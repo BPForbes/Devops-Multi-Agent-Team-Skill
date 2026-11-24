@@ -2,8 +2,9 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Found } from '../types'
 import {
-  branchNameOf, classify, classifySegments, commitInfo, interpretDevopsIntent, shellWords, treeOf,
-  splitArgs, verdictOf,
+  branchNameOf, chatAuthorizesPush, classify, classifySegments, commitInfo, interpretDevopsIntent,
+  shellWords, treeOf,
+  securityVerdictOf, splitArgs, verdictOf,
 } from './guard'
 import {
   helpCatalog, interpretSkillIntent, isGateWord, isSkillWord, orchestrationCard, parseSkillMode,
@@ -27,7 +28,6 @@ const LINT_MODE_REF = { plugin: 'devops-multi-agent-team', key: 'commentAudit' }
 const BRIEFED_REF = { plugin: 'devops-multi-agent-team', key: 'briefed' } as const
 const STANDARDS_REF = { plugin: 'devops-multi-agent-team', key: 'standards' } as const
 const STANDARDS_FILE_REF = { plugin: 'devops-multi-agent-team', key: 'standardsFile' } as const
-const PUSH_AUTHORIZED_REF = { plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const
 
 /** The standards summary, read again only when .devops/standards.json changed since the last read. */
 async function currentStandards($: EngineInterface, root: string): Promise<string> {
@@ -45,6 +45,8 @@ const MINDMAP_OVERVIEW = '.devops/mindmap/OVERVIEW.md'
 const MINDMAP_TEXT_OVERRIDE = '.devops/mindmap/text.json'
 /** Keeps the session prompt small: the overview is about forty lines, this is a guard against a huge README summary. */
 const MAX_OVERVIEW_CHARS = 4000
+
+
 
 async function mindmapText($: EngineInterface, root: string): Promise<Record<string, string>> {
   const parse = (raw: unknown): Record<string, string> => {
@@ -76,23 +78,86 @@ async function detect($: EngineInterface): Promise<Found[]> {
   }
 }
 
-async function latestQaVerdict($: EngineInterface): Promise<{
-  verdict: 'PASS' | 'BLOCKED' | undefined; tree?: string; file?: string
-}> {
+const PUSH_KEY = { plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const
+const OVERRIDES_KEY = { plugin: 'devops-multi-agent-team', key: 'overrides' } as const
+
+/**
+ * The publish check shared by every path that publishes (git push, GitHub
+ * write tools). It needs, in order: the person's push-ok on this exact tree; a
+ * latest security note of CLEAR on this tree (not overridable); and a latest QA
+ * note that is not BLOCKED (BLOCKED is not overridable). A missing or stale QA
+ * PASS is recorded as the human override. Returns the refusal, or undefined.
+ */
+async function publishDenial($: EngineInterface, what: string): Promise<string | undefined> {
+  const tree = await headTree($)
+  if (tree === undefined) return `${PLUGIN}: ${what} is refused: the tree cannot be read.`
+  const granted = (await $.state.get(PUSH_KEY)).value
+  if (granted !== tree) {
+    return `${PLUGIN}: ${what} is refused: push-ok is missing or was given for another tree. `
+      + 'Type /devops push-ok again on the current tree.'
+  }
+  const security = await latestSecurityVerdict($)
+  if (security.verdict !== 'CLEAR' || security.tree !== tree) {
+    return `${PLUGIN}: ${what} is refused: Security must be CLEAR on this tree. `
+      + 'Write the security note with "Security: CLEAR" and the tree.'
+  }
+  const qa = await latestQaVerdict($)
+  if (qa.verdict === 'BLOCKED') {
+    return `${PLUGIN}: ${what} is refused: the latest QA note is BLOCKED.\n`
+      + 'Fix the findings. BLOCKED cannot be overridden.'
+  }
+  if (qa.verdict !== 'PASS' || qa.tree !== tree) {
+    const override = {
+      tree, rule: 'qa-pass', qa: qa.verdict ?? 'none', what,
+      at: new Date().toISOString(),
+    }
+    await $.state.set({ plugin: 'devops-multi-agent-team', key: 'lastOverride' } as const, override)
+    // Every override is kept, not only the latest, for audit.
+    const past = (await $.state.get(OVERRIDES_KEY)).value ?? []
+    await $.state.set(OVERRIDES_KEY, [...past, override])
+  }
+  return undefined
+}
+
+/** GitHub write tools publish too: they need the same push-ok and QA check. */
+const GITHUB_WRITES = [
+  'create_pull_request', 'merge_pull_request', 'push_files', 'create_or_update_file', 'delete_file',
+  'update_pull_request_branch', 'enable_pr_auto_merge', 'create_branch',
+] as const
+
+/** The newest note whose name starts with `prefix`, read from the thought folders. */
+async function newestNote(
+  $: EngineInterface, prefix: string,
+): Promise<{ text: string; file: string } | undefined> {
   const root = await $.session.root()
   const notes: { path: string; mtimeMs: number }[] = []
   for (const dir of THOUGHT_DIRS) {
     const entries = await $.fs.list(`${root}/${dir}`).catch(() => [])
     for (const entry of entries) {
-      if (entry.kind === 'file' && entry.name.startsWith('qa-') && entry.name.endsWith('.md')) {
+      if (entry.kind === 'file' && entry.name.startsWith(prefix) && entry.name.endsWith('.md')) {
         notes.push({ path: `${root}/${dir}/${entry.name}`, mtimeMs: entry.mtimeMs })
       }
     }
   }
   const newest = notes.sort((a, b) => b.mtimeMs - a.mtimeMs)[0]
-  if (newest === undefined) return { verdict: undefined }
-  const text = await $.fs.read(newest.path).catch(() => '')
-  return { verdict: verdictOf(text), tree: treeOf(text), file: newest.path }
+  if (newest === undefined) return undefined
+  return { text: await $.fs.read(newest.path).catch(() => ''), file: newest.path }
+}
+
+async function latestQaVerdict($: EngineInterface): Promise<{
+  verdict: 'PASS' | 'BLOCKED' | undefined; tree?: string; file?: string
+}> {
+  const note = await newestNote($, 'qa-')
+  if (note === undefined) return { verdict: undefined }
+  return { verdict: verdictOf(note.text), tree: treeOf(note.text), file: note.file }
+}
+
+async function latestSecurityVerdict($: EngineInterface): Promise<{
+  verdict: 'CLEAR' | 'BLOCKED' | undefined; tree?: string
+}> {
+  const note = await newestNote($, 'security-')
+  if (note === undefined) return { verdict: undefined }
+  return { verdict: securityVerdictOf(note.text), tree: treeOf(note.text) }
 }
 
 /** The tree the push would send: HEAD^{tree}, or undefined when git cannot say. */
@@ -236,9 +301,21 @@ export const register: Register = on => {
     await $.tool.register(BRIEF_SPEC).catch(() => undefined)
     await currentStandards($, await $.session.root())
     const found = await detect($)
-    await $.state.set(LANGUAGES_REF, found.map(f => f.id))
+    await $.state.set({ plugin: 'devops-multi-agent-team', key: 'languages' } as const, found.map(f => f.id))
     $.ui.status(found.length === 0 ? undefined : `devops: ${found.slice(0, 4).map(f => f.id).join('+')}`)
 
+    return next(e)
+  })
+
+  // The person's chat message "push" (or "push it") authorizes one push on
+  // the current tree, as /devops push-ok does. Other messages pass unchanged.
+  on('prompt.submit', async ($, e, next) => {
+    const message = e as { text?: unknown; origin?: { kind?: unknown } }
+    const kind = typeof message.origin?.kind === 'string' ? message.origin.kind : undefined
+    if (typeof message.text === 'string' && chatAuthorizesPush(message.text, kind)) {
+      const tree = await headTree($)
+      if (tree !== undefined) await $.state.set(PUSH_KEY, tree)
+    }
     return next(e)
   })
 
@@ -256,10 +333,10 @@ export const register: Register = on => {
     }
 
     if (word === '' || word === 'status') {
-      const gates = (await $.state.get(GATES_REF)).value ?? true
-      const authorized = (await $.state.get(PUSH_AUTHORIZED_REF)).value ?? false
+      const gates = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true
+      const authorized = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const)).value ?? false
       const branches = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'allowedBranches' } as const)).value ?? []
-      const languages = (await $.state.get(LANGUAGES_REF)).value ?? []
+      const languages = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'languages' } as const)).value ?? []
       const qa = await latestQaVerdict($)
       return {
         text: [
@@ -267,7 +344,8 @@ export const register: Register = on => {
           `gates: ${gates ? 'on' : 'OFF'}`,
           `check monitor: ${((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) ? 'on' : 'OFF'}; failing checks now: ${Object.entries((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const)).value ?? {}).map(([k, n]) => `${k} x${n}`).join(', ') || 'none'}`,
           `latest QA note: ${qa.verdict ?? 'none'}${qa.file ? ` (${qa.file.split('/').pop()})` : ''}`,
-          `push authorized (human / chat "push"): ${authorized ? 'yes (one push)' : 'no'}`,
+          `push authorized (push in chat or push-ok, this tree): `
+            + (authorized ? 'yes (one push)' : 'no'),
           `branches allowed: ${branches.length === 0 ? 'none' : branches.join(', ')}`,
         ].join('\n'),
       }
@@ -304,14 +382,17 @@ export const register: Register = on => {
       }
     }
     if (word === 'push-ok') {
-      await $.state.set(PUSH_AUTHORIZED_REF, true)
+      // The grant names the tree it was given for: a later commit voids it.
+      const tree = await headTree($)
+      if (tree === undefined) return { text: 'The tree cannot be read; no push is allowed.' }
+      await $.state.set(PUSH_KEY, tree)
       return {
-        text: 'One push is allowed now (human word is final; same as saying "push" in chat). '
+        text: `One push is allowed on tree ${tree.slice(0, 12)}. A new commit voids it. `
           + 'It is consumed by that push. Keep development running.',
       }
     }
     if (word === 'push-reset') {
-      await $.state.set(PUSH_AUTHORIZED_REF, false)
+      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const, false)
       return { text: 'Push permission withdrawn.' }
     }
     if (word === 'allow-branch') {
@@ -323,7 +404,7 @@ export const register: Register = on => {
     }
     if (word === 'comments') {
       if (rest !== 'warn' && rest !== 'strict' && rest !== 'off') return { text: 'Usage: /devops comments warn|strict|off' }
-      await $.state.set(LINT_MODE_REF, rest)
+      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const, rest)
       return { text: `Comment audit on commit: ${rest}.` }
     }
     if (word === 'config') {
@@ -344,7 +425,7 @@ export const register: Register = on => {
     }
     if (word === 'gates') {
       if (rest !== 'on' && rest !== 'off') return { text: 'Usage: /devops gates on|off' }
-      await $.state.set(GATES_REF, rest === 'on')
+      await $.state.set({ plugin: 'devops-multi-agent-team', key: 'gates' } as const, rest === 'on')
       return { text: `Gates ${rest}.` }
     }
     const fallback = interpretSkillIntent(e.args)
@@ -362,8 +443,18 @@ export const register: Register = on => {
     }
   })
 
+  for (const tool of GITHUB_WRITES) {
+    on('tool.call', { tool: `mcp__github__${tool}` }, async ($, e, next) => {
+      const denied = await publishDenial($, `GitHub ${tool}`)
+      if (denied !== undefined) return { deny: denied }
+      const ran = await next(e)
+      if (ran.deny === undefined) await $.state.set(PUSH_KEY, false)
+      return ran
+    })
+  }
+
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    const gatesOn = ((await $.state.get(GATES_REF)).value ?? true) !== false
+    const gatesOn = ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true) !== false
     const actions = gatesOn ? classify(e.command) : []
     let consumeAuthorization = false
 
@@ -377,30 +468,14 @@ export const register: Register = on => {
       }
     }
     if (actions.some(action => action.kind === 'publish')) {
-      // Rule 1: only the person's typed /devops push-ok authorizes a push.
-      const what = actions.find(a => a.kind === 'publish')?.what
-      if (!((await $.state.get(PUSH_AUTHORIZED_REF)).value ?? false)) {
-        return { deny: `${PLUGIN}: ${what} is refused until the person types /devops push-ok.` }
-      }
-      // A human push-ok overrides QA PASS (qa-publish-policy). A missing PASS
-      // on this exact tree is recorded as the override, not silently skipped.
-      const qa = await latestQaVerdict($)
-      const tree = await headTree($)
-      if (qa.verdict !== 'PASS' || tree === undefined || qa.tree !== tree) {
-        const override = {
-          tree: tree ?? 'unknown',
-          rule: 'qa-pass',
-          qa: qa.verdict ?? 'none',
-          at: new Date().toISOString(),
-        }
-        const key = { plugin: 'devops-multi-agent-team', key: 'lastOverride' } as const
-        await $.state.set(key, override)
-      }
+      const what = actions.find(a => a.kind === 'publish')?.what ?? 'push'
+      const denied = await publishDenial($, what)
+      if (denied !== undefined) return { deny: denied }
       consumeAuthorization = true
     }
 
     const commit = commitInfo(e.command)
-    const auditMode = (await $.state.get(LINT_MODE_REF)).value ?? 'warn'
+    const auditMode = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'commentAudit' } as const)).value ?? 'warn'
     const audit = commit.isCommit && auditMode !== 'off' ? await auditCommit($, commit.stagesAll) : undefined
     if (audit !== undefined && auditMode === 'strict' && audit.blocking > 0) return { deny: auditContext(audit) }
 
@@ -408,13 +483,8 @@ export const register: Register = on => {
     if (audit !== undefined && ran.deny === undefined && audit.blocking + audit.nonBlocking > 0) {
       return { ...ran, context: [...(ran.context ?? []), auditContext(audit)] }
     }
-    if (consumeAuthorization && ran.deny === undefined) {
-      await $.state.set(PUSH_AUTHORIZED_REF, false)
-    }
-    if (ran.deny !== undefined) return ran
-    const monitorRef = { plugin: 'devops-multi-agent-team', key: 'monitor' } as const
-    const monitor = (await $.state.get(monitorRef)).value ?? true
-    if (monitor === false) return ran
+    if (consumeAuthorization && ran.deny === undefined) await $.state.set(PUSH_KEY, false)
+    if (ran.deny !== undefined || ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) === false) return ran
 
     const check = await checkRunBy($, e.command)
     if (check === undefined) return ran
