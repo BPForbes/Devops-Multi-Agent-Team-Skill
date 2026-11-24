@@ -4,7 +4,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const LOCK_WAIT_MS = 5000
-const LOCK_STALE_MS = 10000
 const RETRY_MS = 20
 const UUID_BYTES = 4
 const INT32_BYTES = 4
@@ -20,22 +19,18 @@ export function writeAtomic(file, text) {
   fs.renameSync(tmp, file)
 }
 
-function isStale(lock) {
-  try {
-    const { at } = JSON.parse(fs.readFileSync(lock, 'utf8'))
-    return Date.now() - at > LOCK_STALE_MS
-  } catch {
-    return true
-  }
-}
-
-/** Takes the lock file, waiting up to LOCK_WAIT_MS and breaking a stale lock. */
+/**
+ * Takes the lock by exclusive create. A lock is never broken automatically:
+ * a second writer waits, and if the lock is still held after LOCK_WAIT_MS it
+ * fails with the lock path, so a person can remove it once no writer runs.
+ */
 function acquire(lock, file) {
   const deadline = Date.now() + LOCK_WAIT_MS
   while (!tryCreate(lock)) {
-    if (isStale(lock)) fs.rmSync(lock, { force: true })
-    else if (Date.now() > deadline) throw new Error(`the lock for ${file} is busy`)
-    else sleep(RETRY_MS)
+    if (Date.now() > deadline) {
+      throw new Error(`the lock for ${file} is held; if no writer runs, remove ${lock}`)
+    }
+    sleep(RETRY_MS)
   }
 }
 
