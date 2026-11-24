@@ -28,10 +28,14 @@ import {
   acceptWork, allowSameTeam, ackHandoff, addGoal, assignWork, blameFor, closeHandoff,
   completeWork, createSprint, emptyBoard, GOAL_STATES, inboxFor, markThreadRead, moveGoal,
   normalizeBoard, openThread, replyThread, resolveThread, routeHandoff, sendHandoff, sprintView,
-  threadsFor, unreadThreads, workInbox, backlogView,
+  threadsFor, unreadThreads, workInbox, backlogView, MAX_SPRINT_WEEKS,
 } from '../scripts/devops-board.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 import { isTeamId } from '../scripts/devops-ids.mjs'
+import { RISKS, planAllocation, spinUp } from '../scripts/devops-allocation.mjs'
+import {
+  MEETING_KINDS, holdMeeting, meetingsFor, scheduleMeeting,
+} from '../scripts/devops-scrum.mjs'
 import {
   needsAttention, openBoard, recordRefusal, teamIntake, teamMove, teamSignOff,
 } from '../scripts/devops-teams.mjs'
@@ -65,6 +69,43 @@ let clientRoots = []
 
 // When DEVOPS_SEAT is set, this server acts only for that seat.
 const BOUND_SEAT = process.env.DEVOPS_SEAT
+
+/** Limits on what allocation research and meetings may send: a task, not a document. */
+const MAX_TASK_TEXT = 4000
+const MAX_STREAMS = 64
+const MAX_STREAM_NAME = 80
+const MAX_ATTENDEES = 64
+const WEEKS = { type: 'integer', minimum: 1, maximum: MAX_SPRINT_WEEKS }
+
+/** Allocation research: the task, split into the streams a research seat measured. */
+const RESEARCH_SCHEMA = {
+  type: 'object',
+  properties: {
+    task: { type: 'string', maxLength: MAX_TASK_TEXT },
+    streams: {
+      type: 'array',
+      minItems: 1,
+      maxItems: MAX_STREAMS,
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', maxLength: MAX_STREAM_NAME },
+          files: { type: 'integer', minimum: 0 },
+          modules: { type: 'integer', minimum: 1 },
+          languages: { type: 'integer', minimum: 1 },
+          risks: { type: 'array', items: { enum: [...RISKS] } },
+          unknowns: { type: 'boolean' },
+          newSurface: { type: 'boolean' },
+          dependsOn: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['name'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['streams'],
+  additionalProperties: false,
+}
 
 /** Refuses a tool call that names another seat. Returns true when it refused. */
 function refuseForeignSeat(message) {
@@ -661,6 +702,23 @@ const TOOLS = [
     },
   },
   {
+    name: 'allocation_plan',
+    description: [
+      'Plan teams and seats from allocation research (references/allocation-research.md):',
+      'the task split into streams, each with files, modules, languages, risks, unknowns,',
+      'newSurface and dependsOn. Dependent streams share a team; every team is judged by a',
+      'team that authored none of its work; each seat count comes with its reason. Pure.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { research: RESEARCH_SCHEMA },
+      required: ['research'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    run: args => planAllocation(args.research),
+  },
+  {
     name: 'story_parse',
     description: 'Parse a story written in the catalog format (a GitHub issue body or a story file) into structure: catalog id, project, baseline sha, status, depends on, needed by, files, OLD blocks (path, lines, text) and NEW blocks (compiled or not), and which sections are present. Pass the text you read from the issue. Pure; reads nothing from the project.',
     inputSchema: { type: 'object', properties: { text: { type: 'string', maxLength: 300000 }, title: { type: 'string', maxLength: 300 } }, required: ['text'], additionalProperties: false },
@@ -733,12 +791,14 @@ const TOOLS = [
     description: 'Open a sprint on the goal board. Any seat may read the board at devops://board.',
     inputSchema: {
       type: 'object',
-      properties: { dest, name: { type: 'string' } },
+      properties: { dest, name: { type: 'string' }, weeks: WEEKS },
       required: ['name'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => createSprint(board, { name: args.name, at: now() })),
+    run: args => boardChange(args, board => createSprint(board, {
+      name: args.name, weeks: args.weeks, at: now(),
+    })),
   },
   {
     name: 'board_add_goal',
@@ -908,6 +968,78 @@ const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => boardChange(args, board => ({
       board: closeHandoff(board, { id: args.id, agent: args.agent, at: now() }),
+    })),
+  },
+  {
+    name: 'board_spin_up',
+    description: [
+      'Orchestration only: from allocation research, plan the teams, open the sprint, put',
+      'each stream on the backlog as a goal, record the allocation, and hand each authoring',
+      'team lead its Sprint Planning (scheduled for the lead to hold with meeting_hold).',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        research: RESEARCH_SCHEMA,
+        name: { type: 'string' },
+        weeks: WEEKS,
+        goals: { type: 'object', description: 'stream name -> goal hash' },
+        teams: { type: 'object', description: 'plan team (A1, J1, ...) -> { team, lead }' },
+      },
+      required: ['research', 'name', 'goals', 'teams'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      if (BOUND_SEAT) throw new Error('only Orchestration may spin up the board')
+      const plan = planAllocation(args.research)
+      return boardChange(args, board => spinUp(board, plan, {
+        name: args.name, weeks: args.weeks ?? 1, goals: args.goals, teams: args.teams, at: now(),
+      }))
+    },
+  },
+  {
+    name: 'meeting_schedule',
+    description: "Schedule a team's meeting in a sprint, led by `caller` (the team lead): "
+      + `${MEETING_KINDS.join(', ')}.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, sprint: { type: 'string' }, team: { type: 'string' },
+        kind: { enum: [...MEETING_KINDS] },
+      },
+      required: ['caller', 'sprint', 'team', 'kind'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => scheduleMeeting(board, {
+      sprint: args.sprint, team: args.team, kind: args.kind, lead: args.caller, at: now(),
+    })),
+  },
+  {
+    name: 'meeting_hold',
+    description: [
+      'The team lead (`caller`) holds a scheduled meeting: attendees, minutes (within its',
+      'timebox) and the record its kind needs (references/scrum-meetings.md).',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, id: { type: 'string' },
+        minutes: { type: 'integer', minimum: 1 },
+        attendees: { type: 'array', items: { type: 'string' }, maxItems: MAX_ATTENDEES },
+        record: { type: 'object' },
+      },
+      required: ['caller', 'id', 'minutes', 'attendees'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: holdMeeting(board, {
+        id: args.id, by: args.caller, minutes: args.minutes, attendees: args.attendees,
+        record: args.record, at: now(),
+      }),
     })),
   },
   {
@@ -1189,6 +1321,12 @@ const INBOX_TEMPLATES = [
     mimeType: 'application/json',
   },
   {
+    uriTemplate: 'devops://meetings/{sprint}',
+    name: 'Sprint meetings',
+    description: "A sprint's allocation and its teams' meetings (scheduled and held).",
+    mimeType: 'application/json',
+  },
+  {
     uriTemplate: 'devops://board',
     name: 'Board',
     description: 'Every sprint and its goals.',
@@ -1217,6 +1355,11 @@ const RESOURCE_PATTERNS = [
     blame: blameFor(readBoard({}), { goal }),
   })],
   [/^devops:\/\/board$/, () => boardView(readBoard({}))],
+  [/^devops:\/\/meetings\/(sprint-[0-9a-f]{6})$/, sprint => {
+    const board = readBoard({})
+    const allocation = board.allocations?.[sprint] ?? null
+    return { allocation, meetings: meetingsFor(board, { sprint }) }
+  }],
 ]
 
 function boardView(board) {

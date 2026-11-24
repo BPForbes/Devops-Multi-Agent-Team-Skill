@@ -66,7 +66,10 @@ test('initialize negotiates, lists 34 tools, prompts and resources', async () =>
     for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_overview', 'mindmap_tree', 'mindmap_note', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
     const added = ['lint_check', 'lint_commands', 'config_get', 'config_set']
     for (const name of added) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 58)
+    assert.equal(tools.length, 62)
+    for (const name of ['allocation_plan', 'board_spin_up', 'meeting_schedule', 'meeting_hold']) {
+      assert.ok(tools.includes(name), name)
+    }
     const teamTools = ['team_board_open', 'team_item_add', 'team_item_move', 'team_item_signoff']
     for (const name of [...teamTools, 'needs_attention']) assert.ok(tools.includes(name), name)
     const writers = (await c.rpc('tools/list')).result.tools.filter(t => t.name === 'install_devops_team')
@@ -522,5 +525,56 @@ test('a team keeps its own board; nothing closes without security sign-off', asy
   assert.equal(notLead.isError, true, 'only the lead')
   const view = (await call('needs_attention', { caller: 'agent-lead' })).json()
   assert.deepEqual(view.attention.map(a => [a.id, a.kind]), [['item-0000a2', 'awaiting_human']])
+  c.close()
+})
+
+const RESEARCH = { task: 'Fix the parser', streams: [{ name: 'parser', files: 2, unknowns: true }] }
+const SPIN = {
+  research: RESEARCH, name: 'Sprint 1', weeks: 1, goals: { parser: 'goal-111111' },
+  teams: {
+    A1: { team: 'team-a1a1a1', lead: 'agent-a1a1a1' },
+    J1: { team: 'team-b2b2b2', lead: 'agent-b2b2b2' },
+  },
+}
+
+test('research plans the teams, Orchestration spins up the board, the lead plans', async () => {
+  const root = tmp()
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  const plan = (await c.call('allocation_plan', { research: RESEARCH })).json()
+  assert.deepEqual(plan.teams.map(t => t.name), ['A1', 'J1'])
+  const up = await c.call('board_spin_up', { dest: root, ...SPIN })
+  assert.notEqual(up.isError, true, up.text)
+  const { sprint, meetings } = up.json()
+  assert.equal(meetings.length, 1)
+  const held = await c.call('meeting_hold', {
+    dest: root, caller: 'agent-a1a1a1', id: meetings[0].id, minutes: 60,
+    attendees: ['agent-a1a1a1'],
+    record: {
+      sprintGoal: 'Empty config parses', goals: ['goal-111111'],
+      tasks: [{ goal: 'goal-111111', job: 'coder', title: 'Fix it' }],
+    },
+  })
+  assert.notEqual(held.isError, true, held.text)
+  const boardRead = await c.rpc('resources/read', { uri: 'devops://board' })
+  const view = JSON.parse(boardRead.result.contents[0].text)
+  assert.deepEqual(view.sprints[sprint].map(g => g.goal), ['goal-111111'])
+  const read = await c.rpc('resources/read', { uri: `devops://meetings/${sprint}` })
+  const sprintMeetings = JSON.parse(read.result.contents[0].text)
+  assert.equal(sprintMeetings.meetings[0].state, 'held')
+  assert.equal(sprintMeetings.allocation.teams.length, 2)
+  c.close()
+})
+
+test('a bound seat cannot spin up the board or hold a meeting as another seat', async () => {
+  const root = tmp()
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root, DEVOPS_SEAT: 'agent-0a0a0a' } })
+  const refused = await c.call('board_spin_up', { dest: root, ...SPIN })
+  assert.equal(refused.isError, true)
+  assert.match(refused.text, /only Orchestration/)
+  const foreign = await c.call('meeting_hold', {
+    dest: root, caller: 'agent-a1a1a1', id: 'meeting-aaaaaa', minutes: 5,
+    attendees: ['agent-a1a1a1'],
+  })
+  assert.equal(foreign.isError, true)
   c.close()
 })

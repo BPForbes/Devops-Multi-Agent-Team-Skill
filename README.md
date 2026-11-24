@@ -159,6 +159,8 @@ prompts) walks the same steps.
 | `work_assign`, `work_accept`, `work_complete` | assigned work: Orchestration only assigns it (the server records `assigned_by: "orchestration"`); the assigned seat accepts, then completes it |
 | `team_board_open`, `team_item_add`, `team_item_move`, `team_item_signoff` | per-team boards: open a team's own board (its lead is the manager), add a work item (members only), move it as the caller's role under the item rules, and record a security member's sign-off, which an item needs before it is done |
 | `needs_attention` | the team lead's view of what needs a decision: blocked or failed items, and items waiting on security or the person |
+| `allocation_plan`, `board_spin_up` | allocation research (`references/allocation-research.md`): plan the teams and seats from the task's streams, each count with its reason, every team judged by one that authored none of its work; then Orchestration opens the sprint, backlogs each stream, and hands each team lead its Sprint Planning |
+| `meeting_schedule`, `meeting_hold` | Scrum meetings per team and sprint (`references/scrum-meetings.md`): Sprint Planning, Daily Scrum, Backlog Refinement, Sprint Review and Retrospective, in order and within their timeboxes, held by the team lead; read at `devops://meetings/<sprint>` |
 
 **How the server is sandboxed.** It works only inside the project folders it
 is allowed (`DEVOPS_MCP_ROOTS`, else the client's MCP roots, else its working
