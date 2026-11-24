@@ -24,14 +24,15 @@ function triage(overrides = {}) {
     toAgent: '',
     toTeam: T_CODER,
     reason: 'The lint gate still fails on the new branch',
+    blame: { agent: CODER, team: T_CODER },
     ...overrides,
   })
 }
 
 test('every kind has a sender and a receiver job', () => {
   assert.deepEqual(Object.keys(HANDOFF_KINDS), [
-    'triage', 'research-to-coder', 'coder-to-review',
-    'review-to-qa', 'qa-to-security', 'security-signoff',
+    'triage', 'review-send-back', 'security-send-back', 'research-send-back',
+    'research-to-coder', 'coder-to-review', 'review-to-qa', 'qa-to-security', 'security-signoff',
   ])
 })
 
@@ -105,6 +106,31 @@ test('inherited object keys are not kinds', () => {
       ok: false, errors: ['kind is not a handoff kind'],
     })
   }
+})
+
+test('a send-back must carry a blame tag, and no other kind may', () => {
+  const noBlame = triage({ blame: null })
+  assert.match(validateHandoff(noBlame).errors.join(' '), /needs a blame tag/)
+  const notSendBack = makeHandoff('coder-to-review', {
+    ...BASE, signedBy: CODER, fromAgent: CODER, fromTeam: T_CODER,
+    toAgent: REVIEWER, toTeam: T_QA, blame: { agent: CODER, team: T_CODER },
+  })
+  assert.match(validateHandoff(notSendBack).errors.join(' '), /only a send-back/)
+})
+
+test('a blame tag names an agent hash and a team hash', () => {
+  const bad = triage({ blame: { agent: 'coder', team: T_CODER } })
+  assert.match(validateHandoff(bad).errors.join(' '), /blame/)
+})
+
+test('a reviewer send-back goes to the coder and names the author', () => {
+  const payload = makeHandoff('review-send-back', {
+    ...BASE, signedBy: REVIEWER, fromAgent: REVIEWER, fromTeam: T_QA,
+    toAgent: '', toTeam: T_CODER, reason: 'Off-by-one in the parser',
+    blame: { agent: CODER, team: T_CODER }, created: '2026-11-23T10:00:00Z',
+  })
+  assert.equal(payload.to.job, 'coder')
+  assert.equal(validateHandoff(payload).ok, true)
 })
 
 test('a judging hand-off names the receiving team, and created is a UTC timestamp', () => {
