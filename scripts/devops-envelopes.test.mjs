@@ -120,7 +120,8 @@ test('a send-back without a blame tag is refused', () => {
 test('a help step outside 1 to 6 and an unknown verification method are refused', () => {
   const badStep = { ...VALID['help.request'], body: { ...VALID['help.request'].body, step: 9 } }
   assert.equal(validateEnvelope(badStep).ok, false)
-  const badMethod = { ...VALID['help.answer'], body: { ...VALID['help.answer'].body, method: 'trust_me' } }
+  const answerBody = { ...VALID['help.answer'].body, method: 'trust_me' }
+  const badMethod = { ...VALID['help.answer'], body: answerBody }
   assert.equal(validateEnvelope(badMethod).ok, false)
 })
 
