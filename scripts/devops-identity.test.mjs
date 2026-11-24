@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  checkArtifactPath, checkRoute, checkSender, chainEvents, chainLinker, roleMayUse, verifyChain,
+  checkArtifactPath, checkRoute, checkSender, chainEvents, chainLinker, roleMayUse,
+  verifyChain,
 } from './devops-identity.mjs'
 import fs from 'node:fs'
 import os from 'node:os'
