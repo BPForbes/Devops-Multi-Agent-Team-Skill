@@ -67,6 +67,12 @@ export function verdictOf(note: string): 'PASS' | 'BLOCKED' | undefined {
   return all.length === 0 ? undefined : (all[all.length - 1][1] as 'PASS' | 'BLOCKED')
 }
 
+/** The latest "Security: CLEAR" or "Security: BLOCKED" line in a security note. */
+export function securityVerdictOf(note: string): 'CLEAR' | 'BLOCKED' | undefined {
+  const all = [...note.matchAll(/^Security:\s*(CLEAR|BLOCKED)\b/gm)]
+  return all.length === 0 ? undefined : (all[all.length - 1][1] as 'CLEAR' | 'BLOCKED')
+}
+
 export function splitArgs(args: string): { word: string; rest: string } {
   const trimmed = args.trim()
   const space = trimmed.search(/\s/)

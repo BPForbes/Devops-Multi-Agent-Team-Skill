@@ -91,7 +91,9 @@ function engine(on: any) {
   on('command.register', () => ({ value: { command: 'devops' } }))
   on('tool.register', () => ({ value: { tool: 'mcp__devops-multi-agent-team__devops_brief' } }))
   on('ui.status', () => ({ value: undefined }))
-  on('process.run', () => ({ value: { exitCode: 0, stdout: '[]', stderr: '' } }))
+  on('process.run', (_: unknown, e: { argv?: string[] }) => ({ value: e.argv?.includes('rev-parse')
+    ? { exitCode: 0, stdout: `${'a'.repeat(40)}\n`, stderr: '' }
+    : { exitCode: 0, stdout: '[]', stderr: '' } }))
   on('fs.exists', () => ({ value: false }))
   wireDocs(on)
   on('prompt.compose', () => ({ sections: [] }))
@@ -131,7 +133,7 @@ test('/devops brief runs from any origin; push aliases need the person', async (
   expect(state.get('pushAuthorized')).toBeUndefined()
   const push = await run('push-ok')
   expect(push.text).toContain('One push is allowed')
-  expect(state.get('pushAuthorized')).toBe(true)
+  expect(state.get('pushAuthorized')).toBe('a'.repeat(40))
 })
 
 test('/devops skill modes return orchestration cards with tools', async ($, on) => {
