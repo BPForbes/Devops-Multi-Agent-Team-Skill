@@ -471,10 +471,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "v",
         "kind",
-        "id",
-        "kind_detail",
         "item",
         "goal",
         "signed_by",
@@ -482,18 +479,13 @@
         "to",
         "reason",
         "blame",
-        "created",
-        "sent_tick",
-        "turn"
+        "created"
       ],
       "properties": {
         "v": {
           "$ref": "#/$defs/version"
         },
         "kind": {
-          "const": "work.handoff"
-        },
-        "kind_detail": {
           "enum": [
             "triage",
             "review-send-back",
@@ -504,7 +496,8 @@
             "review-to-qa",
             "qa-to-security",
             "security-signoff"
-          ]
+          ],
+          "description": "The existing handoff kind (devops-handoff.mjs), unchanged."
         },
         "id": {
           "$ref": "#/$defs/id"
@@ -710,7 +703,7 @@
         {
           "if": {
             "properties": {
-              "kind_detail": {
+              "kind": {
                 "enum": [
                   "triage",
                   "review-send-back",
@@ -731,7 +724,7 @@
         {
           "if": {
             "properties": {
-              "kind_detail": {
+              "kind": {
                 "const": "security-signoff"
               }
             }

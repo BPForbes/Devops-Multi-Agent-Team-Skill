@@ -20,7 +20,9 @@ command. A plain-English instruction from the person to push (for example
 "push the rebased stack") is the push authorization. It must be clear
 enough to name what is pushed (a branch, a stack, or "this tree"); if it is
 not clear, the orchestrator asks one question before pushing. The authorization
-covers exactly what was named, once.
+covers exactly what was named, once. Required, not yet built in the mod: the
+authorization is bound to the tree it names, and any later commit voids it. The
+mod keeps only the latest override today (see the design, 16.17).
 
 **Human override.** The human's push authorization overrides every other
 rule, including the QA PASS requirement above. The human may bypass any

@@ -212,14 +212,15 @@ The states, and which seat may make each transition:
 | in_qa | in_progress | the QA seat (triage send-back, with blame) |
 | in_security | ready_for_human | the security seat (`Handoff` sign-off clear) |
 | in_security | in_progress | the security seat (send-back, with blame) |
-| ready_for_human | done | the human only, through `/devops push-ok` for the push; the server records completion |
+| ready_for_human | done | the human only, by push-ok; a QA PASS on the exact tree is the default, and a human override may proceed without it (qa-publish-policy). The server records which |
 | blocked | in_progress | the assigned seat, after the blocker is cleared (`Unblock`) |
 | failed | queued | manager (retry decision, counted against max attempts) |
 | any | blocked | the manager (escalation) |
 
 Every transition is an event. A transition not in this table is refused,
 and the refusal is logged. `ready_for_human` is not `done`: a push
-still needs the person's `/devops push-ok` and a QA PASS on the exact tree.
+still needs the person's push-ok. A QA PASS on the exact tree is the default;
+a human override may proceed without it, and the server records the override.
 
 The item state names extend the existing goal states; they do not replace
 them. A goal's state is derived from its items: a goal is `done` when all
@@ -374,8 +375,9 @@ unchanged).
 - **Gates.** Gate commands are accepted only from the human channel
   (`composer` origin, exact typed command). Every gate change is logged.
   Free-form words never change a gate (rule 3).
-- **Push.** A push needs the human's `push-ok` and a QA PASS on the exact
-  tree (rule 2). The manager cannot push, approve, or change
+- **Push.** A push needs the human's push-ok. A QA PASS on the exact tree is
+  the default path (rule 2); a human override may proceed without it and is
+  recorded (qa-publish-policy). The manager cannot push, approve, or change
   gates. The role table says so, and a test checks it.
 
 ### 10.1 Security requirements (from the security review of this design)
@@ -514,7 +516,7 @@ sequenceDiagram
   M->>S: MeetingInvite(review, retro)
   M->>H: Digest(done vs committed, retro actions)
   H->>S: /devops push-ok (typed, composer origin)
-  S->>S: refuse unless QA PASS on exact tree
+  S->>S: refuse unless push-ok; then QA PASS on the exact tree, or a recorded override
 ```
 
 ## 14. Open questions
@@ -823,7 +825,8 @@ evidence (a test, a lint, a build). It is a gate, but not the push gate.
   temporary commit is kept: command, tree hash, exit code, counts, timestamp.
   It is never pushed, and nothing in it is sent to a cloud service.
 - **No push right.** A run authorization does not authorize a push. Push stays
-  under the push gate (`/devops push-ok`, plus QA PASS on the exact tree).
+  under the push gate (push-ok; QA PASS on the exact tree is the default, and an
+  override is recorded).
 - **Evidence.** A run record can serve as the evidence in a verification record
   (section 3b.3) and as the test result in a handoff (section 8).
 
@@ -846,4 +849,15 @@ person's words, the tree it covers, and the time. Plain English does not
 change gate settings unless the person says so explicitly. This is a change to
 the earlier rule that free-form words never change gate state (rule 3), and it
 is recorded here so the two are not confused.
+
+### 16.17 Override record and tree binding: what is built, what is required
+
+- Required: an override record names the tree it covers and the rule it
+  overrode; the authorization applies only to that tree; a commit after the
+  authorization voids it. Records go in the append-only event log (phase 2).
+- Built today (mod, PR 7): the latest override only, kept as `lastOverride`
+  (tree, rule, QA verdict, time). Authorization is a boolean, not bound to a
+  tree. Both gaps are open follow-ups in the mod, not yet implemented.
+- Until those land, the authorization record in the local AI cache is the
+  audit trail for each push.
 
