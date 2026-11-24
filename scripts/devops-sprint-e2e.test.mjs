@@ -12,7 +12,7 @@ import { admit, securitySignOff, transition } from './devops-items.mjs'
 import { assignPrimary, releaseExpired } from './devops-assign.mjs'
 import { buildDigest, digestDue } from './devops-digest.mjs'
 import { chainEvents, verifyChain } from './devops-identity.mjs'
-import { appendEvent, readEvents } from './devops-store.mjs'
+import { appendEvent, readEvents, UNFENCED } from './devops-store.mjs'
 import { openStandup, recordUpdate, closeStandup } from './devops-meetings.mjs'
 import {
   planCommitments, planningSummary, retroActionItems, reviewSprint, startSprint,
@@ -137,7 +137,7 @@ test('one sprint runs from commitment to a digest with a verifiable log', () => 
 function verifyLog(events) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dmat-e2e-'))
   const log = path.join(dir, 'events.jsonl')
-  for (const event of chainEvents(events, KEY)) appendEvent(log, event)
+  for (const event of chainEvents(events, KEY)) appendEvent(log, event, { fence: UNFENCED })
   assert.equal(verifyChain(readEvents(log), KEY), true)
   const lines = fs.readFileSync(log, 'utf8').split('\n')
   lines[0] = lines[0].replace('"tick":0', '"tick":9')
