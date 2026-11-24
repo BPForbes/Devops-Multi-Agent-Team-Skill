@@ -21,7 +21,7 @@ commands, plus:
 |------|------|
 | `skills/project-mindmap/` | Plain-chat skill: answer questions about the project from the mind map, no team needed. |
 | `skills/devops-multi-agent-team/` | The skill: `SKILL.md` and `references/` (team/agent/job/item hashes, pods, side worktrees, Push JSON, QA policy, SOC 2 review, templates). Language-neutral. |
-| `agents/` | Nine role prompts: researcher, reviewer, CI, quality (QA), security, ticket lead, verifier, integrator, communicator. |
+| `agents/` | Eleven role prompts: researcher, coder, reviewer, CI, quality (QA), security, cleaner, ticket lead, verifier, integrator, communicator. |
 | `commands/` | `/goal`, `/create-subagent`, `/code-review`, `/repro`, `/triage`. |
 | `languages.json`, `LANGUAGES.md` | The language setup file (40 languages) and its guide. |
 | `standards.json` | Project standards: line length, function size and nesting, parameters, duplicates, comment density, per-language overrides, and linter settings. Copied as `.devops/standards.json`, where a project overrides only the keys it sets. |
@@ -152,6 +152,13 @@ prompts) walks the same steps.
 | `formal_check` | Lean 4 (optional): find `sorry`, `admit`, axioms and uncovered code in `.lean` files and validate the Push JSON `formal` rows; read-only |
 | `cleanup_brief`, `cleanup_scan` | cleanup: turn a plain-English statement into a brief (goals, scope, thresholds, constraints); find duplicated blocks, long or deeply nested functions, functions with many parameters and noisy or commented-out code, ranked, with a suggested refactor; `save` a baseline and `compare` after |
 | `ghas_plan` | GitHub Advanced Security: CodeQL, dependency review and Dependabot files for your languages and package managers, `SECURITY.md`, a ruleset template, and the settings commands for **you** to run |
+| `board_create_sprint`, `board_add_goal`, `board_move_goal` | the goal board (`references/board.md`): open a sprint, put a goal on it (or in the backlog), move a goal one step at a time or to `blocked` |
+| `board_allow_same_team` | Orchestration only: let one authoring team judge its own goal once, with a reason, when resources are low; the first judged hand-off or judging assignment uses it up |
+| `handoff_send`, `handoff_route`, `handoff_ack`, `handoff_close` | hand-offs between seats (`references/handoff-payloads.md`): the sender sends a checked payload, Orchestration routes an unrouted one, the addressee acknowledges, then closes it |
+| `thread_open`, `thread_reply`, `thread_mark_read`, `thread_resolve` | virtual PR threads on a goal's item: open one, reply, mark it read, and resolve it (only the opener) |
+| `work_assign`, `work_accept`, `work_complete` | assigned work: Orchestration only assigns it (the server records `assigned_by: "orchestration"`); the assigned seat accepts, then completes it |
+| `team_board_open`, `team_item_add`, `team_item_move`, `team_item_signoff` | per-team boards: open a team's own board (its lead is the manager), add a work item (members only), move it as the caller's role under the item rules, and record a security member's sign-off, which an item needs before it is done |
+| `needs_attention` | the team lead's view of what needs a decision: blocked or failed items, and items waiting on security or the person |
 
 **How the server is sandboxed.** It works only inside the project folders it
 is allowed (`DEVOPS_MCP_ROOTS`, else the client's MCP roots, else its working
