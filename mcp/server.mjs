@@ -24,10 +24,10 @@ import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, p
 import { buildMindMap, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree } from '../scripts/devops-mindmap.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
 import {
-  allowSameTeam, ackHandoff, addGoal, backlogView, blameFor, closeHandoff, createSprint,
-  emptyBoard, GOAL_STATES, inboxFor,
-  moveGoal, normalizeBoard, openThread, replyThread, resolveThread, routeHandoff, sendHandoff,
-  sprintView, threadsFor,
+  acceptWork, allowSameTeam, ackHandoff, addGoal, assignWork, blameFor, closeHandoff,
+  completeWork, createSprint, emptyBoard, GOAL_STATES, inboxFor, markThreadRead, moveGoal,
+  normalizeBoard, openThread, replyThread, resolveThread, routeHandoff, sendHandoff, sprintView,
+  threadsFor, unreadThreads, workInbox, backlogView,
 } from '../scripts/devops-board.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 
@@ -115,7 +115,6 @@ const svcs = { description: '"auto" (detect), "none", or a list of service ids f
 
 const BOARD_FILE = path.join('devops-skill', 'thoughts', 'non-final', 'board.json')
 const now = () => new Date().toISOString()
-const goalFilter = args => (args.goal === undefined ? {} : { goal: args.goal })
 const GOAL_STATE = {
   type: 'string', enum: ['backlog', 'ready', 'in_progress', 'review', 'qa', 'security', 'done'],
 }
@@ -681,7 +680,7 @@ const TOOLS = [
   },
   {
     name: 'board_create_sprint',
-    description: 'Open a sprint on the goal board. Any seat may read the board through board_view.',
+    description: 'Open a sprint on the goal board. Any seat may read the board at devops://board.',
     inputSchema: {
       type: 'object',
       properties: { dest, name: { type: 'string' } },
@@ -736,25 +735,6 @@ const TOOLS = [
     })),
   },
   {
-    name: 'board_view',
-    description: 'Read the goal board: one sprint and its goals, or all sprints.',
-    inputSchema: {
-      type: 'object',
-      properties: { dest, sprint: { type: 'string' } },
-      additionalProperties: false,
-    },
-    annotations: { readOnlyHint: true },
-    run: args => {
-      const board = readBoard(args)
-      if (args.sprint !== undefined) return { goals: sprintView(board, args.sprint) }
-      const sprints = Object.keys(board.sprints)
-      return {
-        sprints: Object.fromEntries(sprints.map(id => [id, sprintView(board, id)])),
-        backlog: backlogView(board),
-      }
-    },
-  },
-  {
     name: 'handoff_send',
     description: 'Send a handoff payload (see references/handoff-payloads.md).',
     inputSchema: {
@@ -783,18 +763,6 @@ const TOOLS = [
     run: args => boardChange(args, board => ({
       board: routeHandoff(board, { id: args.id, agent: args.agent, team: args.team, at: now() }),
     })),
-  },
-  {
-    name: 'handoff_inbox',
-    description: 'The handoffs addressed to a seat that are not done yet.',
-    inputSchema: {
-      type: 'object',
-      properties: { dest, agent: { type: 'string' } },
-      required: ['agent'],
-      additionalProperties: false,
-    },
-    annotations: { readOnlyHint: true },
-    run: args => ({ handoffs: inboxFor(readBoard(args), args.agent) }),
   },
   {
     name: 'handoff_ack',
@@ -865,26 +833,18 @@ const TOOLS = [
     })),
   },
   {
-    name: 'thread_list',
-    description: 'The threads on a goal, or on every goal when none is given.',
+    name: 'thread_mark_read',
+    description: 'Mark a thread read up to its latest message, for one participant seat.',
     inputSchema: {
       type: 'object',
-      properties: { dest, goal: { type: 'string' } },
+      properties: { dest, thread: { type: 'string' }, agent: { type: 'string' } },
+      required: ['thread', 'agent'],
       additionalProperties: false,
     },
-    annotations: { readOnlyHint: true },
-    run: args => ({ threads: threadsFor(readBoard(args), goalFilter(args)) }),
-  },
-  {
-    name: 'blame_list',
-    description: 'The send-backs on record, with the author each one returned work to.',
-    inputSchema: {
-      type: 'object',
-      properties: { dest, goal: { type: 'string' } },
-      additionalProperties: false,
-    },
-    annotations: { readOnlyHint: true },
-    run: args => ({ blame: blameFor(readBoard(args), goalFilter(args)) }),
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: markThreadRead(board, { thread: args.thread, agent: args.agent }),
+    })),
   },
   {
     name: 'handoff_close',
@@ -923,6 +883,57 @@ const TOOLS = [
         }),
       }))
     },
+  },
+  {
+    name: 'work_assign',
+    description: 'Give a seat a piece of work on a goal, with what it has to do.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        goal: { type: 'string' },
+        job: { type: 'string' },
+        agent: { type: 'string' },
+        team: { type: 'string' },
+        description: { type: 'string' },
+        by: { type: 'string' },
+      },
+      required: ['goal', 'job', 'agent', 'team', 'description', 'by'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => assignWork(board, {
+      goal: args.goal, job: args.job, agent: args.agent, team: args.team,
+      description: args.description, by: args.by, at: now(),
+    })),
+  },
+  {
+    name: 'work_accept',
+    description: 'The assigned seat accepts the work it was given.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, id: { type: 'string' }, agent: { type: 'string' } },
+      required: ['id', 'agent'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: acceptWork(board, { id: args.id, agent: args.agent, at: now() }),
+    })),
+  },
+  {
+    name: 'work_complete',
+    description: 'The assigned seat reports accepted work done.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, id: { type: 'string' }, agent: { type: 'string' } },
+      required: ['id', 'agent'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: completeWork(board, { id: args.id, agent: args.agent, at: now() }),
+    })),
   },
 ]
 
@@ -966,8 +977,227 @@ const PROMPTS = [
 const send = message => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\n')
 const reply = (id, result) => send({ id, result })
 const fail = (id, code, message) => send({ id, error: { code, message } })
+
+// A seat's inbox is a resource. A subscribed seat is pushed a
+// notifications/resources/updated message when its inbox changes. The check
+// re-reads the board, because another seat's server may have written it.
+const INBOX_URI = /^devops:\/\/inbox\/(agent-[0-9a-f]{6})$/
+const INBOX_POLL_MS = 2000
+const INVALID_PARAMS = -32602
+const UNKNOWN_RESOURCE = -32002
+const INBOX_TEMPLATES = [
+  {
+    uriTemplate: 'devops://inbox/{agent}',
+    name: 'Seat inbox',
+    description: 'Hand-offs, work and unread threads for one seat. Subscribe for pushes.',
+    mimeType: 'application/json',
+  },
+  {
+    uriTemplate: 'devops://work/{agent}',
+    name: 'Seat work',
+    description: 'Open work assigned to one seat.',
+    mimeType: 'application/json',
+  },
+  {
+    uriTemplate: 'devops://threads/{goal}',
+    name: 'Goal threads',
+    description: 'Virtual PR threads on one goal.',
+    mimeType: 'application/json',
+  },
+  {
+    uriTemplate: 'devops://blame/{goal}',
+    name: 'Goal blame',
+    description: 'Send-backs on one goal, with their authors.',
+    mimeType: 'application/json',
+  },
+  {
+    uriTemplate: 'devops://board',
+    name: 'Board',
+    description: 'Every sprint and its goals.',
+    mimeType: 'application/json',
+  },
+]
+const inboxWatch = new Map()
+let inboxTimer = null
+
+function inboxOf(agent) {
+  const board = readBoard({})
+  return {
+    handoffs: inboxFor(board, agent),
+    work: workInbox(board, agent),
+    threads: unreadThreads(board, agent),
+  }
+}
+
+const RESOURCE_PATTERNS = [
+  [/^devops:\/\/inbox\/(agent-[0-9a-f]{6})$/, agent => inboxOf(agent)],
+  [/^devops:\/\/work\/(agent-[0-9a-f]{6})$/, agent => ({ work: workInbox(readBoard({}), agent) })],
+  [/^devops:\/\/threads\/(goal-[0-9a-f]{6})$/, goal => ({
+    threads: threadsFor(readBoard({}), { goal }),
+  })],
+  [/^devops:\/\/blame\/(goal-[0-9a-f]{6})$/, goal => ({
+    blame: blameFor(readBoard({}), { goal }),
+  })],
+  [/^devops:\/\/board$/, () => boardView(readBoard({}))],
+]
+
+function boardView(board) {
+  return {
+    sprints: Object.fromEntries(Object.keys(board.sprints).map(id => [id, sprintView(board, id)])),
+    backlog: backlogView(board),
+  }
+}
+
+/** A board read as a resource, or undefined when the URI is not one of them. */
+function dynamicResource(uri) {
+  for (const [pattern, read] of RESOURCE_PATTERNS) {
+    const match = pattern.exec(uri ?? '')
+    if (match) {
+      const text = JSON.stringify(read(match[1]), null, 2)
+      return { uri, mimeType: 'application/json', text }
+    }
+  }
+  return undefined
+}
+
+/** The inbox at a URI as JSON text, or undefined when it cannot be read. */
+function inboxSnapshot(uri) {
+  try {
+    return JSON.stringify(inboxOf(INBOX_URI.exec(uri)[1]))
+  } catch {
+    return undefined
+  }
+}
+
+function pushIfChanged(uri, last) {
+  const now = inboxSnapshot(uri)
+  if (now === undefined || now === last) return
+  inboxWatch.set(uri, now)
+  send({ method: 'notifications/resources/updated', params: { uri } })
+}
+
+// The board is re-read here: another seat's server process may have written it.
+function checkInboxes() {
+  for (const [uri, last] of inboxWatch) pushIfChanged(uri, last)
+}
+
+function startInboxPolling() {
+  if (inboxTimer !== null) return
+  inboxTimer = setInterval(checkInboxes, INBOX_POLL_MS)
+  inboxTimer.unref()
+}
+
+function stopInboxPolling() {
+  if (inboxTimer === null) return
+  clearInterval(inboxTimer)
+  inboxTimer = null
+}
+
+
+function subscribeInbox(id, uri) {
+  if (!INBOX_URI.test(uri ?? '')) return fail(id, INVALID_PARAMS, `unknown resource: ${uri}`)
+  inboxWatch.set(uri, inboxSnapshot(uri))
+  startInboxPolling()
+  return reply(id, {})
+}
+
+function unsubscribeInbox(uri) {
+  inboxWatch.delete(uri)
+  if (inboxWatch.size === 0) stopInboxPolling()
+}
+
+const INBOX_METHODS = new Set([
+  'resources/templates/list', 'resources/subscribe', 'resources/unsubscribe',
+])
+
+/** Handles the inbox methods; returns nothing, replies or fails itself. */
+function inboxMethod(id, method, params) {
+  if (method === 'resources/templates/list') {
+    return reply(id, { resourceTemplates: INBOX_TEMPLATES })
+  }
+  if (method === 'resources/subscribe') return subscribeInbox(id, params.uri)
+  unsubscribeInbox(params.uri)
+  return reply(id, {})
+}
+
 let nextRequestId = 1
 const pending = new Map()
+
+function initializeMethod(id, params) {
+  const wanted = params.protocolVersion
+  reply(id, {
+    protocolVersion: SUPPORTED.includes(wanted) ? wanted : SUPPORTED[0],
+    capabilities: { tools: {}, resources: { subscribe: true }, prompts: {} },
+    serverInfo: { name: PKG.name, version: PKG.version },
+    instructions: INSTRUCTIONS,
+  })
+  handle.clientHasRoots = params.capabilities?.roots !== undefined
+}
+
+function callTool(id, params) {
+  const tool = TOOLS.find(t => t.name === params.name)
+  if (!tool) return fail(id, INVALID_PARAMS, `unknown tool: ${params.name}`)
+  try {
+    const args = params.arguments ?? {}
+    if (typeof args !== 'object' || Array.isArray(args)) {
+      throw new Error('arguments must be an object')
+    }
+    reply(id, text(tool.run(args)))
+  } catch (error) {
+    reply(id, { isError: true, content: [{ type: 'text', text: error.message }] })
+  }
+}
+
+function toolMethod(id, method, params) {
+  if (method === 'tools/list') {
+    reply(id, { tools: TOOLS.map(({ run, ...tool }) => tool) })
+    return true
+  }
+  if (method !== 'tools/call') return false
+  callTool(id, params)
+  return true
+}
+
+function readResource(id, params) {
+  const dynamic = dynamicResource(params.uri)
+  if (dynamic) return reply(id, { contents: [dynamic] })
+  const resource = RESOURCES.find(r => r.uri === params.uri)
+  if (!resource) return fail(id, UNKNOWN_RESOURCE, `unknown resource: ${params.uri}`)
+  const text = fs.readFileSync(path.join(PACKAGE_ROOT, resource.file), 'utf8')
+  reply(id, { contents: [{ uri: resource.uri, mimeType: resource.mimeType, text }] })
+}
+
+function resourceMethod(id, method, params) {
+  if (INBOX_METHODS.has(method)) {
+    inboxMethod(id, method, params)
+  } else if (method === 'resources/list') {
+    reply(id, { resources: RESOURCES.map(({ file, ...r }) => r) })
+  } else if (method === 'resources/read') {
+    readResource(id, params)
+  } else {
+    return false
+  }
+  return true
+}
+
+function promptMethod(id, method, params) {
+  if (method === 'prompts/list') {
+    reply(id, { prompts: PROMPTS.map(({ build, ...p }) => p) })
+    return true
+  }
+  if (method !== 'prompts/get') return false
+  const prompt = PROMPTS.find(p => p.name === params.name)
+  if (!prompt) {
+    fail(id, INVALID_PARAMS, `unknown prompt: ${params.name}`)
+    return true
+  }
+  const content = { type: 'text', text: prompt.build(params.arguments ?? {}) }
+  const messages = [{ role: 'user', content }]
+  reply(id, { description: prompt.description, messages })
+  return true
+}
+
+const FAMILIES = [toolMethod, resourceMethod, promptMethod]
 
 function handle(message) {
   const { id, method, params = {} } = message
@@ -977,46 +1207,11 @@ function handle(message) {
     return
   }
   try {
-    if (method === 'initialize') {
-      const wanted = params.protocolVersion
-      reply(id, {
-        protocolVersion: SUPPORTED.includes(wanted) ? wanted : SUPPORTED[0],
-        capabilities: { tools: {}, resources: {}, prompts: {} },
-        serverInfo: { name: PKG.name, version: PKG.version },
-        instructions: INSTRUCTIONS,
-      })
-      handle.clientHasRoots = params.capabilities?.roots !== undefined
-    } else if (method === 'notifications/initialized') {
-      if (handle.clientHasRoots) requestRoots()
-    } else if (method === 'notifications/roots/list_changed') {
-      requestRoots()
-    } else if (method === 'ping') {
-      reply(id, {})
-    } else if (method === 'tools/list') {
-      reply(id, { tools: TOOLS.map(({ run, ...tool }) => tool) })
-    } else if (method === 'tools/call') {
-      const tool = TOOLS.find(t => t.name === params.name)
-      if (!tool) return fail(id, -32602, `unknown tool: ${params.name}`)
-      try {
-        const args = params.arguments ?? {}
-        if (typeof args !== 'object' || Array.isArray(args)) throw new Error('arguments must be an object')
-        reply(id, text(tool.run(args)))
-      } catch (error) {
-        reply(id, { isError: true, content: [{ type: 'text', text: error.message }] })
-      }
-    } else if (method === 'resources/list') {
-      reply(id, { resources: RESOURCES.map(({ file, ...r }) => r) })
-    } else if (method === 'resources/read') {
-      const resource = RESOURCES.find(r => r.uri === params.uri)
-      if (!resource) return fail(id, -32002, `unknown resource: ${params.uri}`)
-      reply(id, { contents: [{ uri: resource.uri, mimeType: resource.mimeType, text: fs.readFileSync(path.join(PACKAGE_ROOT, resource.file), 'utf8') }] })
-    } else if (method === 'prompts/list') {
-      reply(id, { prompts: PROMPTS.map(({ build, ...p }) => p) })
-    } else if (method === 'prompts/get') {
-      const prompt = PROMPTS.find(p => p.name === params.name)
-      if (!prompt) return fail(id, -32602, `unknown prompt: ${params.name}`)
-      reply(id, { description: prompt.description, messages: [{ role: 'user', content: { type: 'text', text: prompt.build(params.arguments ?? {}) } }] })
-    } else if (isRequest) {
+    if (method === 'initialize') initializeMethod(id, params)
+    else if (method === 'notifications/initialized') { if (handle.clientHasRoots) requestRoots() }
+    else if (method === 'notifications/roots/list_changed') requestRoots()
+    else if (method === 'ping') reply(id, {})
+    else if (!FAMILIES.some(f => f(id, method, params)) && isRequest) {
       fail(id, -32601, `method not found: ${method}`)
     }
   } catch (error) {

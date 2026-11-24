@@ -27,7 +27,7 @@ goal board ([board.md](board.md)):
 |------|--------------|--------------|
 | `handoff_send` | the sending seat (`caller` = its agent hash) | checks the payload with the validator and records it on the board |
 | `handoff_route` | Orchestration | picks the receiving seat and its team for an unrouted hand-off |
-| `handoff_inbox` | the receiving seat | lists the handoffs addressed to it that are not done |
+| `devops://inbox/<agent>` (resource) | the receiving seat | reads its hand-offs, work and unread threads |
 | `handoff_ack` | the addressee | acknowledges a handoff it has read |
 | `handoff_close` | the addressee | marks the handoff done once its work is finished |
 
