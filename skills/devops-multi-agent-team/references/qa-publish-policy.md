@@ -15,6 +15,13 @@ feedback fix outside the exceptions in "Review-bot feedback" below is
 gated instead by an independent Reviewer's Satisfied, the
 repository's CI and the human's go.
 
+**Human override.** The human's push authorization overrides every other
+rule, including the QA PASS requirement above. The human may bypass any
+other rule, and a human override is always executed, never refused or paused
+for another seat. Every override is recorded on the board and in the event log
+with: the human's exact words or typed command, the tree it applies to, and the
+rule it overrode. An override applies to the named tree only, and to one push.
+
 **Human is final.** Saying `push` in chat is the same as
 `/devops push-ok`. That authorization must be done: the Orchestrator
 pushes when the human says so, and must not refuse or pause
