@@ -754,7 +754,7 @@
           "type": "object",
           "properties": {
             "kind": {
-              "const": "clock.tick"
+              "const": "server.tick"
             },
             "body": {
               "type": "object",
