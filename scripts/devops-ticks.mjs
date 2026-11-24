@@ -2,10 +2,14 @@
 // a state object; the caller persists it with devops-store.mjs.
 import { updateJson } from './devops-store.mjs'
 
+const ITEMS_PER_TICK = 3
+const MINUTES_PER_TICK = 15
+const TICKS_PER_SPRINT = 10
+
 export const TICK_CONFIG = Object.freeze({
-  itemsPerTick: 3,
-  minutesPerTick: 15,
-  ticksPerSprint: 10,
+  itemsPerTick: ITEMS_PER_TICK,
+  minutesPerTick: MINUTES_PER_TICK,
+  ticksPerSprint: TICKS_PER_SPRINT,
 })
 
 const MINUTE_MS = 60000
@@ -32,7 +36,8 @@ export function recordCompletion(state, { nowMs, config = TICK_CONFIG }) {
   const lastMs = next.tick_started_ms[String(next.tick)] ?? nowMs
   const due = next.completed_since_tick >= config.itemsPerTick
     || nowMs - lastMs >= config.minutesPerTick * MINUTE_MS
-  return due ? { state: advanceTick(next, nowMs, config), ticked: true } : { state: next, ticked: false }
+  if (!due) return { state: next, ticked: false }
+  return { state: advanceTick(next, nowMs, config), ticked: true }
 }
 
 /** Advances one tick unconditionally; rolls the sprint over at its last tick. */
