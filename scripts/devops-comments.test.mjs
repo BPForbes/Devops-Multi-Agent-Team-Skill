@@ -338,3 +338,8 @@ test('a line comment inside a block comment does not hide its closer', () => {
   const dir = repo({ 'e.go': `${head}${long}\n}\n` })
   assert.ok(rules(commentAudit(dir, { staged: true })).includes('long-code-line'))
 })
+
+test('a new doc names its new system with a docs-new marker, no docs row needed', () => {
+  const dir = repo({ 'docs/queue.md': lines('<!-- docs-new: job queue -->', '# Queue', '', 'Workers pull from one queue.') })
+  assert.ok(!rules(commentAudit(dir, { staged: true })).includes('new-doc'))
+})

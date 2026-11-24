@@ -588,13 +588,17 @@ function longCodeLines(rows, limits, syntax, interior) {
     })
 }
 
+const NEW_DOC_MARK = /docs-new:\s*\S/
+
 function docFindings(file, rows, { created, docs }) {
   const out = rows.filter(row => NARRATIVE.test(unquoted(row.text)))
     .map(row => blockingIssue(file, row.line, 'narrative', SAY.docNarrative))
   const entry = (docs ?? []).find(e => e.file === file)
   const first = rows[0].line
   if (docs && !entry) out.push(blockingIssue(file, first, 'unlisted-doc', SAY.unlistedDoc))
-  const named = typeof entry?.new === 'string' && entry.new.trim() !== ''
+  // A new doc names its new system in its first lines: <!-- docs-new: <system> -->.
+  const declared = rows.slice(0, 10).some(row => NEW_DOC_MARK.test(row.text))
+  const named = declared || (typeof entry?.new === 'string' && entry.new.trim() !== '')
   if (created.has(file) && !named) out.push(blockingIssue(file, first, 'new-doc', SAY.newDoc))
   return out
 }

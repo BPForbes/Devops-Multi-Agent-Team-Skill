@@ -1,3 +1,4 @@
+<!-- docs-new: orchestrator (server, team lead, seat profile, envelopes; design only) -->
 # Orchestrator and management layer: design
 
 Status: design only. Nothing here is implemented. Stacked on PR 11

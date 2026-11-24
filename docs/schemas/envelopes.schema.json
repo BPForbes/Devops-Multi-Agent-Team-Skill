@@ -1,4 +1,5 @@
 {
+  "$comment": "docs-new: orchestrator envelopes (typed seat messages; JSON Schema), design only.",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://devops-multi-agent-team/schemas/envelopes.schema.json",
   "title": "Seat envelopes (version 1)",
