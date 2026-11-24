@@ -77,4 +77,4 @@ exist; the real branch stays clean until the work is approved.
 
 The Claude mod enforces the mechanical part at the tool layer: it refuses
 `git push`, `gh pr create|merge`, and branch creation until the human
-authorizes (`/devops push-ok` or chat "push"; same meaning).
+authorizes (typed `/devops push-ok` on that tree; chat words do not count).

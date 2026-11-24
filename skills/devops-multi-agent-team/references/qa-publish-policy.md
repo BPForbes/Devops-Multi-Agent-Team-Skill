@@ -23,7 +23,7 @@ parse the human's intent with no restrictions.
 
 The Claude mod enforces the mechanical part at the tool layer:
 `git push`, `gh pr create|merge` and branch creation are refused until
-the human has authorized (`/devops push-ok` or chat equivalent). A
+the human has authorized (typed `/devops push-ok` on that tree; chat words do not count). A
 human authorization alone is enough for that one push (see the
 README, "The mod").
 
