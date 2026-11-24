@@ -2,6 +2,7 @@
 // Pure rules: commit work within each seat's capacity, compare committed work
 // with what finished, and turn retro actions into owned backlog items.
 import { openSprint } from './devops-ticks.mjs'
+import { isItemId, isJob, mintItemId } from './devops-ids.mjs'
 
 const RETRO_POINTS = 1
 
@@ -64,24 +65,36 @@ export function reviewSprint({ committed, items, owners }) {
   }
 }
 
+/** The job a retro item is routed to: the action's own job, else its owner's. */
+function routedJob(action, seat) {
+  if (isJob(action.job)) return action.job
+  return seat.jobs[0] ?? null
+}
+
 /**
- * Turns retro actions into backlog items. An action with no owner, or no
- * text, is refused; an owned action becomes a queued item with that owner.
+ * Turns retro actions into backlog items. An action needs text, an owner who
+ * is a seat, and a job it can be routed to; an action with no valid id gets a
+ * minted one. Anything else is refused with a reason.
  */
 export function retroActionItems({ actions, goal, seats }) {
-  const known = new Set(seats.map(seat => seat.agent))
+  const bySeat = new Map(seats.map(seat => [seat.agent, seat]))
   const items = []
   const refused = []
   for (const action of actions) {
-    if (!known.has(action.owner)) {
-      refused.push({ id: action.id, reason: 'an action needs an owner who is a seat' })
-    } else if (typeof action.text !== 'string' || action.text.trim() === '') {
+    const seat = bySeat.get(action.owner)
+    const job = seat ? routedJob(action, seat) : null
+    if (typeof action.text !== 'string' || action.text.trim() === '') {
       refused.push({ id: action.id, reason: 'an action needs text' })
+    } else if (!seat) {
+      refused.push({ id: action.id, reason: 'an action needs an owner who is a seat' })
+    } else if (job === null) {
+      refused.push({ id: action.id, reason: `${seat.agent} has no job to route the action to` })
     } else {
       items.push({
-        id: action.id,
+        id: isItemId(action.id) ? action.id : mintItemId(),
         goal,
         owner: action.owner,
+        job,
         state: 'queued',
         points: RETRO_POINTS,
         acceptance: [action.text],
