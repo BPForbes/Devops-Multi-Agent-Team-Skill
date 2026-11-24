@@ -210,11 +210,12 @@ test('a project\'s own wording replaces the default sentence', async ($, on) => 
   assert.ok(!String(section?.text).includes('DEFAULT PROMPT'))
 })
 
-test('a PASS on another tree is refused even when push-ok was typed', async ($, on) => {
+test('push-ok overrides a missing QA PASS and records the override', async ($, on) => {
   const state = engine(on, `Publish gate: PASS\ntree: ${'b'.repeat(40)}\n`)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', true)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push' })
-  expect(refused.isError ?? refused.deny).toBeTruthy()
-  expect(state.get('pushAuthorized')).toBe(true)
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push' })
+  expect(allowed.isError).not.toBe(true)
+  expect((state.get('lastOverride') as { tree: string }).tree).toBe(TREE)
+  expect(state.get('pushAuthorized')).toBe(false)
 })

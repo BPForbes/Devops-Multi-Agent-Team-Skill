@@ -412,21 +412,21 @@ export const register: Register = on => {
       }
     }
     if (actions.some(action => action.kind === 'publish')) {
-      // Rule 2: QA records PASS on the exact tree the push would send.
+      // Rule 1: only the person's typed /devops push-ok authorizes a push.
       const what = actions.find(a => a.kind === 'publish')?.what
-      const qa = await latestQaVerdict($)
-      const tree = await headTree($)
-      if (qa.verdict !== 'PASS' || tree === undefined || qa.tree !== tree) {
-        return {
-          deny: `${PLUGIN}: ${what} is refused: QA must record PASS on this exact tree `
-            + `(${tree ?? 'unknown'}). Latest QA note: ${qa.verdict ?? 'none'}, `
-            + `tree ${qa.tree ?? 'none'}.`,
-        }
-      }
-      // Rule 1: only the person's typed /devops push-ok authorizes it.
       const pushKey = { plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const
       if (!((await $.state.get(pushKey)).value ?? false)) {
         return { deny: `${PLUGIN}: ${what} is refused until the person types /devops push-ok.` }
+      }
+      // A human push authorization overrides QA PASS (qa-publish-policy). A missing
+      // PASS on this exact tree is recorded as the override, not silently skipped.
+      const qa = await latestQaVerdict($)
+      const tree = await headTree($)
+      if (qa.verdict !== 'PASS' || tree === undefined || qa.tree !== tree) {
+        const override = {
+          tree: tree ?? 'unknown', rule: 'qa-pass', qa: qa.verdict ?? 'none', at: new Date().toISOString(),
+        }
+        await $.state.set({ plugin: 'devops-multi-agent-team', key: 'lastOverride' } as const, override)
       }
       consumeAuthorization = true
     }
