@@ -64,6 +64,7 @@ Every payload has these fields, in this order:
   "from": { "job": "qa", "agent": "agent-0c0c0c", "team": "team-4d5e6f" },
   "to": { "job": "coder", "agent": "", "team": "team-1a2b3c" },
   "reason": "The lint gate still fails on the new branch",
+  "blame": { "agent": "agent-0a0a0a", "team": "team-1a2b3c" },
   "created": "2026-11-20T10:00:00Z"
 }
 ```

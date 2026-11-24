@@ -94,16 +94,26 @@ export function moveGoal(board, { goal, state, at }) {
   need(STATE_SET.has(state), `unknown state: ${state}`)
   const row = board.goals[goal]
   const from = row.state
-  const forward = GOAL_STATES.indexOf(state) === GOAL_STATES.indexOf(from) + 1
-  const unblock = from === 'blocked' && GOAL_STATES.includes(state)
-  need(
-    forward || state === 'blocked' || unblock,
-    `a goal moves one step at a time: ${from} -> ${state} is not allowed`,
-  )
   const next = structuredClone(board)
-  next.goals[goal].state = state
-  next.goals[goal].history.push({ at, event: 'state', from, to: state })
+  const target = next.goals[goal]
+  if (from === 'blocked') {
+    need(state === row.blocked_from, `a blocked goal resumes at ${row.blocked_from}, not ${state}`)
+  } else if (state === 'blocked') {
+    target.blocked_from = from
+  } else {
+    const forward = GOAL_STATES.indexOf(state) === GOAL_STATES.indexOf(from) + 1
+    need(forward, `a goal moves one step at a time: ${from} -> ${state} is not allowed`)
+  }
+  target.state = state
+  target.history.push({ at, event: 'state', from, to: state })
   return next
+}
+
+/** Goals on the board that belong to no sprint. */
+export function backlogView(board) {
+  return Object.entries(normalizeBoard(board).goals)
+    .filter(([, g]) => !g.sprint)
+    .map(([goal, g]) => ({ goal, title: g.title, state: g.state }))
 }
 
 /**

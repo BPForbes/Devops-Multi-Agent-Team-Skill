@@ -24,8 +24,8 @@ import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, p
 import { buildMindMap, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree } from '../scripts/devops-mindmap.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
 import {
-  allowSameTeam, ackHandoff, addGoal, blameFor, closeHandoff, createSprint, emptyBoard,
-  GOAL_STATES, inboxFor,
+  allowSameTeam, ackHandoff, addGoal, backlogView, blameFor, closeHandoff, createSprint,
+  emptyBoard, GOAL_STATES, inboxFor,
   moveGoal, normalizeBoard, openThread, replyThread, resolveThread, routeHandoff, sendHandoff,
   sprintView, threadsFor,
 } from '../scripts/devops-board.mjs'
@@ -57,6 +57,20 @@ const INSTRUCTIONS = [
 ].join(' ') + '\n\n' + SETUP_SCRIPT
 
 let clientRoots = []
+
+// When DEVOPS_SEAT is set, this server acts only for that seat.
+const BOUND_SEAT = process.env.DEVOPS_SEAT
+
+/** Refuses a tool call that names another seat. Returns true when it refused. */
+function refuseForeignSeat(message) {
+  if (message.method !== 'tools/call') return false
+  const args = message.params?.arguments ?? {}
+  const claimed = args.caller ?? args.agent
+  if (!BOUND_SEAT || claimed === undefined || claimed === BOUND_SEAT) return false
+  const error = `this server is bound to ${BOUND_SEAT}; it cannot act as ${claimed}`
+  reply(message.id, { isError: true, content: [{ type: 'text', text: error }] })
+  return true
+}
 
 function allowedRoots() {
   const fromEnv = (process.env.DEVOPS_MCP_ROOTS ?? '').split(path.delimiter).filter(Boolean)
@@ -734,7 +748,10 @@ const TOOLS = [
       const board = readBoard(args)
       if (args.sprint !== undefined) return { goals: sprintView(board, args.sprint) }
       const sprints = Object.keys(board.sprints)
-      return { sprints: Object.fromEntries(sprints.map(id => [id, sprintView(board, id)])) }
+      return {
+        sprints: Object.fromEntries(sprints.map(id => [id, sprintView(board, id)])),
+        backlog: backlogView(board),
+      }
     },
   },
   {
@@ -1039,7 +1056,7 @@ export function serve(input = process.stdin) {
         fail(null, -32700, 'parse error')
         continue
       }
-      handle(message)
+      if (!refuseForeignSeat(message)) handle(message)
     }
   })
   input.on('end', () => process.exit(0))
