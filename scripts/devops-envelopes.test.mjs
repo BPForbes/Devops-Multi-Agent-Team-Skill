@@ -134,11 +134,11 @@ test('an artifact path that climbs out of the repo is refused', () => {
     ...VALID['handoff.triage'],
     kind: 'coder-to-review',
     to: { job: 'reviewer', agent: '', team: 'team-4d5e6f' },
-    blame: undefined,
   }
   delete climbing.blame
-  const result = validateEnvelope({ ...climbing, artifacts: {
+  const artifacts = {
     branch: 'feature/x', commit: 'a'.repeat(40), tree: 'b'.repeat(40), files: ['../secrets'],
-  } })
+  }
+  const result = validateEnvelope({ ...climbing, artifacts })
   assert.equal(result.ok, false)
 })
