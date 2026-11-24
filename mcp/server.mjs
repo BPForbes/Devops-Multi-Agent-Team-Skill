@@ -31,6 +31,10 @@ import {
   threadsFor, unreadThreads, workInbox, backlogView,
 } from '../scripts/devops-board.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
+import { isTeamId } from '../scripts/devops-ids.mjs'
+import {
+  needsAttention, openBoard, teamIntake, teamMove, teamSignOff,
+} from '../scripts/devops-teams.mjs'
 
 const PKG = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'))
 const SUPPORTED = ['2025-06-18', '2025-03-26', '2024-11-05']
@@ -124,10 +128,10 @@ const GOAL_STATE = {
  * The board file's path inside the project. Refuses a symbolic link on the way,
  * so a read or write cannot be redirected outside the project.
  */
-function boardFile(args) {
+function boardFile(args, rel = BOARD_FILE) {
   const root = fs.realpathSync(projectDir(args))
   let at = root
-  for (const part of BOARD_FILE.split(path.sep)) {
+  for (const part of rel.split(path.sep)) {
     at = path.join(at, part)
     if (fs.existsSync(at) && fs.lstatSync(at).isSymbolicLink()) {
       throw new Error(`refusing to use a symbolic link for the board: ${at}`)
@@ -144,6 +148,41 @@ function readBoard(args) {
     if (error.code === 'ENOENT') return emptyBoard()
     throw error
   }
+}
+
+const TEAM_DIR = path.join('.devops', 'teams')
+
+/** A team's own board file, under the project's teams folder. */
+function teamFile(args) {
+  if (!isTeamId(args.team)) throw new Error('team must look like team-<hex>')
+  return boardFile(args, path.join(TEAM_DIR, `${args.team}.json`))
+}
+
+function boardOrThrow(current, team) {
+  if (current === null) throw new Error(`${team} has no board yet: open it with team_board_open`)
+  return current
+}
+
+/** Applies one change to a team's board under its lock. `change` returns { board, ...result }. */
+function teamChange(args, change) {
+  let result
+  updateJson(teamFile(args), null, current => {
+    const { board, ...rest } = change(current)
+    result = rest
+    return board
+  })
+  return result
+}
+
+function readTeam(args) {
+  let text
+  try {
+    text = fs.readFileSync(teamFile(args), 'utf8')
+  } catch (error) {
+    if (error.code === 'ENOENT') return boardOrThrow(null, args.team)
+    throw error
+  }
+  return boardOrThrow(JSON.parse(text), args.team)
 }
 
 /** Applies one change to the board and saves it. `change` returns { board, ...result }. */
@@ -938,6 +977,129 @@ const TOOLS = [
     run: args => boardChange(args, board => ({
       board: completeWork(board, { id: args.id, agent: args.agent, at: now() }),
     })),
+  },
+  {
+    name: 'team_board_open',
+    description: "Open a team's own board; the lead is its manager. Refused if it exists.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        team: { type: 'string' },
+        caller: { type: 'string' },
+        members: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { agent: { type: 'string' }, role: { type: 'string' } },
+            required: ['agent', 'role'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['team', 'caller', 'members'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => teamChange(args, current => {
+      if (current !== null) throw new Error(`${args.team} already has a board`)
+      const opened = openBoard({ team: args.team, members: args.members })
+      if (!opened.ok) throw new Error(opened.reason)
+      const lead = opened.board.members.find(m => m.role === 'manager')
+      if (lead.agent !== args.caller) throw new Error('only the lead may open the board')
+      return { board: opened.board, team: args.team, members: opened.board.members }
+    }),
+  },
+  {
+    name: 'team_item_add',
+    description: "Add a work item to a team's own board. Only a member of that team may add.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        team: { type: 'string' },
+        caller: { type: 'string' },
+        item: { type: 'string' },
+        goal: { type: 'string' },
+        job: { type: 'string' },
+        acceptance: { type: 'array', items: { type: 'string' } },
+        points: { type: 'integer' },
+      },
+      required: ['team', 'caller', 'item', 'goal', 'job', 'acceptance', 'points'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => teamChange(args, current => {
+      const body = {
+        item: args.item,
+        goal: args.goal,
+        job: args.job,
+        acceptance: args.acceptance,
+        points: args.points,
+      }
+      const result = teamIntake(boardOrThrow(current, args.team), args.caller, body)
+      if (!result.ok) throw new Error(result.reason)
+      return { board: result.board, item: result.item }
+    }),
+  },
+  {
+    name: 'team_item_move',
+    description: "Move an item on the team's board as the caller's role; the rules apply.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        team: { type: 'string' },
+        caller: { type: 'string' },
+        item: { type: 'string' },
+        to: { type: 'string' },
+      },
+      required: ['team', 'caller', 'item', 'to'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => teamChange(args, current => {
+      const result = teamMove(boardOrThrow(current, args.team), args.caller, args)
+      if (!result.ok) throw new Error(result.reason)
+      return { board: result.board, item: args.item, to: args.to }
+    }),
+  },
+  {
+    name: 'team_item_signoff',
+    description: "Sign off an item in review on the team's board. Security members only.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, team: { type: 'string' }, caller: { type: 'string' }, item: { type: 'string' },
+      },
+      required: ['team', 'caller', 'item'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => teamChange(args, current => {
+      const result = teamSignOff(boardOrThrow(current, args.team), args.caller, args)
+      if (!result.ok) throw new Error(result.reason)
+      return { board: result.board, item: args.item, signedOff: true }
+    }),
+  },
+  {
+    name: 'needs_attention',
+    description: [
+      "The team lead's view of what needs a decision:",
+      'blocked or failed items, and items waiting on security or the human.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { dest, team: { type: 'string' }, caller: { type: 'string' } },
+      required: ['team', 'caller'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    run: args => {
+      const view = needsAttention(readTeam(args), args.caller)
+      if (!view.ok) throw new Error(view.reason)
+      return view
+    },
   },
 ]
 

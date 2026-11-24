@@ -66,7 +66,9 @@ test('initialize negotiates, lists 34 tools, prompts and resources', async () =>
     for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_overview', 'mindmap_tree', 'mindmap_note', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
     const added = ['lint_check', 'lint_commands', 'config_get', 'config_set']
     for (const name of added) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 53)
+    assert.equal(tools.length, 58)
+    const teamTools = ['team_board_open', 'team_item_add', 'team_item_move', 'team_item_signoff']
+    for (const name of [...teamTools, 'needs_attention']) assert.ok(tools.includes(name), name)
     const writers = (await c.rpc('tools/list')).result.tools.filter(t => t.name === 'install_devops_team')
     assert.equal(writers[0].annotations.destructiveHint, false)
     assert.ok((await c.rpc('prompts/list')).result.prompts.some(p => p.name === 'setup_project'))
@@ -439,5 +441,53 @@ test('only Orchestration, not a bound seat, may allow a same-team review', async
   })
   assert.equal(refused.isError, true)
   assert.match(refused.text, /only Orchestration/)
+  c.close()
+})
+
+test('a team keeps its own board; nothing closes without security sign-off', async () => {
+  const root = tmp()
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  const team = 'team-1a2b3c'
+  const members = [
+    { agent: 'agent-lead', role: 'manager' },
+    { agent: 'agent-dev', role: 'assignee' },
+    { agent: 'agent-rev', role: 'reviewer' },
+    { agent: 'agent-qa', role: 'qa' },
+    { agent: 'agent-sec', role: 'security' },
+    { agent: 'agent-srv', role: 'server' },
+    { agent: 'agent-hum', role: 'human' },
+  ]
+  const call = (name, args) => c.call(name, { dest: root, team, ...args })
+  const move = (caller, item, to) => call('team_item_move', { caller, item, to })
+  assert.equal((await call('team_board_open', { caller: 'agent-dev', members })).isError, true)
+  assert.equal((await call('team_board_open', { caller: 'agent-lead', members })).isError, false)
+  assert.equal((await call('team_board_open', { caller: 'agent-lead', members })).isError, true)
+  const body = { goal: 'goal-7f0a12', job: 'coder', acceptance: ['tests pass'], points: 3 }
+  const add = (caller, item) => call('team_item_add', { caller, item, ...body })
+  assert.equal((await add('agent-x', 'item-0000a1')).isError, true)
+  for (const item of ['item-0000a1', 'item-0000a2']) {
+    assert.equal((await add('agent-dev', item)).isError, false)
+  }
+  const path = [
+    ['agent-srv', 'assigned'], ['agent-dev', 'in_progress'], ['agent-dev', 'in_review'],
+    ['agent-rev', 'in_qa'], ['agent-qa', 'in_security'],
+  ]
+  for (const item of ['item-0000a1', 'item-0000a2']) {
+    for (const [caller, to] of path) assert.equal((await move(caller, item, to)).isError, false, to)
+  }
+  const signoff = (caller, item) => call('team_item_signoff', { caller, item })
+  assert.equal((await signoff('agent-dev', 'item-0000a1')).isError, true)
+  assert.equal((await signoff('agent-sec', 'item-0000a1')).isError, false)
+  assert.equal((await move('agent-sec', 'item-0000a1', 'ready_for_human')).isError, false)
+  const done1 = await move('agent-hum', 'item-0000a1', 'done')
+  assert.equal(done1.isError, false, 'signed off, so it can close')
+  assert.equal((await move('agent-sec', 'item-0000a2', 'ready_for_human')).isError, false)
+  const refused = await move('agent-hum', 'item-0000a2', 'done')
+  assert.equal(refused.isError, true)
+  assert.match(refused.text, /security sign-off/)
+  const notLead = await call('needs_attention', { caller: 'agent-dev' })
+  assert.equal(notLead.isError, true, 'only the lead')
+  const view = (await call('needs_attention', { caller: 'agent-lead' })).json()
+  assert.deepEqual(view.attention.map(a => [a.id, a.kind]), [['item-0000a2', 'awaiting_human']])
   c.close()
 })

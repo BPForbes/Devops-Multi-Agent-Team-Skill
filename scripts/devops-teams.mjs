@@ -5,7 +5,9 @@
 import { admit, securitySignOff, transition } from './devops-items.mjs'
 
 export const LEAD_ROLE = 'manager'
-export const MEMBER_ROLES = Object.freeze(['assignee', 'reviewer', 'qa', 'security', 'manager'])
+export const MEMBER_ROLES = Object.freeze([
+  'assignee', 'reviewer', 'qa', 'security', 'manager', 'server', 'human',
+])
 
 const roleOf = (board, caller) => board.members.find(m => m.agent === caller)?.role ?? null
 const notOn = (board, caller) => ({ ok: false, reason: `${caller} is not on ${board.team}` })
