@@ -468,12 +468,14 @@ test('a team keeps its own board; nothing closes without security sign-off', asy
   for (const item of ['item-0000a1', 'item-0000a2']) {
     assert.equal((await add('agent-dev', item)).isError, false)
   }
-  const path = [
+  const steps = [
     ['agent-srv', 'assigned'], ['agent-dev', 'in_progress'], ['agent-dev', 'in_review'],
     ['agent-rev', 'in_qa'], ['agent-qa', 'in_security'],
   ]
   for (const item of ['item-0000a1', 'item-0000a2']) {
-    for (const [caller, to] of path) assert.equal((await move(caller, item, to)).isError, false, to)
+    for (const [caller, to] of steps) {
+      assert.equal((await move(caller, item, to)).isError, false, to)
+    }
   }
   const signoff = (caller, item) => call('team_item_signoff', { caller, item })
   assert.equal((await signoff('agent-dev', 'item-0000a1')).isError, true)
@@ -485,7 +487,8 @@ test('a team keeps its own board; nothing closes without security sign-off', asy
   const refused = await move('agent-hum', 'item-0000a2', 'done')
   assert.equal(refused.isError, true)
   assert.match(refused.text, /security sign-off/)
-  const saved = JSON.parse(fs.readFileSync(path.join(root, '.devops', 'teams', `${team}.json`), 'utf8'))
+  const teamFile = path.join(root, '.devops', 'teams', `${team}.json`)
+  const saved = JSON.parse(fs.readFileSync(teamFile, 'utf8'))
   assert.equal(saved.refusals.at(-1).action, 'move', 'the refusal is kept on the team board')
   assert.equal(saved.refusals.at(-1).by, 'agent-hum')
   const notLead = await call('needs_attention', { caller: 'agent-dev' })

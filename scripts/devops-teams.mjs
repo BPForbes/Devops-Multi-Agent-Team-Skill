@@ -13,7 +13,7 @@ const roleOf = (board, caller) => board.members.find(m => m.agent === caller)?.r
 const notOn = (board, caller) => ({ ok: false, reason: `${caller} is not on ${board.team}` })
 
 /** A refused action: its reason, and the record the board keeps for audit. */
-function refused(board, caller, action, reason, detail = {}) {
+function refused(caller, action, reason, detail = {}) {
   return { ok: false, reason, refusal: { action, by: caller, reason, ...detail } }
 }
 
@@ -46,10 +46,10 @@ export function recordRefusal(board, refusal) {
 export function teamIntake(board, caller, body) {
   if (roleOf(board, caller) === null) return notOn(board, caller)
   const admitted = admit(body)
-  if (!admitted.ok) return refused(board, caller, 'intake', admitted.errors.join('; '))
+  if (!admitted.ok) return refused(caller, 'intake', admitted.errors.join('; '))
   const { item } = admitted
   if (board.items.some(i => i.id === item.id)) {
-    return refused(board, caller, 'intake', `${item.id} is already on ${board.team}`)
+    return refused(caller, 'intake', `${item.id} is already on ${board.team}`)
   }
   const placed = { ...item, team: board.team }
   return { ok: true, board: { ...board, items: [...board.items, placed] }, item: placed.id }
@@ -61,10 +61,10 @@ export function teamMove(board, caller, { item, to }) {
   if (role === null) return notOn(board, caller)
   const current = board.items.find(i => i.id === item)
   if (current === undefined) {
-    return refused(board, caller, 'unknown-item', `${item} is not on ${board.team}`, { item })
+    return refused(caller, 'unknown-item', `${item} is not on ${board.team}`, { item })
   }
   const moved = transition(current, to, role)
-  if (!moved.ok) return refused(board, caller, 'move', moved.reason, { item, to })
+  if (!moved.ok) return refused(caller, 'move', moved.reason, { item, to })
   const items = board.items.map(i => (i.id === item ? moved.item : i))
   return { ok: true, board: { ...board, items } }
 }
@@ -75,10 +75,10 @@ export function teamSignOff(board, caller, { item }) {
   if (role === null) return notOn(board, caller)
   const current = board.items.find(i => i.id === item)
   if (current === undefined) {
-    return refused(board, caller, 'unknown-item', `${item} is not on ${board.team}`, { item })
+    return refused(caller, 'unknown-item', `${item} is not on ${board.team}`, { item })
   }
   const signed = securitySignOff(current, { agent: caller, role })
-  if (!signed.ok) return refused(board, caller, 'signoff', signed.reason, { item })
+  if (!signed.ok) return refused(caller, 'signoff', signed.reason, { item })
   const items = board.items.map(i => (i.id === item ? signed.item : i))
   return { ok: true, board: { ...board, items } }
 }
