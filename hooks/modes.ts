@@ -150,9 +150,11 @@ const SPECS: ModeSpec[] = [
     modes: ['planning', 'daily', 'refinement', 'review', 'retro'],
     defaultMode: 'daily',
     skill: 'Scrum meetings on the board, held by the team lead (scrum-meetings.md)',
-    tools: ['meeting_schedule', 'meeting_hold'],
+    tools: ['meeting_schedule', 'meeting_hold', 'goal_signoff', 'report_forward'],
     behavior: [
-      'The team lead schedules (meeting_schedule) and holds (meeting_hold) each meeting.',
+      'Each team lead, whatever the team\'s job, schedules (meeting_schedule) and holds',
+      '  (meeting_hold) its team\'s meetings, and signs goals off as done (goal_signoff),',
+      '  which reports to Orchestration; Orchestration reports to the person (report_forward).',
       'planning: sprint goal, backlog goals chosen, tasks per goal (2 h per sprint week).',
       'daily: done, today and blockers per developer (15 minutes).',
       'refinement: size and order upcoming goals. review: demo Done goals, take feedback.',

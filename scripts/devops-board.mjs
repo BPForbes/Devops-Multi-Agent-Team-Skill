@@ -36,6 +36,7 @@ export function emptyBoard() {
     reads: {},
     meetings: {},
     allocations: {},
+    reports: {},
   }
 }
 
@@ -43,7 +44,7 @@ export function emptyBoard() {
 export function normalizeBoard(board) {
   return {
     blame: [], threads: {}, exceptions: [], assignments: {}, reads: {},
-    meetings: {}, allocations: {},
+    meetings: {}, allocations: {}, reports: {},
     ...board,
   }
 }
@@ -86,9 +87,29 @@ export function createSprint(board, { name, at, mint, weeks = 1 }) {
  * Puts a goal from goal memory on the board and in a sprint (or the backlog
  * when sprint is empty). A goal already on the board moves to the new sprint.
  */
+/** True when `allocation` lists `goal`, built or judged there. */
+const listsGoal = (allocation, goal) => allocation.teams
+  .some(t => (t.goals ?? []).includes(goal) || (t.judged_goals ?? []).includes(goal))
+
+/** The open sprint whose allocation lists `goal`, or undefined; it holds the goal. */
+export function allocatedSprintOf(board, goal) {
+  return Object.entries(board.allocations ?? {})
+    .find(([sprint, allocation]) => board.sprints?.[sprint]?.status !== 'closed'
+      && listsGoal(allocation, goal))?.[0]
+}
+
+/** True when any allocation, open or closed, has listed `goal`: it is done only by sign-off. */
+export function everAllocated(board, goal) {
+  return Object.values(board.allocations ?? {}).some(allocation => listsGoal(allocation, goal))
+}
+
 export function addGoal(board, { goal, title, sprint = '', state = 'backlog', at }) {
   need(isGoalId(goal), `not a goal hash: ${goal}`)
-  need(STATE_SET.has(state) && state !== 'blocked', `bad starting state: ${state}`)
+  const starts = STATE_SET.has(state) && state !== 'blocked' && state !== 'done'
+  need(starts, `bad starting state: ${state}`)
+  const allocated = allocatedSprintOf(board, goal)
+  need(allocated === undefined || sprint === allocated,
+    `${goal} belongs to sprint ${allocated}'s allocation; it stays there`)
   const next = structuredClone(board)
   if (sprint !== '') need(next.sprints[sprint] !== undefined, `unknown sprint: ${sprint}`)
   for (const row of Object.values(next.sprints)) {
@@ -110,6 +131,8 @@ export function addGoal(board, { goal, title, sprint = '', state = 'backlog', at
 /** Moves a goal to a new state. Forward by one step, or to `blocked`, or back from `blocked`. */
 export function moveGoal(board, { goal, state, at }) {
   need(isGoalId(goal) && board.goals[goal] !== undefined, `goal is not on the board: ${goal}`)
+  need(state !== 'done' || !everAllocated(board, goal),
+    `${goal} is in a sprint's allocation: only its team lead's sign-off marks it done`)
   need(STATE_SET.has(state), `unknown state: ${state}`)
   const row = board.goals[goal]
   const from = row.state

@@ -48,11 +48,11 @@ function checkOrder(kinds, kind) {
   }
 }
 
-/** The authoring teams the sprint's allocation names, with their leads. */
+/** Every team the sprint's allocation names, authoring and judging, with its lead. */
 function allocatedTeams(next, sprint) {
   const allocation = next.allocations[sprint]
   need(allocation !== undefined, `sprint ${sprint} has no allocation; spin up the board first`)
-  return allocation.teams.filter(t => t.authors !== null)
+  return allocation.teams
 }
 
 /** Refuses a sprint that does not exist or is closed. */
@@ -71,7 +71,7 @@ export function scheduleMeeting(board, { sprint, team, kind, lead, at, mint }) {
   need(MEETING_KINDS.includes(kind), `meeting kind is one of ${MEETING_KINDS.join(', ')}`)
   need(isTeamId(team) && isAgentId(lead), 'a meeting names a team hash and its lead')
   const row = allocatedTeams(next, sprint).find(t => t.team === team)
-  need(row !== undefined, `team ${team} has no work in this sprint's allocation`)
+  need(row !== undefined, `team ${team} is not in this sprint's allocation`)
   need(row.lead === lead, `only ${team}'s lead (${row.lead}) runs its meetings`)
   const id = mintId('meeting', next.meetings, mint)
   need(MEETING_RE.test(id), 'bad meeting id')
@@ -94,15 +94,25 @@ function planning(next, meeting, record) {
   need(filled(record.sprintGoal), 'Sprint Planning sets a sprint goal')
   const chosen = record.goals
   need(nonEmpty(chosen), 'Sprint Planning chooses one backlog goal or more')
-  const own = allocatedTeams(next, meeting.sprint).find(t => t.team === meeting.team).goals ?? []
+  const seat = allocatedTeams(next, meeting.sprint).find(t => t.team === meeting.team)
+  const own = [...(seat.goals ?? []), ...(seat.judged_goals ?? [])]
   for (const g of chosen) {
-    need(isGoalId(g) && next.goals[g]?.sprint === '', `${g} is not a backlog goal`)
-    need(own.includes(g), `${g} is another team's stream; plan this team's own goals`)
+    const where = next.goals[g]?.sprint
+    need(isGoalId(g) && (where === '' || where === meeting.sprint), `${g} is not a backlog goal`)
+    need(own.includes(g), `${g} is not this team's work; plan the goals it builds or judges`)
   }
   checkTasks(record.tasks, chosen)
+  const judging = new Set(['reviewer', 'qa', 'security'])
+  for (const t of record.tasks) {
+    const judged = !(seat.goals ?? []).includes(t.goal)
+    need(!judged || judging.has(t.job),
+      `${t.goal} is judged by this team: a ${t.job} task does not belong here`)
+  }
   let board = next
   const { sprint, held_at: at } = meeting
-  for (const goal of chosen) board = addGoal(board, { goal, sprint, at })
+  for (const goal of chosen.filter(g => board.goals[g].sprint !== sprint)) {
+    board = addGoal(board, { goal, sprint, at })
+  }
   const sprintGoal = record.sprintGoal.trim()
   const row = board.sprints[meeting.sprint]
   row.team_goals = { ...(row.team_goals ?? {}), [meeting.team]: sprintGoal }
@@ -167,10 +177,30 @@ function review(next, meeting, record) {
   return { board, record: { demo: [...demo], feedback, newGoals: added.map(g => g.goal) } }
 }
 
-/** True when every authoring team in the allocation has held its retrospective (this one counts). */
+/** True when every team in the allocation has held its retrospective (this one counts). */
 function allRetrosHeld(next, meeting) {
   return allocatedTeams(next, meeting.sprint)
     .every(t => t.team === meeting.team || held(next, meeting.sprint, t.team).includes('retro'))
+}
+
+/**
+ * Closes a sprint: its unfinished goals go back to the backlog, in the backlog
+ * state so the next sprint judges them from the start, and its allocation no
+ * longer holds them, so a later sprint can plan them.
+ */
+function closeSprint(next, sprint, at) {
+  const row = next.sprints[sprint]
+  const unfinished = row.goals.filter(g => next.goals[g]?.state !== 'done')
+  for (const g of unfinished) {
+    const was = next.goals[g].state
+    // A return starts the review over: verdicts before it no longer count.
+    const judgedFrom = Object.keys(next.handoffs).length
+    Object.assign(next.goals[g], { sprint: '', state: 'backlog', judged_from: judgedFrom })
+    delete next.goals[g].blocked_from
+    next.goals[g].history.push({ at, event: 'returned', from: sprint, was, sprint: '' })
+  }
+  const kept = row.goals.filter(g => !unfinished.includes(g))
+  Object.assign(row, { status: 'closed', closed: at, goals: kept })
 }
 
 /** Sprint Retrospective: what went well, the bottlenecks, and the agreed improvements. */
@@ -182,9 +212,7 @@ function retro(next, meeting, record) {
     bottlenecks: texts(record.bottlenecks ?? [], 'bottlenecks'),
     actions,
   }
-  if (allRetrosHeld(next, meeting)) {
-    Object.assign(next.sprints[meeting.sprint], { status: 'closed', closed: meeting.held_at })
-  }
+  if (allRetrosHeld(next, meeting)) closeSprint(next, meeting.sprint, meeting.held_at)
   return { board: next, record: outcome }
 }
 
@@ -224,4 +252,113 @@ export function meetingsFor(board, { sprint, team }) {
     .filter(([, m]) => m.sprint === sprint && (team === undefined || m.team === team))
     .map(([id, m]) => ({ id, ...m }))
     .sort((a, b) => String(a.scheduled_at).localeCompare(String(b.scheduled_at)))
+}
+
+/** The index of the last hand-off of `kind` after `after` that passes `ok`, or -1. */
+function lastAt(list, kind, ok, after) {
+  const index = list.findLastIndex(h => h.payload.kind === kind && ok(h))
+  return index > after ? index : -1
+}
+
+/** Hand-offs that send work back for rework: verdicts before the last one no longer count. */
+const SEND_BACKS = new Set([
+  'triage', 'review-send-back', 'security-send-back', 'research-send-back',
+])
+
+/** Hand-offs that mark authors of the goal's work (the sender; for research, the coder too). */
+const AUTHORING = new Set(['coder-to-review', 'research-to-coder'])
+
+/**
+ * Refuses a sign-off unless, since the goal's last send-back or return to the
+ * backlog (whichever is later) and in this order,
+ * the goal was reviewed into the QA team the allocation names, that QA team
+ * handed it to its Security team, and that Security team's latest sign-off
+ * after the hand-off is clear. No verdict counts from a seat that ever
+ * authored the goal, in any sprint, or from its team lead, whatever team the
+ * seat names (teams are self-declared on a shared server).
+ */
+function checkVerdicts(next, sprint, goal) {
+  const teams = allocatedTeams(next, sprint)
+  const team = job => teams.find(t => (t[`${job}_goals`] ?? []).includes(goal))?.team
+  const [qa, security] = [team('qa'), team('security')]
+  need(qa !== undefined && security !== undefined,
+    `${goal} has no QA and Security team in the allocation`)
+  const all = Object.values(next.handoffs ?? {})
+  const ever = all.filter(h => h.payload.goal === goal)
+  // Authors stay authors across a return; only verdicts start over.
+  const authors = new Set(ever.filter(h => AUTHORING.has(h.payload.kind)).flatMap(h => [
+    h.payload.from?.agent, ...(h.payload.kind === 'research-to-coder' ? [h.payload.to?.agent] : []),
+  ]))
+  const owner = teams.find(t => (t.goals ?? []).includes(goal))?.lead
+  const independent = h => !authors.has(h.payload.from?.agent) && h.payload.from?.agent !== owner
+  const mine = all.slice(next.goals[goal].judged_from ?? 0).filter(h => h.payload.goal === goal)
+  const since = mine.slice(mine.findLastIndex(h => SEND_BACKS.has(h.payload.kind)) + 1)
+  const at = (kind, from, to, after = -1) => since.findIndex((h, i) => i > after
+    && h.payload.kind === kind && h.payload.to?.team === to
+    && (from === undefined || h.payload.from?.team === from) && independent(h))
+  const reviewed = at('review-to-qa', undefined, qa)
+  need(reviewed !== -1, `${goal} has no review hand-off to QA (${qa}) since its last send-back`)
+  const handed = lastAt(since, 'qa-to-security', h => h.payload.from?.team === qa
+    && h.payload.to?.team === security && independent(h), reviewed)
+  need(handed !== -1,
+    `${goal} has no QA hand-off from ${qa} to Security (${security}) after its review`)
+  const latest = since.slice(handed + 1).filter(h => h.payload.kind === 'security-signoff').at(-1)
+  const clear = latest?.payload.result === 'clear' && latest.payload.from?.team === security
+    && independent(latest)
+  need(clear,
+    `${goal}'s latest Security sign-off after QA's hand-off must be clear, from ${security}`)
+}
+
+/**
+ * The team lead's sign-off that a goal is done for the team: only the lead of
+ * the team that builds the goal, and only once the goal has passed security
+ * (its last step). Moves the goal to done, records who signed, and files a
+ * done report to Orchestration. It is not the final word: Orchestration
+ * reports to the person, whose typed push-ok is the real final sign-off.
+ */
+export function leadSignOff(board, { sprint, goal, lead, at, mint }) {
+  const next = normalizeBoard(structuredClone(board))
+  openSprint(next, sprint)
+  const row = allocatedTeams(next, sprint).find(t => (t.goals ?? []).includes(goal))
+  need(row !== undefined, `${goal} is not built by a team in this sprint's allocation`)
+  need(row.lead === lead, `only ${row.team}'s lead (${row.lead}) signs ${goal} off as done`)
+  const target = next.goals[goal]
+  need(target?.sprint === sprint, `${goal} is not in this sprint`)
+  need(target.state === 'security', `${goal} must pass security first (it is ${target.state})`)
+  checkVerdicts(next, sprint, goal)
+  Object.assign(target, { state: 'done', done_by: lead, done_at: at })
+  target.history.push({ at, event: 'lead_signoff', by: lead, from: 'security', to: 'done' })
+  const id = mintId('report', next.reports, mint)
+  next.reports[id] = {
+    sprint, goal, team: row.team, lead, signed_at: at, state: 'to_orchestration',
+  }
+  return { id, board: next }
+}
+
+/** Done reports by where they stand: `to_orchestration` (from a lead) or `to_person`. */
+export function reportsFor(board, { state } = {}) {
+  return Object.entries(normalizeBoard(board).reports)
+    .filter(([, r]) => state === undefined || r.state === state)
+    .map(([id, r]) => ({ id, ...r }))
+}
+
+/**
+ * Orchestration passes the leads' done reports on to the person, with its
+ * summary. The person's typed /devops push-ok on the exact tree, after QA PASS
+ * and Security CLEAR, stays the real final sign-off; this only tells them.
+ */
+export function forwardReports(board, { sprint, ids, summary, at }) {
+  const next = normalizeBoard(structuredClone(board))
+  need(next.sprints[sprint] !== undefined, `unknown sprint: ${sprint}`)
+  need(Array.isArray(ids) && ids.length > 0, 'forward one done report or more')
+  need(String(summary ?? '').trim() !== '', 'a report to the person needs a summary')
+  for (const id of ids) {
+    const row = next.reports[id]
+    need(row !== undefined, `unknown report: ${id}`)
+    need(row.state === 'to_orchestration', `report ${id} was already passed to the person`)
+    need(row.sprint === sprint,
+      `report ${id} belongs to ${row.sprint}; forward one sprint at a time`)
+    Object.assign(row, { state: 'to_person', forwarded_at: at, summary: summary.trim() })
+  }
+  return next
 }

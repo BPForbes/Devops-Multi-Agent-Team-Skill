@@ -8,7 +8,6 @@ const ASSIGNEE = 'assignee'
 const REVIEWER = 'reviewer'
 const QA = 'qa'
 const SECURITY = 'security'
-const HUMAN = 'human'
 const MANAGER = 'manager'
 
 // Every state the manager may escalate to blocked from (design: "any").
@@ -43,7 +42,7 @@ const MOVES = Object.freeze(withEscalation({
   in_review: { in_qa: [REVIEWER], in_progress: [REVIEWER] },
   in_qa: { in_security: [QA], in_progress: [QA] },
   in_security: { ready_for_human: [SECURITY], in_progress: [SECURITY] },
-  ready_for_human: { done: [HUMAN] },
+  ready_for_human: { done: [MANAGER] },
   done: {},
 }))
 

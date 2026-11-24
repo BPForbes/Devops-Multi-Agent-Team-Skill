@@ -34,7 +34,7 @@ import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 import { isTeamId } from '../scripts/devops-ids.mjs'
 import { RISKS, planAllocation, spinUp } from '../scripts/devops-allocation.mjs'
 import {
-  MEETING_KINDS, holdMeeting, meetingsFor, scheduleMeeting,
+  MEETING_KINDS, forwardReports, holdMeeting, leadSignOff, meetingsFor, reportsFor, scheduleMeeting,
 } from '../scripts/devops-scrum.mjs'
 import {
   needsAttention, openBoard, recordRefusal, teamIntake, teamMove, teamSignOff,
@@ -985,7 +985,7 @@ const TOOLS = [
         name: { type: 'string' },
         weeks: WEEKS,
         goals: { type: 'object', description: 'stream name -> goal hash' },
-        teams: { type: 'object', description: 'plan team (A1, J1, ...) -> { team, lead }' },
+        teams: { type: 'object', description: 'plan team (A1, R1, Q1, S1, ...) -> { team, lead }' },
       },
       required: ['research', 'name', 'goals', 'teams'],
       additionalProperties: false,
@@ -1041,6 +1041,55 @@ const TOOLS = [
         record: args.record, at: now(),
       }),
     })),
+  },
+  {
+    name: 'goal_signoff',
+    description: [
+      "The team lead's sign-off that a goal is done for the team: only the lead (`caller`) of",
+      'the team that builds it, once it has passed security. Files a done report to',
+      "Orchestration, which reports to the person; the person's typed push-ok stays",
+      'the final sign-off.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, sprint: { type: 'string' }, goal: { type: 'string' },
+      },
+      required: ['caller', 'sprint', 'goal'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => leadSignOff(board, {
+      sprint: args.sprint, goal: args.goal, lead: args.caller, at: now(),
+    })),
+  },
+  {
+    name: 'report_forward',
+    description: [
+      "Orchestration only: pass the team leads' done reports on to the person with a summary.",
+      "The person's typed /devops push-ok, after QA PASS and Security CLEAR, is the",
+      'final sign-off.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        sprint: { type: 'string' },
+        ids: { type: 'array', items: { type: 'string' }, minItems: 1 },
+        summary: { type: 'string', maxLength: MAX_TASK_TEXT },
+      },
+      required: ['sprint', 'ids', 'summary'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      if (BOUND_SEAT) throw new Error('only Orchestration reports to the person')
+      return boardChange(args, board => ({
+        board: forwardReports(board, {
+          sprint: args.sprint, ids: args.ids, summary: args.summary, at: now(),
+        }),
+      }))
+    },
   },
   {
     name: 'board_allow_same_team',
@@ -1321,6 +1370,12 @@ const INBOX_TEMPLATES = [
     mimeType: 'application/json',
   },
   {
+    uriTemplate: 'devops://reports',
+    name: 'Done reports',
+    description: "Team leads' done reports: waiting for Orchestration, and passed to the person.",
+    mimeType: 'application/json',
+  },
+  {
     uriTemplate: 'devops://meetings/{sprint}',
     name: 'Sprint meetings',
     description: "A sprint's allocation and its teams' meetings (scheduled and held).",
@@ -1355,6 +1410,10 @@ const RESOURCE_PATTERNS = [
     blame: blameFor(readBoard({}), { goal }),
   })],
   [/^devops:\/\/board$/, () => boardView(readBoard({}))],
+  [/^devops:\/\/reports$/, () => ({
+    toOrchestration: reportsFor(readBoard({}), { state: 'to_orchestration' }),
+    toPerson: reportsFor(readBoard({}), { state: 'to_person' }),
+  })],
   [/^devops:\/\/meetings\/(sprint-[0-9a-f]{6})$/, sprint => {
     const board = readBoard({})
     const allocation = board.allocations?.[sprint] ?? null

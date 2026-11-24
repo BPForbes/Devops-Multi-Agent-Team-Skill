@@ -89,8 +89,13 @@ runs an allocation research step (at least one researcher), plans the
 teams and seats from it (`allocation_plan`), spins up the board
 (`board_spin_up`) and hands each team lead its Sprint Planning
 ([allocation-research.md](references/allocation-research.md),
-[scrum-meetings.md](references/scrum-meetings.md)). A one-file fix gets
-one Coder and one Reviewer, QA and Security from another team. The
+[scrum-meetings.md](references/scrum-meetings.md)). Every team lead,
+whatever the team's job, runs its team's meetings and signs its tasks
+off as done (`goal_signoff`), reporting to the Orchestrator, who reports
+to the person; the person's typed `/devops push-ok` is the real final
+sign-off before any push. A one-file fix gets
+one Coder and one Reviewer, QA and Security, each on its own team that
+wrote nothing. The
 ceiling is 2 to 3 seats of each of Researcher, Coder, Reviewer, QA and
 Security per team (a ceiling not a quota; cost and conflicts decide). A seat that
 finished its role may take another job on a *different* item, keeping

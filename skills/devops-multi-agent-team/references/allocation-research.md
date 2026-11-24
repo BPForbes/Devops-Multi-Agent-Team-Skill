@@ -36,12 +36,14 @@ comes with its reason:
 
 - **Teams.** Streams that depend on each other, directly or through
   others, share one authoring team; independent streams get their own.
-  No team judges work it wrote. There is always a judging team, `J1`,
-  that authors nothing: with one authoring team it reviews, QAs and
-  security-checks that team's work; with more, each authoring team
-  reviews the next one's items as their diffs land, and `J1` gives the
-  final QA PASS and Security CLEAR on the combined tree, which every
-  team wrote.
+  No team judges work it wrote, and every judging hand-off crosses a
+  team boundary, so each judging job has its own small team that
+  authors nothing: `R1` reviews when there is one authoring team (with
+  more, each authoring team reviews the next one's items as their diffs
+  land), `Q1` gives the final QA PASS and `S1` the final Security CLEAR
+  on the combined tree, which every authoring team wrote. A one-file fix
+  is still four seats: one Coder and one each of Reviewer, QA and
+  Security.
 - **Points per stream.** Files (1 is 0 points, up to 5 is 1, up to 15 is
   2, up to 40 is 3, more is 4), each extra module or language (at most
   2), each risk (at most 2), unknowns (1) and a new surface (1).
@@ -52,9 +54,9 @@ comes with its reason:
 - **Reviewers.** One per coder, so each item is reviewed as its diff
   lands.
 - **QA.** One, plus one per stream whose cause is not known yet (on
-  `J1` with several teams, summed and capped).
+  `Q1`, summed over the teams and capped).
 - **Security.** One, plus one per stream that touches auth, security,
-  the gate or payments (on `J1` with several teams, summed and capped).
+  the gate or payments (on `S1`, summed over the teams and capped).
 - No job goes past 3 seats on one team (the ceiling in
   [department-pods.md](department-pods.md)).
 
@@ -71,11 +73,17 @@ team hash and lead (the team's manager seat) per team, then calls
 1. opens the sprint (`weeks`, 1 to 4);
 2. puts each stream on the backlog as a goal;
 3. records the allocation on the board (`devops://meetings/<sprint>`);
-4. schedules each authoring team's Sprint Planning with its lead.
+4. schedules every team's Sprint Planning with its lead, the judging
+   teams' too.
 
 That scheduled Sprint Planning is the hand-off to the team lead. Only an
 unbound server (Orchestration) may spin up the board, and only the lead
-the allocation names may run a team's meetings. The lead opens the
+the allocation names may run a team's meetings. Every team has a lead,
+whatever its job: an authoring team's lead plans the goals it builds,
+a judging team's lead plans the goals it judges. The team lead signs a goal off as
+done and reports it to Orchestration, which reports to the person; the
+person's typed push-ok is the final sign-off
+([scrum-meetings.md](scrum-meetings.md)). The lead opens the
 team's own board (`team_board_open`) and holds the planning
 ([scrum-meetings.md](scrum-meetings.md)).
 

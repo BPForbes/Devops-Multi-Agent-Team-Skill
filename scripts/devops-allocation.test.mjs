@@ -8,14 +8,17 @@ import {
 
 const AT = '2026-11-24T10:00:00Z'
 
-test('a one-file fix gets one coder, judged by a separate team of one of each judge', () => {
+test('a one-file fix: one coder, then one reviewer, QA and Security, each on its own team', () => {
   const plan = planAllocation({ task: 'Fix the typo', streams: [{ name: 'readme', files: 1 }] })
-  assert.deepEqual(plan.teams.map(t => t.name), ['A1', 'J1'])
+  assert.deepEqual(plan.teams.map(t => t.name), ['A1', 'R1', 'Q1', 'S1'])
   assert.equal(plan.teams[0].authors.coder, 1)
   assert.equal(plan.teams[0].authors.researcher, 0)
-  assert.equal(plan.teams[1].authors, null)
-  const judges = plan.teams[1].judges.map(j => [j.of, j.reviewer, j.qa, j.security])
-  assert.deepEqual(judges, [[['A1'], 1, 1, 1]])
+  for (const judge of plan.teams.slice(1)) assert.equal(judge.authors, null, judge.name)
+  const seats = j => [j.of, j.reviewer, j.qa, j.security]
+  const judges = plan.teams.slice(1).map(t => t.judges.map(seats))
+  assert.deepEqual(judges, [[[['A1'], 1, 0, 0]], [[['A1'], 0, 1, 0]], [[['A1'], 0, 0, 1]]])
+  const four = { teams: 4, researcher: 0, coder: 1, reviewer: 1, qa: 1, security: 1 }
+  assert.deepEqual(plan.totals, four)
 })
 
 test('dependent streams share a team; the others get their own and judge each other', () => {
@@ -29,17 +32,17 @@ test('dependent streams share a team; the others get their own and judge each ot
   })
   const authored = plan.teams.filter(t => t.authors !== null).map(t => t.authors.streams)
   assert.deepEqual(authored, [['api', 'client'], ['docs']])
-  assert.deepEqual(plan.teams.map(t => t.name), ['A1', 'A2', 'J1'])
+  assert.deepEqual(plan.teams.map(t => t.name), ['A1', 'A2', 'Q1', 'S1'])
   const judged = plan.teams.map(t => t.judges.map(j => j.of))
-  assert.deepEqual(judged, [[['A2']], [['A1']], [['A1', 'A2']]])
-  const final = plan.teams[2].judges[0]
-  assert.equal(plan.teams[2].authors, null, 'J1 authors nothing')
-  assert.equal(final.reviewer, 0)
-  assert.equal(final.security, 3, 'one, plus auth, for A1; one for A2')
+  assert.deepEqual(judged, [[['A2']], [['A1']], [['A1', 'A2']], [['A1', 'A2']]])
+  const [qa, security] = [plan.teams[2].judges[0], plan.teams[3].judges[0]]
+  assert.equal(plan.teams[3].authors, null, 'S1 authors nothing')
+  assert.deepEqual([qa.reviewer, qa.security, security.qa], [0, 0, 0])
+  assert.equal(security.security, 3, 'one, plus auth, for A1; one for A2')
   const api = plan.teams[0]
   assert.equal(api.authors.coder, 2)
   assert.equal(api.authors.researcher, 1)
-  assert.equal(plan.teams[1].judges[0].qa, 0, 'final QA comes from J1')
+  assert.equal(plan.teams[1].judges[0].qa, 0, 'final QA comes from Q1')
   assert.ok(api.authors.reasons.some(r => r.startsWith('api: ')))
 })
 
@@ -86,10 +89,12 @@ test('the plan overlaps the work; the verdicts stay in order: QA, Security, push
 test('spin-up opens the sprint, backlogs each stream, and hands each lead its planning', () => {
   const plan = planAllocation({ task: 'Fix', streams: [{ name: 'parser', files: 2 }] })
   let n = 0
-  const mint = () => ['aaaaaa', 'bbbbbb'][n++]
+  const mint = () => ['aaaaaa', 'bbbbbb', 'cccccc', 'dddddd', 'eeeeee'][n++]
   const teams = {
     A1: { team: 'team-a1a1a1', lead: 'agent-a1a1a1' },
-    J1: { team: 'team-b2b2b2', lead: 'agent-b2b2b2' },
+    R1: { team: 'team-b2b2b2', lead: 'agent-b2b2b2' },
+    Q1: { team: 'team-c3c3c3', lead: 'agent-c3c3c3' },
+    S1: { team: 'team-d4d4d4', lead: 'agent-d4d4d4' },
   }
   const up = spinUp(emptyBoard(), plan, {
     name: 'Sprint 1', weeks: 2, goals: { parser: 'goal-111111' }, teams, at: AT, mint,
@@ -97,11 +102,14 @@ test('spin-up opens the sprint, backlogs each stream, and hands each lead its pl
   assert.equal(up.sprint, 'sprint-aaaaaa')
   assert.equal(up.board.sprints[up.sprint].weeks, 2)
   assert.equal(up.board.goals['goal-111111'].sprint, '', 'the stream waits on the backlog')
-  const planning = { id: 'meeting-bbbbbb', team: 'team-a1a1a1', lead: 'agent-a1a1a1' }
-  assert.deepEqual(up.meetings, [planning])
+  assert.deepEqual(up.meetings.map(m => m.team), Object.values(teams).map(t => t.team))
   assert.equal(up.board.meetings['meeting-bbbbbb'].state, 'scheduled')
-  assert.equal(up.board.allocations[up.sprint].teams.length, 2)
-  assert.deepEqual(up.board.allocations[up.sprint].teams.map(t => t.goals), [['goal-111111'], []])
+  const record = up.board.allocations[up.sprint].teams
+  assert.deepEqual(record.map(t => t.goals), [['goal-111111'], [], [], []])
+  const by = job => record.map(t => t[job])
+  assert.deepEqual(by('review_goals'), [[], ['goal-111111'], [], []])
+  assert.deepEqual(by('qa_goals'), [[], [], ['goal-111111'], []])
+  assert.deepEqual(by('security_goals'), [[], [], [], ['goal-111111']])
   const missing = { name: 'S', goals: {}, teams, at: AT }
   assert.throws(() => spinUp(emptyBoard(), plan, missing), /needs a goal hash/)
 })
@@ -112,5 +120,5 @@ test('with several teams, final QA and Security come from a team that wrote noth
   const writers = plan.teams.filter(t => t.authors !== null).map(t => t.name)
   const finals = plan.teams.flatMap(t => t.judges.filter(j => j.qa > 0 || j.security > 0)
     .map(j => ({ team: t.name, of: j.of })))
-  assert.deepEqual(finals, [{ team: 'J1', of: writers }])
+  assert.deepEqual(finals, [{ team: 'Q1', of: writers }, { team: 'S1', of: writers }])
 })

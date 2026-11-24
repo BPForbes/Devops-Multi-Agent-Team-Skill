@@ -121,9 +121,9 @@ function judgeSeats(group, authors) {
  * Plans teams and seats from allocation research: { task, streams: [{ name,
  * files, modules, languages, risks, unknowns, newSurface, dependsOn }] }.
  * Each group of dependent streams gets one authoring team. Another authoring
- * team reviews its items; J1, a team that authored nothing, gives the final QA
- * and Security on the combined tree (and the review too when there is only one
- * authoring team). Returns { teams, totals, parallel }.
+ * team reviews its items (R1, a team that authors nothing, when there is only
+ * one); Q1 gives the final QA and S1 the final Security on the combined tree,
+ * each a team that authored nothing. Returns { teams, totals, parallel }.
  */
 export function planAllocation(research) {
   checkResearch(research)
@@ -133,39 +133,40 @@ export function planAllocation(research) {
     return { name: `A${i + 1}`, authors, group, seats: judgeSeats(group, authors) }
   })
   const teams = authoring.map(({ name, authors }) => ({ name, authors, judges: [] }))
-  const final = { name: 'J1', authors: null, judges: [] }
-  teams.push(final)
+  const review = ({ name, seats }) => ({
+    of: [name], reviewer: seats.reviewer, qa: 0, security: 0, reasons: seats.reasons.slice(0, 1),
+  })
   if (authoring.length === 1) {
-    const [{ name, seats }] = authoring
-    final.judges.push({ of: [name], ...seats })
+    teams.push({ name: 'R1', authors: null, judges: [review(authoring[0])] })
   } else {
-    authoring.forEach(({ name, seats }, i) => {
-      const reviewer = teams[(i + 1) % authoring.length]
-      const reasons = seats.reasons.slice(0, 1)
-      const review = { reviewer: seats.reviewer, qa: 0, security: 0, reasons }
-      reviewer.judges.push({ of: [name], ...review })
-    })
-    final.judges.push(finalVerdicts(authoring))
+    authoring.forEach((team, i) => teams[(i + 1) % authoring.length].judges.push(review(team)))
   }
+  teams.push({ name: 'Q1', authors: null, judges: [finalCheck(authoring, 'qa')] })
+  teams.push({ name: 'S1', authors: null, judges: [finalCheck(authoring, 'security')] })
   const task = String(research.task ?? '')
   return { task, teams, totals: totalsOf(teams), parallel: parallelPlan() }
 }
 
+/** Where each final check's reason sits in judgeSeats' reasons. */
+const REASON_AT = Object.freeze({ qa: 1, security: 2 })
+
 /**
- * The final QA and Security seats for several teams' work. QA PASS and
- * Security CLEAR are given on the combined tree, which holds every team's
- * streams, so they come from J1, a team that authored none of it.
+ * The final QA (Q1) or Security (S1) seats for every team's work. Both are
+ * given on the combined tree, which every authoring team wrote, so each comes
+ * from its own team that authored nothing, and QA hands over to Security
+ * across a team boundary, as every judging hand-off must.
  */
-function finalVerdicts(authoring) {
-  const sum = job => authoring.reduce((n, a) => n + a.seats[job], 0)
+function finalCheck(authoring, job) {
+  const seats = capped(authoring.reduce((n, a) => n + a.seats[job], 0))
+  const team = job === 'qa' ? 'Q1' : 'S1'
   return {
     of: authoring.map(a => a.name),
     reviewer: 0,
-    qa: capped(sum('qa')),
-    security: capped(sum('security')),
+    qa: job === 'qa' ? seats : 0,
+    security: job === 'security' ? seats : 0,
     reasons: [
-      'J1 gives the final QA PASS and Security CLEAR on the combined tree, which every team wrote',
-      ...authoring.flatMap(a => a.seats.reasons.slice(1).map(r => `${a.name} ${r}`)),
+      `${team} gives the final ${job === 'qa' ? 'QA PASS' : 'Security CLEAR'} on the combined tree`,
+      ...authoring.map(a => `${a.name} ${a.seats.reasons[REASON_AT[job]]}`),
     ],
   }
 }
@@ -217,11 +218,32 @@ function checkSpinUp(plan, { goals, teams }) {
   if (new Set(hashes).size !== hashes.length) throw new Error('each team needs its own team hash')
 }
 
+/** What the board keeps of a plan: each team's hash and lead, the goals it builds and judges. */
+function allocationRecord(plan, { goals, teams }) {
+  const streamsOf = name => plan.teams.find(p => p.name === name).authors.streams
+  const goalsFor = (t, job) => t.judges.filter(j => j[job] > 0)
+    .flatMap(j => j.of).flatMap(streamsOf).map(stream => goals[stream])
+  return {
+    task: plan.task,
+    teams: plan.teams.map(t => ({
+      name: t.name,
+      ...teams[t.name],
+      goals: (t.authors?.streams ?? []).map(stream => goals[stream]),
+      judged_goals: t.judges.flatMap(j => j.of).flatMap(streamsOf).map(stream => goals[stream]),
+      review_goals: goalsFor(t, 'reviewer'),
+      qa_goals: goalsFor(t, 'qa'),
+      security_goals: goalsFor(t, 'security'),
+      authors: t.authors,
+      judges: t.judges,
+    })),
+  }
+}
+
 /**
  * Spins up the board from a plan: opens the sprint, puts each stream on the
- * backlog as a goal, records the allocation, and hands each authoring team's
- * lead its Sprint Planning (scheduled, for the lead to hold). `goals` maps a
- * stream to its goal hash; `teams` maps a plan team (A1, J1) to { team, lead }.
+ * backlog as a goal, records the allocation, and hands every team's lead, the
+ * judging team's too, its Sprint Planning (scheduled, for the lead to hold). `goals` maps a
+ * stream to its goal hash; `teams` maps a plan team (A1, Q1, ...) to { team, lead }.
  * Returns { sprint, meetings, board }.
  */
 export function spinUp(board, plan, options) {
@@ -234,16 +256,9 @@ export function spinUp(board, plan, options) {
       next = addGoal(next, { goal: goals[stream], title: stream, at })
     }
   }
-  next.allocations[opened.id] = {
-    task: plan.task,
-    teams: plan.teams.map(t => ({
-      name: t.name, ...teams[t.name],
-      goals: (t.authors?.streams ?? []).map(stream => goals[stream]),
-      authors: t.authors, judges: t.judges,
-    })),
-  }
+  next.allocations[opened.id] = allocationRecord(plan, { goals, teams })
   const meetings = []
-  for (const t of plan.teams.filter(team => team.authors !== null)) {
+  for (const t of plan.teams) {
     const { team, lead } = teams[t.name]
     const planning = { sprint: opened.id, team, kind: 'planning', lead, at, mint }
     const made = scheduleMeeting(next, planning)
