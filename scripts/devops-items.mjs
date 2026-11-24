@@ -71,7 +71,24 @@ export function transition(item, to, actor, onRefuse = () => {}) {
     onRefuse({ item: item.id, from: item.state, to, actor, reason })
     return { ok: false, reason }
   }
+  if (to === 'done' && !item.security_signoff) {
+    const reason = `${item.id} needs security sign-off before it can be done`
+    onRefuse({ item: item.id, from: item.state, to, actor, reason })
+    return { ok: false, reason }
+  }
   return { ok: true, item: { ...item, state: to } }
+}
+
+/**
+ * Records security's sign-off on an item in security review. Only a security
+ * member may sign off, and only in in_security. Returns { ok, item | reason }.
+ */
+export function securitySignOff(item, { agent, role }) {
+  if (role !== 'security') return { ok: false, reason: 'only a security member may sign off' }
+  if (item.state !== 'in_security') {
+    return { ok: false, reason: `sign-off is given in in_security, not ${item.state}` }
+  }
+  return { ok: true, item: { ...item, security_signoff: { by: agent, role } } }
 }
 
 /** Checks a work item before it joins the board. Returns { ok, errors }. */

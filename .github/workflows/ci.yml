@@ -49,6 +49,7 @@ jobs:
           scripts/devops-meetings.test.mjs scripts/devops-sprint.test.mjs
           scripts/devops-help.test.mjs scripts/devops-digest.test.mjs
           scripts/devops-identity.test.mjs scripts/devops-sprint-e2e.test.mjs
+          scripts/devops-teams.test.mjs
           scripts/devops-board.test.mjs
           scripts/devops-mindmap.test.mjs mcp/server.test.mjs
 

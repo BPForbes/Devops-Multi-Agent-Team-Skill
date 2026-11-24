@@ -8,7 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { admit, transition } from './devops-items.mjs'
+import { admit, securitySignOff, transition } from './devops-items.mjs'
 import { assignPrimary, releaseExpired } from './devops-assign.mjs'
 import { buildDigest, digestDue } from './devops-digest.mjs'
 import { chainEvents, verifyChain } from './devops-identity.mjs'
@@ -38,6 +38,9 @@ const PATH_TO_DONE = [
 function walk(item, steps) {
   let current = item
   for (const [to, actor] of steps) {
+    if (to === 'ready_for_human') {
+      current = securitySignOff(current, { agent: 'agent-s', role: 'security' }).item
+    }
     const moved = transition(current, to, actor)
     assert.equal(moved.ok, true, `${to} by ${actor}: ${moved.reason}`)
     current = moved.item

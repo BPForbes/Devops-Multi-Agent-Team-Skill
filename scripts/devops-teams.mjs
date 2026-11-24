@@ -1,0 +1,88 @@
+// Per-team boards (design: sections 3 and 10). Each team keeps its own board:
+// an item lives on one team's board, and only that team's members can act on
+// it. Items cannot be done until security signs them off. Pure rules: the
+// caller persists the board.
+import { admit, securitySignOff, transition } from './devops-items.mjs'
+
+export const LEAD_ROLE = 'manager'
+export const MEMBER_ROLES = Object.freeze(['assignee', 'reviewer', 'qa', 'security', 'manager'])
+
+const roleOf = (board, caller) => board.members.find(m => m.agent === caller)?.role ?? null
+const notOn = (board, caller) => ({ ok: false, reason: `${caller} is not on ${board.team}` })
+
+/** Opens a team's board. The members must name a lead (a manager). */
+export function openBoard({ team, members }) {
+  if (!Array.isArray(members) || !members.some(m => m.role === LEAD_ROLE)) {
+    return { ok: false, reason: 'a team needs a manager member, its lead' }
+  }
+  const known = members.every(m => typeof m.agent === 'string' && MEMBER_ROLES.includes(m.role))
+  if (!known) return { ok: false, reason: 'every member needs an agent and a known role' }
+  const agents = members.map(m => m.agent)
+  if (new Set(agents).size !== agents.length) {
+    return { ok: false, reason: 'a member is listed twice' }
+  }
+  const board = { team, members: members.map(({ agent, role }) => ({ agent, role })), items: [] }
+  return { ok: true, board }
+}
+
+/** Adds a work item to this team's board. The caller must be a member. */
+export function teamIntake(board, caller, body) {
+  if (roleOf(board, caller) === null) return notOn(board, caller)
+  const admitted = admit(body)
+  if (!admitted.ok) return { ok: false, reason: admitted.errors.join('; ') }
+  const { item } = admitted
+  if (board.items.some(i => i.id === item.id)) {
+    return { ok: false, reason: `${item.id} is already on ${board.team}` }
+  }
+  const placed = { ...item, team: board.team }
+  return { ok: true, board: { ...board, items: [...board.items, placed] }, item: placed.id }
+}
+
+/** Moves an item as the caller's role. Refusals are returned with their reason. */
+export function teamMove(board, caller, { item, to }) {
+  const role = roleOf(board, caller)
+  if (role === null) return notOn(board, caller)
+  const current = board.items.find(i => i.id === item)
+  if (current === undefined) return { ok: false, reason: `${item} is not on ${board.team}` }
+  const moved = transition(current, to, role)
+  if (!moved.ok) return { ok: false, reason: moved.reason }
+  const items = board.items.map(i => (i.id === item ? moved.item : i))
+  return { ok: true, board: { ...board, items } }
+}
+
+/** Records security's sign-off on an item in review. Only a security member may. */
+export function teamSignOff(board, caller, { item }) {
+  const role = roleOf(board, caller)
+  if (role === null) return notOn(board, caller)
+  const current = board.items.find(i => i.id === item)
+  if (current === undefined) return { ok: false, reason: `${item} is not on ${board.team}` }
+  const signed = securitySignOff(current, { agent: caller, role })
+  if (!signed.ok) return { ok: false, reason: signed.reason }
+  const items = board.items.map(i => (i.id === item ? signed.item : i))
+  return { ok: true, board: { ...board, items } }
+}
+
+const ATTENTION = Object.freeze({
+  blocked: ['blocked', 'unblock it or move it to failed'],
+  failed: ['failed', 'send it back to the queue, or close it out'],
+  in_security: ['awaiting_signoff', 'security must sign it off before it can be done'],
+  ready_for_human: ['awaiting_human', 'the human marks it done'],
+})
+
+/**
+ * The team lead's view: what on this team's board needs a decision. Only the
+ * lead may read it. Returns { ok, attention } or { ok: false, reason }.
+ */
+export function needsAttention(board, caller) {
+  if (roleOf(board, caller) !== LEAD_ROLE) {
+    return { ok: false, reason: `only the ${board.team} lead may read needs-attention` }
+  }
+  const attention = []
+  for (const item of board.items) {
+    const entry = ATTENTION[item.state]
+    if (entry !== undefined) {
+      attention.push({ id: item.id, kind: entry[0], state: item.state, next: entry[1] })
+    }
+  }
+  return { ok: true, team: board.team, attention }
+}
