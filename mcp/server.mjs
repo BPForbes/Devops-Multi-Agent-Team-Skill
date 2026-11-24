@@ -170,7 +170,7 @@ function teamChange(args, change) {
     const { board, ...rest } = change(current)
     result = rest
     return board
-  })
+  }, UNFENCED)
   return result
 }
 
