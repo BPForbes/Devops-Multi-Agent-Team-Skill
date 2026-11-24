@@ -141,3 +141,12 @@ test('an item needs security sign-off to be done; only security signs off in rev
   const ready = transition(signed.item, 'ready_for_human', 'security')
   assert.equal(transition(ready.item, 'done', 'human').ok, true)
 })
+
+test('rework after a sign-off clears it, so the next review must sign off again', () => {
+  const signed = securitySignOff(itemIn('in_security'), { agent: 'agent-s', role: 'security' })
+  const back = transition(signed.item, 'in_progress', 'security')
+  assert.equal(back.ok, true)
+  assert.equal(back.item.security_signoff, undefined)
+  const again = transition(back.item, 'in_review', 'assignee')
+  assert.equal(again.ok, true)
+})

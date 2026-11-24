@@ -76,7 +76,11 @@ export function transition(item, to, actor, onRefuse = () => {}) {
     onRefuse({ item: item.id, from: item.state, to, actor, reason })
     return { ok: false, reason }
   }
-  return { ok: true, item: { ...item, state: to } }
+  const next = { ...item, state: to }
+  // Rework sends the item back to implementation: an earlier sign-off no longer
+  // covers the work, so it must be given again in the next review.
+  if (item.state === 'in_security' && to !== 'ready_for_human') delete next.security_signoff
+  return { ok: true, item: next }
 }
 
 /**
