@@ -896,16 +896,18 @@ const TOOLS = [
         agent: { type: 'string' },
         team: { type: 'string' },
         description: { type: 'string' },
-        by: { type: 'string' },
       },
-      required: ['goal', 'job', 'agent', 'team', 'description', 'by'],
+      required: ['goal', 'job', 'agent', 'team', 'description'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => assignWork(board, {
-      goal: args.goal, job: args.job, agent: args.agent, team: args.team,
-      description: args.description, by: args.by, at: now(),
-    })),
+    run: args => {
+      if (BOUND_SEAT) throw new Error('only Orchestration may assign work')
+      return boardChange(args, board => assignWork(board, {
+        goal: args.goal, job: args.job, agent: args.agent, team: args.team,
+        description: args.description, by: 'orchestration', at: now(),
+      }))
+    },
   },
   {
     name: 'work_accept',

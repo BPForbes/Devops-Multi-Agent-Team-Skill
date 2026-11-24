@@ -413,12 +413,17 @@ export function assignWork(board, { goal, job, agent, team, description, by, at,
   need(isAgentId(agent), `not an agent hash: ${agent}`)
   need(isTeamId(team), `not a team hash: ${team}`)
   need(String(description ?? '').trim() !== '', 'assigned work needs a description')
+  need(
+    by === 'orchestration' || isAgentId(by),
+    `assigned_by must be orchestration or an agent hash: ${by}`,
+  )
   if (JUDGING_JOBS.has(job) && !isExempt(board, goal, { team, agent, job })) {
     const authors = normalizeBoard(board).goals[goal].authors ?? []
     need(!authors.includes(team), `team ${team} authored this goal and cannot judge it`)
   }
   const next = normalizeBoard(structuredClone(board))
   const id = mintId('work', next.assignments, mint)
+  if (JUDGING_JOBS.has(job)) useException(next, goal, { team, agent, job }, { at, by: id })
   next.assignments[id] = {
     goal, job, agent, team, description: description.trim(), state: 'assigned',
     assigned_by: by, assigned_at: at, accepted_at: null, done_at: null,
