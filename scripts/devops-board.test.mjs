@@ -414,6 +414,28 @@ test('assigned work needs a goal on the board, a job, a team, and a description'
   assert.throws(() => assignWork(board, { ...base, job: 'pizza' }), /not a job/)
   assert.throws(() => assignWork(board, { ...base, team: 'pod-1' }), /not a team hash/)
   assert.throws(() => assignWork(board, { ...base, description: ' ' }), /needs a description/)
+  const stranger = { ...base, by: 'someone' }
+  assert.throws(() => assignWork(board, stranger), /orchestration or an agent hash/)
+  const made = assignWork(board, { ...base, by: 'orchestration', mint: () => '999999' })
+  assert.equal(made.board.assignments[made.id].assigned_by, 'orchestration')
+})
+
+test('a judging assignment binds the exception to that seat, which then gets its work', () => {
+  const work = {
+    goal: GOAL, job: 'qa', agent: QA, team: T_CODER,
+    description: 'QA it', by: 'orchestration', at: AT,
+  }
+  const first = assignWork(allowedBoard(), { ...work, mint: () => 'aaaaaa' })
+  assert.equal(first.board.exceptions[0].used_by, first.id)
+  assert.equal(first.board.exceptions[0].judge, QA)
+  const handed = reviewToSeat(first.board, { qaTeam: T_CODER, qaSeat: QA, mint: 'ddd111' })
+  assert.equal(handed.board.handoffs[handed.id].state, 'sent')
+  const otherSeat = { ...work, agent: 'agent-0e0e0e', mint: () => 'bbbbbb' }
+  assert.throws(() => assignWork(first.board, otherSeat), /authored this goal/)
+  for (const job of ['security', 'reviewer']) {
+    const otherJob = { ...work, job, mint: () => 'cccccc' }
+    assert.throws(() => assignWork(first.board, otherJob), /authored this goal/, job)
+  }
 })
 
 test('a judging job may not go to a team that authored the goal', () => {

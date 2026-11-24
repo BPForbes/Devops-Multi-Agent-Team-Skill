@@ -43,20 +43,22 @@ A team never judges an item it authored. The board enforces this:
 When resources are low, Orchestration may allow one same-team review with
 `board_allow_same_team`, which records a reason. The allowance covers only
 that goal and that team, and only one review: the first seat of that
-authoring team that judges the goal through it, in one job, on one item,
-uses it up (`used_at`, `used_by`, `judge`, `job`, `item` on the
-exception). That seat may finish its review: receive the work, pass it on
-or send it back. Another seat, another job (QA cannot also be Security)
-or another item needs a second allowance, and no seat may hand judging
-work to itself. An unrouted hand-off names no seat yet, so it
-uses nothing until it is routed. It
+authoring team that judges the goal through it, by a hand-off or a
+`work_assign`, in one job, on one item, uses it up (`used_at`, `used_by`,
+`judge`, `job`, `item` on the exception). That seat may finish its review:
+receive the work, pass it on or send it back. Another seat, another job
+(QA cannot also be Security) or another item needs a second allowance,
+and no seat may hand judging work to itself. An unrouted hand-off names
+no seat yet, so it uses nothing until it is routed. It
 does not change the authors.
 
 ## Assigned work
 
 Orchestration gives a seat a piece of work on a goal with `work_assign`:
 the seat's job (coder, reviewer, qa, security, ...), its agent and team hash,
-and a description of what it has to do. The seat sees its work with
+and a description of what it has to do. Only an unbound server
+(Orchestration) may call it, and the server records
+`assigned_by: "orchestration"` itself. The seat sees its work with
 `devops://work/<agent>`, accepts it with `work_accept`, and reports it done with
 `work_complete`. Only the assigned seat can accept or complete its work, and
 completing requires accepting first.

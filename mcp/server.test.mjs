@@ -350,7 +350,7 @@ test('a subscribed seat is pushed on new work, and can read its inbox', async ()
   assert.deepEqual(subscribed.result, {})
   await c.call('work_assign', {
     goal: 'goal-3c9e41', job: 'coder', agent: seat, team: 'team-1a2b3c',
-    description: 'Fix the parser', by: 'agent-0c0c0c',
+    description: 'Fix the parser',
   })
   const pushed = () => c.notes.some(
     n => n.method === 'notifications/resources/updated' && n.params.uri === uri,
@@ -424,6 +424,33 @@ test('the board is never written through a symbolic link out of the project', as
   assert.equal(refused.isError, true)
   assert.match(refused.text, /symbolic link/)
   assert.equal(fs.existsSync(path.join(outside, 'thoughts')), false)
+  c.close()
+})
+
+test('only Orchestration, not a bound seat, may assign work', async () => {
+  const root = tmp()
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root, DEVOPS_SEAT: 'agent-0a0a0a' } })
+  const refused = await c.call('work_assign', {
+    goal: 'goal-3c9e41', job: 'coder', agent: 'agent-0a0a0a', team: 'team-1a2b3c',
+    description: 'Fix the parser',
+  })
+  assert.equal(refused.isError, true)
+  assert.match(refused.text, /only Orchestration/)
+  c.close()
+})
+
+test('the server records Orchestration as the one who assigned the work', async () => {
+  const root = tmp()
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  await c.call('board_add_goal', { goal: 'goal-3c9e41', title: 'Lint gate' })
+  const assigned = await c.call('work_assign', {
+    goal: 'goal-3c9e41', job: 'coder', agent: 'agent-0a0a0a', team: 'team-1a2b3c',
+    description: 'Fix the parser',
+  })
+  assert.notEqual(assigned.isError, true, assigned.text)
+  const read = await c.rpc('resources/read', { uri: 'devops://work/agent-0a0a0a' })
+  const work = JSON.parse(read.result.contents[0].text)
+  assert.equal(work.work[0].assigned_by, 'orchestration')
   c.close()
 })
 
