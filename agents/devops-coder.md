@@ -120,7 +120,8 @@ Author of that item.
 When the work is through Security and you believe it is done, look for
 another member of your team first (not your lead; ask Orchestration
 only when none is free) to verify it before the lead signs. The verifier
-runs merge-ok then done (`goal_merge`, `goal_done`), or merge-deny with a
-reason to send it back. You may verify a teammate's goal the same way,
+types `/devops merge-ok GOAL` then `/devops done GOAL` (or uses
+`goal_merge`, `goal_done`), or `/devops merge-deny GOAL REASON` to send it
+back. Report a bug on a goal as a board thread with the topic `bug`. You may verify a teammate's goal the same way,
 never one you wrote. If your lead wrote the goal, a member other than
 the verifier signs the lead's step.

@@ -18,9 +18,10 @@ text. Do not stop development when `/devops` is given. Gate words
 `push-reset`, `gates`, `allow-branch`, `comments`, `monitor`,
 `config` writes, `setup claude`) run only when the person types them;
 free-form wording never changes a gate. `merge-ok`, `done` and `merge-deny REASON`
-typed by the person answer Orchestration's merge report (approve and grant
-the push, or send it back to the BA); a seat runs the same words on the
-board with `goal_merge` and `goal_done`. `/devops on|off` and
+typed by the person answer Orchestration's merge report (approve the named
+reports and grant the push, or send them back to the BA). A seat types the
+same words with a goal (`/devops merge-ok GOAL`) to run its own Done-chain
+step as its bound seat; that never grants a push. `/devops on|off` and
 `/devops enable|disable` turn the whole skill on or off (session +
 `.claude/settings.json` `enabledPlugins`). `/devops skill on|off NAME`
 and `/devops skills` manage `skillOverrides` (bare skill names).

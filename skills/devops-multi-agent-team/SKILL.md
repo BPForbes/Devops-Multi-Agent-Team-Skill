@@ -174,9 +174,10 @@ Clear does not authorize a push either.
   `disable`, `skill`, `skills`, `push-ok`, `push-reset`, `gates`,
   `allow-branch`, `comments`, `monitor`, `config` writes and
   `setup claude` run only as commands the person types. Typed by the
-  person, `merge-ok`, `done` and `merge-deny REASON` answer the merge
-  report; a seat runs them on the board with `goal_merge` and
-  `goal_done` instead. Person-typed
+  person, `push-ok REPORT...`, `merge-ok`, `done` and
+  `merge-deny REASON` answer the merge report; a seat types `merge-ok`,
+  `merge-deny` or `done` with a goal for its own step, which never
+  grants a push. Person-typed
   aliases (`push`, `go`, `publish`, chat `push` / `push it`) map onto
   `push-ok`. Agents cannot flip gates. One-shot `push-ok` takes no
   `on|off` parameter and is final (see Client authority).

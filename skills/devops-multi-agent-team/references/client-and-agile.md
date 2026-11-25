@@ -27,6 +27,13 @@ Reviewer, QA, Security, Business Analyst, and every other role).
   merge-ok, then done. The client's decision and the push are
   human-only; a denial goes back to the BA, who files the client's
   feedback as the new approach.
+- The Business Analyst is a wrapper around Orchestration: Orchestration
+  routes the work and the data, and the BA scans what the seats are doing
+  against the client's intentions, as needed, holds or denies a step when
+  it drifts, and carries the client's feedback back as goals.
+- The client approves merge reports by name (`/devops push-ok REPORT...`).
+  Each item stands on its own; only a declared dependency that is denied
+  or not yet approved holds it back.
 - The client's step on the board comes after the BA's two signatures and
   never replaces them. A client order to ship sooner is still obeyed at
   once: the push gate lets push-ok override a missing QA PASS or Security

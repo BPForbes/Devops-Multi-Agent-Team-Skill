@@ -53,10 +53,12 @@ by every agent on that pod:
   spawned onto that pod records the same team hash.
 - Used to block a pod from judging **its own pod's work**
   (Independence below).
-- Carried in every envelope: the header's `from.team` (set by the
-  server when the seat is bound with `DEVOPS_TEAM`), and the `from` and
-  `to` of every hand-off. A server bound with `DEVOPS_SEAT` and
-  `DEVOPS_TEAM` refuses a tool call that names another team.
+- Many agents belong to one team, so an agent hash is enough to name a
+  seat to others (the demo roster shows only the demoer's agent hash);
+  its team follows from the team board's members or the hand-offs. The
+  envelope header's optional `from.team` is set only when the seat is
+  bound with `DEVOPS_TEAM`, so the server can refuse a call under another
+  team; hand-offs keep `from.team` and `to.team`.
 
 ### 2. Agent hash
 

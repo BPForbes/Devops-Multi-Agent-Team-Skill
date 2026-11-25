@@ -103,10 +103,28 @@ is blocking the day and a 30-second terminal or browser run clears it.
 
 A goal goes Done through an ordered chain of signatures, each recorded
 on the goal (`signoffs`, plus a `<step>_signoff` history event). Every
-step's signer runs two words, in order: **merge-ok** (`goal_merge`,
-decision `ok`), then **done** (`goal_done`), which promotes the goal to
-the next signature. A signer who rejects the work runs **merge-deny**
-(`goal_merge`, decision `deny`) with a reason instead.
+step's signer runs two words, in order: **merge-ok**, then **done**,
+which promotes the goal to the next signature. A signer who rejects the
+work runs **merge-deny** with a reason instead. A role's approval is its
+sign-off: merge-ok and done are recorded as that role's signature.
+
+**Each seat types the command.** A seat types `/devops merge-ok GOAL`,
+`/devops merge-deny GOAL REASON` or `/devops done GOAL` for its own step
+(the BA's first `done` adds `--demoer AGENT` and one `--meets TEXT` per
+acceptance criterion). The hook runs it on the board as the seat the
+session was bound to (`DEVOPS_SEAT`, and `DEVOPS_TEAM`) through
+`scripts/devops-chain.mjs`; Orchestration routes the data from there. The
+same steps are the `goal_merge` and `goal_done` tools. A seat's typed
+word never grants a push: only words the person types (the composer
+origin) do, and a seat session without `DEVOPS_SEAT` is refused.
+
+**Signature envelopes.** Every signature item is one `chain.signature`
+envelope (`docs/schemas/envelopes.schema.json`, `Signature`) in the
+board's `signatures`: merge-ok and merge-deny (`ok`, `deny`), each done
+(`signed`), the BA's scan (step `scan`), Orchestration's merge report
+(step `report`, signer `orchestration`) and the client's decision (signer
+`client`). The goal's `signoffs`, `reviews` and `scans` point to their
+envelope (`sig`). Envelopes stay when a goal is reopened.
 
 **The BA scans as needed.** Every merge-ok pings the goal's Business
 Analyst (the one the building team named at Sprint Planning): the ping is
@@ -134,10 +152,15 @@ client's push-ok is not held by a scan.
    done report is filed as `awaiting_ba`. `goal_signoff` is this step's
    done on its own.
 3. **BA, first signature**: when a worthy item (usually a feature, not a
-   bug) can be demoed and is put on the sprint's **scheduled** Sprint
-   Review. The signature records the demo entry (`kind`: feature,
-   improvement or bug; optional `surface`). Report: `ba_signed`. The BA is
-   the one the building team named at its Sprint Planning.
+   bug) meets the client's expectations and can be demoed on the sprint's
+   **scheduled** Sprint Review. The goal must state its objective and
+   acceptance criteria, and the BA confirms each criterion (`meets`); the
+   check is recorded (`expectations`). The signature records the demo
+   entry (`kind`: feature, improvement or bug; the demoer's agent hash;
+   optional `surface`). Report: `ba_signed`. The BA is the one the
+   building team named at its Sprint Planning. Neither BA signature is
+   given while a bug is open on the goal: a board thread on it with the
+   topic `bug`.
 4. **Orchestration prepares** (`report_prepare`): Orchestration starts the
    merge presentation for the reports the BA signed. Report: `preparing`.
 5. **BA, second signature**: while Orchestration prepares the merge
@@ -145,12 +168,19 @@ client's push-ok is not held by a scan.
 6. **Merge report** (`report_forward`): Orchestration delivers the big
    picture: the real branch, how the work fits the overall design, the
    implementation summary and the risks. Report: `to_person`.
-7. **Client** (the person only): `/devops push-ok` (or chat `push`,
-   `/devops merge-ok`, `/devops done`) approves every merge report waiting
-   for it, signs the last step, and grants one push of the current tree
-   through the push gate. Report: `approved`. `/devops merge-deny REASON`
-   withdraws the push grant and sends the report back to the BA. Report:
-   `denied`.
+7. **Client** (the person only): `/devops push-ok REPORT...` (or
+   `merge-ok`, `done` with report ids) approves the named merge reports,
+   signs their last step, and grants one push of the current tree through
+   the push gate. Report: `approved`. When that push happens, each named
+   report records who pushed it, when, and the tree (`pushed_by`,
+   `pushed_at`, `pushed_tree`). An item is judged on its own: unrelated
+   reports, denied or unsigned, never block it. Only a goal it depends on
+   (`depends_on`, set from `dependsOn` at Refinement or Sprint Review) can:
+   a dependency that is denied or not yet approved refuses the approval
+   and grants no push. A bare push-ok (or chat `push`) still grants the
+   push and approves no report. `/devops merge-deny [REPORT...] REASON`
+   withdraws the push grant and sends the reports (all waiting ones when
+   none is named) back to the BA. Report: `denied`.
 8. **New approach** (`report_new_approach`): after a denial the BA, on
    standby, asks the client why if the reason is unclear, then turns the
    feedback into new backlog goals (objective, acceptance criteria,

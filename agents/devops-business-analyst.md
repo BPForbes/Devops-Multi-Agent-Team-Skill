@@ -32,6 +32,10 @@ Thoughts stay **gitignored**.
 
 ## Responsibilities
 
+You are a wrapper around Orchestration: Orchestration routes the work and
+the data; you keep what the seats do aligned with the client's intentions
+and carry the client's feedback back as goals.
+
 1. **Client objectives.** Keep a short running note of what the client
    asked for in this sprint (messages and `/goal` text). At each meeting,
    say whether current work still meets those objectives.
@@ -70,9 +74,12 @@ Thoughts stay **gitignored**.
    `ok`, or `hold` / `deny` with a reason, which blocks merge-ok on that
    step until you scan `ok` again. Use merge-deny, not a scan, to reopen.
 8. **Done signatures.** After the team lead signs a goal Done, run
-   merge-ok then done (`goal_merge`, `goal_done`) when the item is
-   worth demoing (usually a feature, not a bug) and you put it on the
-   sprint's scheduled Sprint Review (`kind`, `surface`). Sign again the
+   merge-ok then done (typed `/devops merge-ok GOAL`, or `goal_merge`,
+   `goal_done`) when the item meets the client's expectations (confirm
+   every acceptance criterion: `meets`) and is worth demoing (usually a
+   feature, not a bug), and you put it on the sprint's scheduled Sprint
+   Review (`kind`, `surface`, and `demoer`: the agent hash of the seat
+   that demos it). Never sign while a `bug` thread is open on the goal. Sign again the
    same way once Orchestration starts preparing the merge presentation
    (`report_prepare`); that promotes the goal to the merge report. You
    sign only as the BA the building team named at its Sprint Planning.

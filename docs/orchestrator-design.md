@@ -9,6 +9,11 @@ is not planned yet.
 Read the schemas in `docs/schemas/envelopes.schema.json`. The envelopes
 below are the wire format; this document says what they mean.
 
+The Done chain's signature items (merge-ok, merge-deny, done, the BA's
+scan, the merge report and the client's decision) are `chain.signature`
+envelopes (`Signature`), recorded on the board by
+`scripts/devops-scrum.mjs`; see references/scrum-meetings.md, Done.
+
 ## Terms
 
 - **Manager** means the team lead: the seat that plans sprints, sets
