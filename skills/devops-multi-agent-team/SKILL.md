@@ -5,7 +5,8 @@ description: >-
   research (docs/ + online media), implement in per-Coder side worktrees,
   pre-QA Markdown reviewers, Security (SOC 2 style review plus the static
   analysis for each language in the project), then QA. Only QA may give the
-  OK to push. /devops off turns the skill off. Works for any mix of languages
+  OK to push. /devops off (or disable) turns the skill off and writes
+  project enabledPlugins. Works for any mix of languages
   through a per-project profile
   (.devops/project.md) built from languages.json: C, C++, assembly, Rust, Go,
   C#, Java, Kotlin, Python, TypeScript/JavaScript, CSS, shell, PowerShell, SQL,
@@ -157,15 +158,28 @@ Clear does not authorize a push either.
   [agent-commands.md](references/agent-commands.md).
 - **Do not stop development.** A `/devops` command never pauses or
   cancels the current goal loop; apply it and keep working.
-- **Gate words are the person's alone.** `on`, `off`, `push-ok`,
-  `push-reset`, `gates`, `allow-branch`, `comments`, `monitor`,
-  `config` writes and `setup claude` run only as commands the person
-  types. Free-form words never change a gate. One-shot gates such as
-  `push-ok` take no `on|off` parameter.
-- **`/devops on|off`.** The only skill-wide switch. Turns the whole
-  skill on or off. While off, publish and branch checks, lint-on-commit,
-  the failed-check monitor and the DevOps session card are inactive;
-  `/devops status` and `/devops on` still work. Default is on.
+- **Gate words are the person's alone.** `on`, `off`, `enable`,
+  `disable`, `skill`, `skills`, `push-ok`, `push-reset`, `gates`,
+  `allow-branch`, `comments`, `monitor`, `config` writes and
+  `setup claude` run only as commands the person types. Free-form
+  words never change a gate. One-shot gates such as `push-ok` take no
+  `on|off` parameter.
+- **`/devops on|off` and `/devops enable|disable`.** The skill-wide
+  switch. Turns the whole skill on or off in this session **and**
+  writes `.claude/settings.json` `enabledPlugins` for
+  `devops-multi-agent-team@devops-multi-agent-team` (project settings
+  override user settings). While session-off, publish and branch
+  checks, lint-on-commit, the monitor and the DevOps card are
+  inactive; `/devops status`, `/devops on|enable`, `/devops skills`
+  and `/devops skill on|off` still work. After unload, re-enable by
+  editing that file (`"…": true`), `/devops enable` before reload, or
+  `claude plugin enable devops-multi-agent-team@devops-multi-agent-team`.
+- **`/devops skill on|off NAME` and `/devops skills`.** Write
+  `skillOverrides` with the **bare skill name** (for example
+  `devops-cleanup`; aliases like `cleanup` or
+  `devops-multi-agent-team:cleanup` normalize to that). Claude Code
+  applies overrides to project copies under `.claude/skills/`; skills
+  loaded only from the plugin are not affected — use disable for those.
 
 ### Development bypass (human over skill contingencies)
 
@@ -188,7 +202,8 @@ failure mode; it is not compliance.
 - **Mechanical gates.** Free-form chat still never flips a gate.
   While the skill is on, a push needs QA PASS, Security CLEAR, and
   the person's typed one-shot `/devops push-ok`. To lift every check,
-  the person types `/devops off` (then `/devops on` to restore).
+  the person types `/devops off` or `/devops disable` (then `/devops on`
+  or `/devops enable` to restore).
 - **Record it.** When a human order overrides a skill contingency,
   note the order and what was skipped under
   `devops-skill/thoughts/non-final/` and keep going. Do not ask the

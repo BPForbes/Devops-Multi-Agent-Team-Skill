@@ -15,6 +15,7 @@
     "devops-cleanup": "scripts/devops-cleanup.mjs",
     "devops-lint": "scripts/devops-lint.mjs",
     "devops-config": "scripts/devops-config.mjs",
+    "devops-claude-settings": "scripts/devops-claude-settings.mjs",
     "devops-ids": "scripts/devops-ids.mjs"
   },
   "scripts": {
@@ -45,6 +46,7 @@
     "scripts/devops-comments.mjs",
     "scripts/devops-ghas.mjs",
     "scripts/devops-config.mjs",
+    "scripts/devops-claude-settings.mjs",
     "scripts/devops-formal.mjs",
     "scripts/devops-lint.mjs",
     "scripts/devops-lint-rules.mjs",

@@ -14,14 +14,17 @@ hash**, **initial job** and **current job**
 **`/devops` is free-form**, but prefer **skill modes** so the agent
 uses MCP tools and skills instead of dumping the request as plain
 text. Do not stop development when `/devops` is given. Gate words
-(`on`, `off`, `push-ok`, `push-reset`, `gates`, `allow-branch`,
-`comments`, `monitor`, `config` writes, `setup claude`) run only when
-the person types them; free-form wording never changes a gate.
-`/devops on|off` turns the whole skill on or off. One-shot gates such
-as `/devops push-ok` take no `on|off` parameter. A push needs QA PASS
-and Security CLEAR on the tree, then the person's typed
-`/devops push-ok`. After PASS: one compressed push that keeps approved
-Coder commits.
+(`on`, `off`, `enable`, `disable`, `skill`, `skills`, `push-ok`,
+`push-reset`, `gates`, `allow-branch`, `comments`, `monitor`,
+`config` writes, `setup claude`) run only when the person types them;
+free-form wording never changes a gate. `/devops on|off` and
+`/devops enable|disable` turn the whole skill on or off (session +
+`.claude/settings.json` `enabledPlugins`). `/devops skill on|off NAME`
+and `/devops skills` manage `skillOverrides` (bare skill names).
+One-shot gates such as `/devops push-ok` take no `on|off` parameter.
+A push needs QA PASS and Security CLEAR on the tree, then the
+person's typed `/devops push-ok`. After PASS: one compressed push
+that keeps approved Coder commits.
 
 **Human over skill.** If the human's order conflicts with this skill's
 role contingencies, obey the human and keep developing

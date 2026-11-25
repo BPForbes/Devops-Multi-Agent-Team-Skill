@@ -252,7 +252,8 @@ const MODE_FLAG = /(?:^|\s)--mode\s+(\S+)/i
 /** Known gate subcommands (not skill modes). */
 export const GATE_WORDS = [
   '', 'status', 'languages', 'setup', 'brief', 'push-ok', 'push-reset',
-  'on', 'off', 'allow-branch', 'comments', 'config', 'monitor', 'gates',
+  'on', 'off', 'enable', 'disable', 'skill', 'skills',
+  'allow-branch', 'comments', 'config', 'monitor', 'gates',
 ] as const
 
 export function skillWords(): string[] {
@@ -330,7 +331,10 @@ export function interpretSkillIntent(args: string): SkillMode | undefined {
 /** Command lines for /devops help --mode gates and the chat fallback (non-skill commands). */
 const COMMAND_HELP: string[] = [
   '/devops              status: languages, gates, QA verdict',
-  '/devops on|off       (you) turn the whole skill on or off; off lifts every check and the card',
+  '/devops on|off | enable|disable  (you) turn the whole skill on or off; writes',
+  '                     .claude/settings.json enabledPlugins and lifts session checks',
+  '/devops skill on|off NAME  (you) skillOverrides for one skill (bare name)',
+  '/devops skills       list each skill and its skillOverrides state',
   '/devops languages    what was detected and in which layer',
   '/devops setup        how to install the skill and profile in this project',
   '/devops setup claude [--dry-run] [--share-config] (you) set this project up for Claude Code:',

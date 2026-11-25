@@ -20,14 +20,32 @@ const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
 // Words that change what may be pushed, or switch a check off. Only the
 // person may run them.
 const HUMAN_ONLY_WORDS = new Set([
-  'on', 'off', 'push-ok', 'push-reset', 'gates', 'allow-branch', 'comments', 'monitor',
+  'on', 'off', 'enable', 'disable', 'skill', 'skills',
+  'push-ok', 'push-reset', 'gates', 'allow-branch', 'comments', 'monitor',
 ])
 const ACTIVE_REF = { plugin: 'devops-multi-agent-team', key: 'active' } as const
+const SETTINGS_SCRIPT = 'scripts/devops-claude-settings.mjs'
 
-/** The skill is on unless the person typed `/devops off`. */
+/** The skill is on unless the person typed `/devops off` / `disable`. */
 async function skillActive($: EngineInterface): Promise<boolean> {
   return (await $.state.get(ACTIVE_REF)).value !== false
 }
+
+/** Run devops-claude-settings.mjs against the session root; returns its printout. */
+async function runClaudeSettings(
+  $: EngineInterface,
+  args: string[],
+): Promise<string> {
+  const root = await $.session.root()
+  const script = `${$.plugin.root}/${SETTINGS_SCRIPT}`
+  const command = ['node', script, ...args, '--dest', root]
+  const ran = await $.process
+    .run(command, { timeoutMs: SCRIPT_TIMEOUT_MS })
+    .catch(() => undefined)
+  if (ran === undefined) return 'devops-claude-settings could not run.'
+  return `${ran.stdout}${ran.stderr}`.trim() || 'devops-claude-settings printed nothing.'
+}
+
 // `config` reads are open to every seat; these subcommands write.
 const CONFIG_WRITES = new Set(['set', 'unset', 'add', 'remove', 'rule'])
 
@@ -445,16 +463,37 @@ export const register: Register = on => {
     const mappedEarly = isGateWord(split.word)
       ? split
       : (interpretDevopsIntent(e.args) ?? split)
-    if (mappedEarly.word === 'on' || mappedEarly.word === 'off') {
+    const turnOn = mappedEarly.word === 'on' || mappedEarly.word === 'enable'
+    const turnOff = mappedEarly.word === 'off' || mappedEarly.word === 'disable'
+    if (turnOn || turnOff) {
       if (!isHuman(e)) return { text: personOnlyText(mappedEarly.word) }
-      await $.state.set(ACTIVE_REF, mappedEarly.word === 'on')
+      await $.state.set(ACTIVE_REF, turnOn)
+      const persist = await runClaudeSettings($, [turnOn ? 'enable' : 'disable'])
       return {
-        text: mappedEarly.word === 'on'
+        text: turnOn
           ? 'DevOps skill on. Gates, publish checks, lint-on-commit, the monitor and the '
-            + 'session card are active again.'
+            + 'session card are active again.\n'
+            + persist
           : 'DevOps skill off. Gates, publish checks, lint-on-commit, the monitor and the '
-            + 'session card are inactive. Type /devops on to restore.',
+            + 'session card are inactive in this session. Type /devops on (or enable) to '
+            + 'restore before reload; after unload, edit .claude/settings.json or run '
+            + '`claude plugin enable devops-multi-agent-team@devops-multi-agent-team`.\n'
+            + persist,
       }
+    }
+    if (mappedEarly.word === 'skills') {
+      if (!isHuman(e)) return { text: personOnlyText('skills') }
+      return { text: await runClaudeSettings($, ['skills']) }
+    }
+    if (mappedEarly.word === 'skill') {
+      if (!isHuman(e)) return { text: personOnlyText('skill') }
+      const parts = shellWords(mappedEarly.rest)
+      const action = parts[0]
+      const name = parts[1]
+      if ((action !== 'on' && action !== 'off') || !name) {
+        return { text: 'Usage: /devops skill on|off NAME' }
+      }
+      return { text: await runClaudeSettings($, ['skill', action, name]) }
     }
 
     const active = await skillActive($)
@@ -467,7 +506,7 @@ export const register: Register = on => {
       if (!active) {
         return {
           text: 'skill: OFF\nGates, publish checks, lint-on-commit, the monitor and the '
-            + 'session card are inactive. Type /devops on to restore.',
+            + 'session card are inactive. Type /devops on (or enable) to restore.',
         }
       }
       const gates = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true
@@ -493,8 +532,8 @@ export const register: Register = on => {
 
     if (!active) {
       return {
-        text: 'DevOps skill is off. Type /devops on to restore it '
-          + '(status still works while off).',
+        text: 'DevOps skill is off. Type /devops on (or enable) to restore it '
+          + '(status, skills, and skill on|off still work while off).',
       }
     }
 
