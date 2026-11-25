@@ -177,7 +177,10 @@ Clear does not authorize a push either.
   person, `push-ok REPORT...`, `merge-ok`, `done` and
   `merge-deny REASON` answer the merge report; a seat types `merge-ok`,
   `merge-deny` or `done` with a goal for its own step, which never
-  grants a push. Person-typed
+  grants a push. A push-ok naming no report is refused while merge
+  reports wait; the approval lets virtual history move into real history
+  (compressed on the PR branch), and the temporary side branches are
+  deleted after the real PR merges (`references/virtual-git.md`). Person-typed
   aliases (`push`, `go`, `publish`, chat `push` / `push it`) map onto
   `push-ok`. Agents cannot flip gates. One-shot `push-ok` takes no
   `on|off` parameter and is final (see Client authority).

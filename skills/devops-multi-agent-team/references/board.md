@@ -128,7 +128,11 @@ or through the tools (`goal_merge`, `goal_done`, `goal_signoff`,
 and the client's (`/devops push-ok REPORT...`, `merge-deny`), are written
 through `scripts/devops-chain.mjs`, with the same board functions and
 lock. Every signature item is a `chain.signature` envelope in the board's
-`signatures`. A server started with `DEVOPS_SEAT` and `DEVOPS_TEAM` acts only for
+`signatures`. A goal may list its open bug issues in the project's repo
+(`bug_issues`); with QA's open triage hand-offs they are its reported
+bugs, which the BA does not sign. A merge report's plan may list the
+temporary virtual-git branches (`side`); `devops-chain.mjs merged` records
+the merge of the real PR and deletes them. A server started with `DEVOPS_SEAT` and `DEVOPS_TEAM` acts only for
 that seat under that team hash.
 
 ## Storage

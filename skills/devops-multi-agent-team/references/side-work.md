@@ -81,7 +81,8 @@ on or delete. The Coder's work is handed over **by commit SHA**.
    by **commit SHA** in the Handoff `Pass-along`. Never commit on the
    shared checkout. The Orchestrator integrates by cherry-picking the
    approved SHAs onto the local PR branch (department-pods.md, Team
-   board), then removes the worktree.
+   board). The worktree is removed once the real PR is merged
+   ([virtual-git.md](virtual-git.md), step 8), not before.
 4. **Staging.** Stage by explicit path only (`git add <path>`); never
    `git add -A`, `git add .`, `git commit -a` or `git stash`. Never
    stage a path the project profile lists under "Never stage" (local
@@ -93,8 +94,8 @@ on or delete. The Coder's work is handed over **by commit SHA**.
 5. **A named ref.** There is no per-seat branch. If a Coder needs a
    named ref it asks the Orchestrator, who may create a local-only
    `local/<item>-agent-<hex>-<n>` (`<n>` counts up so two refs never
-   collide), never pushed, never a PR branch, deleted after
-   integration. Nothing else is a branch.
+   collide), never pushed, never a PR branch, deleted once the real PR
+   is merged ([virtual-git.md](virtual-git.md), step 8). Nothing else is a branch.
 
 ### What a worktree shares
 

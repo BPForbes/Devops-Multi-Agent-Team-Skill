@@ -21,7 +21,8 @@ free-form wording never changes a gate. `merge-ok`, `done` and `merge-deny REASO
 typed by the person answer Orchestration's merge report (approve the named
 reports and grant the push, or send them back to the BA). A seat types the
 same words with a goal (`/devops merge-ok GOAL`) to run its own Done-chain
-step as its bound seat; that never grants a push. `/devops on|off` and
+step as its bound seat; that never grants a push. A `push-ok` naming no
+report is refused while merge reports wait. `/devops on|off` and
 `/devops enable|disable` turn the whole skill on or off (session +
 `.claude/settings.json` `enabledPlugins`). `/devops skill on|off NAME`
 and `/devops skills` manage `skillOverrides` (bare skill names).

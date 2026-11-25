@@ -76,6 +76,14 @@ One Sprint Review per sprint. All teams attend. The Business Analyst
    goal of the sprint; a bug fix is listed with kind `bug` so it skips
    the demo. The board refuses a roster that leaves a Done goal out.
 
+**Team schedule.** Meetings look at a team as a whole by its team hash.
+The board keeps a joint table for the sprint (`teamSchedule`, read at
+`devops://meetings/<sprint>` as `schedule`): for each team hash, its lead,
+the goals it builds and judges, the tasks it planned at Sprint Planning and
+its demos. A held Daily Scrum records its team's row (`schedule`); the
+Sprint Review records every team's. A single seat, such as the demoer, is
+still named by its own agent hash.
+
 During the review:
 
 - Demoing teams **run** the rostered work live on the named surface
@@ -110,8 +118,7 @@ sign-off: merge-ok and done are recorded as that role's signature.
 
 **Each seat types the command.** A seat types `/devops merge-ok GOAL`,
 `/devops merge-deny GOAL REASON` or `/devops done GOAL` for its own step
-(the BA's first `done` adds `--demoer AGENT` and one `--meets TEXT` per
-acceptance criterion). The hook runs it on the board as the seat the
+(the BA's first `done` adds `--demoer AGENT` and `--meets`). The hook runs it on the board as the seat the
 session was bound to (`DEVOPS_SEAT`, and `DEVOPS_TEAM`) through
 `scripts/devops-chain.mjs`; Orchestration routes the data from there. The
 same steps are the `goal_merge` and `goal_done` tools. A seat's typed
@@ -151,16 +158,27 @@ client's push-ok is not held by a scan.
    signs this step instead. The goal becomes `done` (team Done), and a
    done report is filed as `awaiting_ba`. `goal_signoff` is this step's
    done on its own.
-3. **BA, first signature**: when a worthy item (usually a feature, not a
-   bug) meets the client's expectations and can be demoed on the sprint's
-   **scheduled** Sprint Review. The goal must state its objective and
-   acceptance criteria, and the BA confirms each criterion (`meets`); the
-   check is recorded (`expectations`). The signature records the demo
-   entry (`kind`: feature, improvement or bug; the demoer's agent hash;
-   optional `surface`). Report: `ba_signed`. The BA is the one the
-   building team named at its Sprint Planning. Neither BA signature is
-   given while a bug is open on the goal: a board thread on it with the
-   topic `bug`.
+3. **BA, first signature**: when a worthy item (a feature or an
+   improvement) meets the client's expectations and can be demoed on the
+   sprint's **scheduled** Sprint Review. The goal must state its objective
+   and acceptance criteria, and the BA confirms the goal meets them, by
+   task (`meets`); the check is recorded (`expectations`). The signature
+   records the demo entry (`kind`: feature or improvement; the demoer's
+   agent hash; optional `surface`). Report: `ba_signed`. The BA is the one
+   the building team named at its Sprint Planning.
+
+   **A bug is not signed.** Only reported bugs count: an issue in the
+   project's repo that the goal lists (`bugIssues` at Refinement or Sprint
+   Review, stored as `bug_issues`), or a bug found in discovery (QA's
+   triage hand-off on the goal that is not done; see `/triage`). When a
+   reported bug is open, or the BA's first `done` names `kind: bug`, the
+   BA's merge-ok or done is recorded as **merge-deny** with the reason
+   `bug fix needed` (and the bugs). The goal reopens, and the coders are
+   told through a `bug fix needed` thread on the goal in their inbox. The
+   bug is not fixed at once: the goal records an issue draft
+   (`bug_fix.issue_draft`) that a person or the Ticket Lead may file as a
+   real issue in the project's repo, and the fix is planned like other
+   work. The same holds at the BA's second signature.
 4. **Orchestration prepares** (`report_prepare`): Orchestration starts the
    merge presentation for the reports the BA signed. Report: `preparing`.
 5. **BA, second signature**: while Orchestration prepares the merge
@@ -177,8 +195,11 @@ client's push-ok is not held by a scan.
    reports, denied or unsigned, never block it. Only a goal it depends on
    (`depends_on`, set from `dependsOn` at Refinement or Sprint Review) can:
    a dependency that is denied or not yet approved refuses the approval
-   and grants no push. A bare push-ok (or chat `push`) still grants the
-   push and approves no report. `/devops merge-deny [REPORT...] REASON`
+   and grants no push. A bare push-ok (or chat `push`) naming no report
+   is refused while merge reports wait for the client: it must name the
+   ones it approves. With no report waiting, the bare word still grants
+   the push (the client override) and approves nothing.
+   `/devops merge-deny [REPORT...] REASON`
    withdraws the push grant and sends the reports (all waiting ones when
    none is named) back to the BA. Report: `denied`.
 8. **New approach** (`report_new_approach`): after a denial the BA, on
@@ -188,6 +209,18 @@ client's push-ok is not held by a scan.
    carrying the client's reason (`client_feedback`). Report: `reworked`.
    The BA notes the feedback on the mind map (`mindmap_note`); the
    Researcher still builds and structures the map.
+
+**IMPORTANT: virtual history into real history.** The client's approval
+(push-ok, merge-ok or done naming merge reports) is what allows the
+virtual history of those items (side worktrees, `local/` refs, review
+threads) to move into real history. When it moves, the PR branch the
+person sees and reviews carries **compressed** history: keep-commits only,
+everything else folded ([virtual-git.md](virtual-git.md), step 6). The
+temporary virtual-git branches (listed in the merge plan's `side`) are
+deleted only **after** the person merges the real PR: Orchestration runs
+`node scripts/devops-chain.mjs merged --base <base> REPORT...`, which
+refuses until each pushed tree is on the base, records the merge
+(`merged_at`, `merged_by`) and then deletes them. No seat merges a PR.
 
 **merge-deny and reopening.** QA, Review and Security send work back with
 their existing send-back hand-offs, which carry the reason. On the chain,

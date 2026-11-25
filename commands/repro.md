@@ -54,6 +54,10 @@ Live:      <ran live with the seat | async only: why live was not possible>
 Ask:       <the one thing the other seat should do or answer>
 ```
 
+To replay a seat's own Done-chain step, bind the seat first: the steps
+are in [role-identity.md](../skills/devops-multi-agent-team/references/role-identity.md)
+(Reproduce a seat binding). Put the binding on `Inputs:`.
+
 When a live run is not possible (no display, no shared environment, a
 seat is offline), say so on `Live:` and attach the captured output or
 screenshot paths instead. That async fallback still counts as the

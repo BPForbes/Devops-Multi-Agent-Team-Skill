@@ -33,7 +33,15 @@ Reviewer, QA, Security, Business Analyst, and every other role).
   it drifts, and carries the client's feedback back as goals.
 - The client approves merge reports by name (`/devops push-ok REPORT...`).
   Each item stands on its own; only a declared dependency that is denied
-  or not yet approved holds it back.
+  or not yet approved holds it back. A push-ok naming no report is refused
+  while reports wait; with none waiting it still grants the push.
+- The client's approval is what lets virtual history move into real
+  history: the PR branch the client reviews has compressed history, and
+  the temporary virtual-git branches are deleted once the client merges
+  the real PR ([virtual-git.md](virtual-git.md)).
+- Only reported bugs count as bugs: issues in the project's repo, or bugs
+  found in discovery (QA triage). The BA does not sign a bug: it is denied
+  as needing a bug fix, the coders are told, and a real issue may be filed.
 - The client's step on the board comes after the BA's two signatures and
   never replaces them. A client order to ship sooner is still obeyed at
   once: the push gate lets push-ok override a missing QA PASS or Security

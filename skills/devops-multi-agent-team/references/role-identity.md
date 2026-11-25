@@ -53,12 +53,32 @@ by every agent on that pod:
   spawned onto that pod records the same team hash.
 - Used to block a pod from judging **its own pod's work**
   (Independence below).
-- Many agents belong to one team, so an agent hash is enough to name a
-  seat to others (the demo roster shows only the demoer's agent hash);
-  its team follows from the team board's members or the hand-offs. The
-  envelope header's optional `from.team` is set only when the seat is
-  bound with `DEVOPS_TEAM`, so the server can refuse a call under another
-  team; hand-offs keep `from.team` and `to.team`.
+- The team hash names the team **as a whole**: sprint meetings and
+  schedules use it. The board's joint schedule ties each team hash to its
+  goals, planned tasks and demos for the Daily Scrum, the Sprint Review
+  and the other meetings ([scrum-meetings.md](scrum-meetings.md), Team
+  schedule).
+- Many agents belong to one team, so a single seat is named by its agent
+  hash (the demo roster shows the demoer's agent hash); its team follows
+  from the team board's members or the hand-offs. The envelope header's
+  `from.team` stays: it is set when the seat is bound with `DEVOPS_TEAM`,
+  so the server can refuse a call under another team, and hand-offs keep
+  `from.team` and `to.team`.
+
+#### Reproduce a seat binding
+
+Spin-up does not set `DEVOPS_SEAT` or `DEVOPS_TEAM` for every seat. To
+reproduce a seat's binding (for example to replay its typed
+`/devops merge-ok GOAL`), follow these steps and record them in the
+reproduction hand-off ([/repro](../../../commands/repro.md)):
+
+1. Read the seat's agent hash and its team hash from the team board
+   (`.devops/teams/<team>.json`, `members`) or from its hand-offs.
+2. Start the session or the MCP server with both set:
+   `DEVOPS_SEAT=agent-<hex> DEVOPS_TEAM=team-<hex>`.
+3. Run the step (`node scripts/devops-chain.mjs merge-ok GOAL --dest .`,
+   or the typed word) and copy its output into the hand-off's `Actual:`.
+4. Unset both afterwards; an unbound session acts for no seat.
 
 ### 2. Agent hash
 

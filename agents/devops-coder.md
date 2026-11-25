@@ -122,6 +122,8 @@ another member of your team first (not your lead; ask Orchestration
 only when none is free) to verify it before the lead signs. The verifier
 types `/devops merge-ok GOAL` then `/devops done GOAL` (or uses
 `goal_merge`, `goal_done`), or `/devops merge-deny GOAL REASON` to send it
-back. Report a bug on a goal as a board thread with the topic `bug`. You may verify a teammate's goal the same way,
+back. Bugs that block the BA are reported ones: an issue in the project's
+repo the goal lists, or a QA triage. A `bug fix needed` thread on your goal
+means the BA denied it for a bug; plan the fix. You may verify a teammate's goal the same way,
 never one you wrote. If your lead wrote the goal, a member other than
 the verifier signs the lead's step.
