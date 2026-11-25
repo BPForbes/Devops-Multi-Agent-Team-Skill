@@ -50,33 +50,43 @@ recorded on the meeting record (`reallocations`). The Business Analyst
 checks that the move still serves the client's stated objectives and
 notes cost impact (seat-time, deferred scope).
 
-## Live demos (GUI, browser, terminal)
+## Show live: demo vs reproduction
 
-AI seats **show** work live to other seats and to the client when that
-cuts questions. Prefer a short live run over a long written summary.
+Prefer a short **live run** (GUI, browser, terminal) over a long written
+summary when the other party needs to see the item. Two modes:
 
-| Surface | Use when |
-|---------|----------|
-| **GUI / desktop** | The change is a desktop or host UI; drive the app where the host can see it |
-| **Browser** | Web UI, docs pages, local preview, deployed preview; use the host's browser MCP (`/browser-automation` or the profile's browser tools) |
-| **Terminal** | CLI, scripts, tests, builds, logs, CI job output; run the commands live and point at the result |
-| **Other** | Canvas, video, or screen capture when the host offers them and a live surface is a poor fit |
+| Mode | Who | What |
+|------|-----|------|
+| **Demo** | Sprint Review (and the client) | Show a Done **feature** or **improvement** on the BA roster |
+| **Reproduction** | AI talking to another AI about a concrete item | Re-run the **feature**, **bug**, failure, fix, or green path so the other seat sees it (`/repro` when it is a failure) |
 
-**When (as needed):**
+Surfaces: **GUI / desktop**, **browser** (`/browser-automation` or the
+profile's browser tools), **terminal** (CLI, tests, builds, logs), or
+canvas / capture when those fit better.
 
-- **Sprint Review** — features and improvements: live demo on the
-  roster (bugs optional).
-- **Sprint Retrospective** — when a bottleneck or improvement needs
-  proof, show the failing or fixed path live instead of only describing it.
-- **Help between seats** — when a Coder, Reviewer, QA, Security or
-  other seat is stuck or explaining a finding, demo the repro, the
-  green path, or the failing command so the other seat sees it.
-- **Daily / ad hoc** — only when a short live show unblocks the team
-  faster than text.
+### What needs a reproduction (AI ↔ AI)
 
-Every AI that can demo **should** demo when asked or when the roster
-names them. Record what was shown (commands, URL, or path) in the
-meeting record or under thoughts so later seats do not re-ask.
+Reproduce when seats discuss a **specific** feature, bug, finding, or
+blocker and text alone would spawn more questions — for example help
+between Coder / Reviewer / QA / Security, proving a Retro bottleneck,
+or answering a Review Q&A by re-running a step.
+
+### What does not need a reproduction
+
+- **Daily Scrum / standup** — done / today / blockers, stress / strain,
+  reallocations: talk only; no live repro by default.
+- **Sprint Planning** and **Backlog Refinement** — sizing and order;
+  no live repro unless a seat is stuck on a concrete failing item.
+- Status, allocation, cost, or process talk with no specific
+  feature/bug under discussion.
+- A one-line answer that already settles the point.
+
+### Logic
+
+Ask: *Are we discussing a concrete feature, bug, or behavior the other
+seat must see?* If yes → reproduce (or demo in Review). If no → text is
+enough. Record commands, URL, or path under thoughts when you did
+reproduce, so later seats do not re-ask.
 
 See [scrum-meetings.md](scrum-meetings.md).
 
@@ -84,10 +94,10 @@ See [scrum-meetings.md](scrum-meetings.md).
 
 | Meeting | Client | Team lead | Business Analyst | Developers / judges |
 |---------|--------|-----------|------------------|---------------------|
-| Sprint Planning | optional | hosts | present | team seats |
-| Daily Scrum | optional | hosts; reallocates under strain | present | developers on the team |
-| Backlog Refinement | optional | hosts | present; clarifies objectives and cost | sizing seats |
-| Sprint Review (joint) | invited | one host lead for the sprint | prepares attendance and demo roster ahead; present | every team **live**-demos features / improvements |
-| Sprint Retrospective | optional | hosts (per team, after the joint review) | optional | that team's seats; live demo bottlenecks when needed |
+| Sprint Planning | optional | hosts | present | team seats (no repro by default) |
+| Daily Scrum | optional | hosts; reallocates under strain | present | developers on the team (no repro by default) |
+| Backlog Refinement | optional | hosts | present; clarifies objectives and cost | sizing seats (no repro by default) |
+| Sprint Review (joint) | invited | one host lead for the sprint | prepares attendance and demo roster ahead; present | every team **demos** features / improvements |
+| Sprint Retrospective | optional | hosts (per team, after the joint review) | optional | that team's seats; **reproduce** a bottleneck only when proof is needed |
 
 See [scrum-meetings.md](scrum-meetings.md) for timeboxes and records.

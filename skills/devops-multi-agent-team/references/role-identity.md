@@ -22,17 +22,19 @@ Communicator, Integrator, and every other job
 - Orchestration obeys the same rule: it never blocks the client to
   protect process.
 
-## Live demos between seats
+## Reproduction between seats (AI ↔ AI)
 
-When another seat (or the client) needs to understand what was done,
-**show it live** instead of only writing about it
-([client-and-agile.md](client-and-agile.md), Live demos):
+When one seat talks to another about a **concrete** feature, bug,
+finding or blocker, **reproduce** it live instead of only writing about
+it ([client-and-agile.md](client-and-agile.md), Show live):
 
-- Prefer **GUI**, **browser**, or **terminal** for the surface that
-  matches the work (`/browser-automation`, shell, host desktop tools).
-- Use demos **as needed**: Sprint Review, Sprint Retrospective, help
-  when stuck, or any short unblock that cuts questions.
-- Record the commands, URL or path shown so later seats reuse it.
+- Prefer **GUI**, **browser**, or **terminal** (`/repro`,
+  `/browser-automation`, shell).
+- Do **not** reproduce in Daily Scrum / standup, Planning, or
+  Refinement by default — those are talk meetings.
+- Sprint Review uses a **demo** roster for features / improvements;
+  answers about behavior may still use a short reproduction.
+- Record the commands, URL or path so later seats reuse it.
 
 ## Identity hashes (team, agent, jobs, items)
 

@@ -46,14 +46,15 @@ Thoughts stay **gitignored**.
    publish the **attendance and demo roster**: who demos which Done
    feature or improvement, and on which **surface** (GUI, browser,
    terminal, other). Bug fixes are not required in the demo; features
-   and improvements should be **live** demos.
+   and improvements should be **live demos**.
 5. **Sprint Review follow-up.** Capture questions AI seats ask of
    demoing teams and the answers; file them for later refinement
    (`review-qa-<sprint>.md` under thoughts, or the meeting `questions`
-   record). Prefer that demoers re-show a step live when that answers
-   faster than prose.
-6. **Live demos elsewhere.** Remind seats to demo as needed in Retro
-   and when helping each other
+   record). When the answer is about a concrete behavior, prefer a
+   short **reproduction** of that step.
+6. **Reproduction vs meetings.** Daily Scrum / Planning / Refinement
+   do **not** need reproductions by default. When seats help each
+   other on a feature or bug, they **reproduce** it live
    ([client-and-agile.md](../skills/devops-multi-agent-team/references/client-and-agile.md)).
 
 ## Commands

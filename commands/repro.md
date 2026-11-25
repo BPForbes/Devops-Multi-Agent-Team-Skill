@@ -7,7 +7,12 @@ description: Reproduce a failure with exact commands before declaring a cause. N
 
 Also: `reproduce`, `write a repro`.
 
-Reproduce the failure before declaring a cause.
+Reproduce the failure before declaring a cause. When one AI seat talks
+to another about a concrete **feature**, **bug**, finding or blocker,
+prefer a live **reproduction** on GUI / browser / terminal over a long
+write-up ([client-and-agile.md](../skills/devops-multi-agent-team/references/client-and-agile.md)).
+Daily Scrum / standup, Planning and Refinement do not need a repro by
+default.
 
 1. Recreate it with exact commands, inputs, and exit codes.
 2. Write the repro to `devops-skill/thoughts/non-final/repro-<topic>.md`.
