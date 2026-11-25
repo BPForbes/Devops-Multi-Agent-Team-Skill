@@ -148,7 +148,7 @@ async function publishDenial($: EngineInterface, what: string): Promise<string |
     const past = (await $.state.get(OVERRIDES_KEY)).value ?? []
     const stamped = new Date().toISOString()
     const recorded = rules.map(({ rule, subject }) => ({
-      tree, rule, qa: subject, what, at: stamped,
+      tree, rule, verdict: subject, what, at: stamped,
     }))
     await $.state.set(OVERRIDES_KEY, [...past, ...recorded])
     await $.state.set(

@@ -293,8 +293,8 @@ test('a BLOCKED QA note yields to push-ok and records the override', async ($, o
   const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
   expect(allowed.isError).not.toBe(true)
   expect(state.get('pushAuthorized')).toBe(false)
-  const overrides = state.get('overrides') as { rule: string; qa: string }[]
-  expect(overrides.some(row => row.rule === 'qa-pass' && row.qa === 'BLOCKED')).toBe(true)
+  const overrides = state.get('overrides') as { rule: string; verdict: string }[]
+  expect(overrides.some(row => row.rule === 'qa-pass' && row.verdict === 'BLOCKED')).toBe(true)
 })
 
 test('a GitHub write tool needs push-ok and the QA check; the grant is consumed', async ($, on) => {
@@ -333,8 +333,10 @@ test('a BLOCKED security note yields to push-ok and records the override', async
   state.set('pushAuthorized', TREE)
   const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
   expect(allowed.isError).not.toBe(true)
-  const overrides = state.get('overrides') as { rule: string; qa: string }[]
-  expect(overrides.some(row => row.rule === 'security-clear' && row.qa === 'BLOCKED')).toBe(true)
+  const overrides = state.get('overrides') as { rule: string; verdict: string }[]
+  const blocked = (row: { rule: string; verdict: string }) =>
+    row.rule === 'security-clear' && row.verdict === 'BLOCKED'
+  expect(overrides.some(blocked)).toBe(true)
 })
 
 test('push-ok with QA PASS for another tree still pushes and records override', async ($, on) => {
@@ -356,8 +358,8 @@ test('push-ok with no QA note authorizes the push and records the override', asy
   const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
   expect(allowed.isError).not.toBe(true)
   expect(state.get('pushAuthorized')).toBe(false)
-  const overrides = state.get('overrides') as { rule: string; qa: string }[]
-  expect(overrides.some(row => row.rule === 'qa-pass' && row.qa === 'none')).toBe(true)
+  const overrides = state.get('overrides') as { rule: string; verdict: string }[]
+  expect(overrides.some(row => row.rule === 'qa-pass' && row.verdict === 'none')).toBe(true)
 })
 
 test('a GitHub write tool with push-ok but no QA PASS is allowed and recorded', async ($, on) => {

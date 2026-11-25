@@ -20,10 +20,10 @@ declare module 'claude-code' {
        * Security CLEAR (those misses are recorded under overrides).
        */
       pushAuthorized: string | false
-      /** The last human push that overrode a seat gate: tree, rule, subject, what, time. */
-      lastOverride?: { tree: string; rule: string; qa: string; what: string; at: string }
+      /** The last human push that overrode a seat gate: tree, rule, verdict seen, what, time. */
+      lastOverride?: { tree: string; rule: string; verdict: string; what: string; at: string }
       /** Every human override, kept for audit. */
-      overrides?: Array<{ tree: string; rule: string; qa: string; what: string; at: string }>
+      overrides?: Array<{ tree: string; rule: string; verdict: string; what: string; at: string }>
       allowedBranches: string[]
       monitor: boolean
       commentAudit: 'warn' | 'strict' | 'off'
