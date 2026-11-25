@@ -69,13 +69,40 @@ function engine(on: any, note: string | undefined, setup: Setup = {}) {
   on('command.register', () => ({ value: { command: 'devops' } }))
   on('tool.register', () => ({ value: { tool: 'mcp__devops-multi-agent-team__devops_brief' } }))
   on('ui.status', () => ({ value: undefined }))
-  on('process.run', (_: unknown, e: { argv?: string[] }) => ({
-    value: (e.argv?.[0] === 'git' ? fakeGit(e.argv, git) : undefined) ?? {
-      exitCode: 0, stdout: JSON.stringify([{
-        id: 'rust', name: 'Rust', layers: ['systems'], evidence: ['Cargo.toml'],
-      }]), stderr: '',
-    },
-  }))
+  on('process.run', (_: unknown, e: { argv?: string[] }) => {
+    const argv = e.argv ?? []
+    if (argv[0] === 'git') return { value: fakeGit(argv, git) }
+    if (argv.some(a => a.includes('devops-claude-settings.mjs'))) {
+      const action = argv.find(a => ['enable', 'disable', 'skills', 'skill', 'show'].includes(a))
+        ?? 'show'
+      return {
+        value: {
+          exitCode: 0,
+          stdout: action === 'disable' || action === 'enable'
+            ? `plugin devops-multi-agent-team@devops-multi-agent-team `
+              + `${action === 'enable' ? 'enabled' : 'disabled'}, written to `
+              + `.claude/settings.json\n`
+            : action === 'skill'
+              ? 'skillOverrides.devops-cleanup=off, written to .claude/settings.json\n'
+              : 'plugin devops-multi-agent-team@devops-multi-agent-team: (not set)\n'
+                + 'skills (skillOverrides; absent = on):\n'
+                + '  devops-multi-agent-team: on\n'
+                + '  devops-cleanup: on\n'
+                + '  project-mindmap: on\n',
+          stderr: '',
+        },
+      }
+    }
+    return {
+      value: {
+        exitCode: 0,
+        stdout: JSON.stringify([{
+          id: 'rust', name: 'Rust', layers: ['systems'], evidence: ['Cargo.toml'],
+        }]),
+        stderr: '',
+      },
+    }
+  })
   noteFiles(on, note, security)
   on('fs.exists', () => ({ value: false }))
   on('tool.call', () => ({ result: {} }))
@@ -442,11 +469,52 @@ test('/devops off lifts every publish and branch check', async ($, on) => {
     presentation: { isFullscreen: false, columns: 100 },
   })
   expect(turned.text).toContain('DevOps skill off')
+  expect(turned.text).toContain('disabled')
   expect(state.get('active')).toBe(false)
   const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
   expect(allowed.deny).toBeUndefined()
   const branch = await $.tool.call({ tool: 'Bash', command: 'git checkout -b topic' })
   expect(branch.deny).toBeUndefined()
+})
+
+test('/devops disable and enable persist via settings and restore gates', async ($, on) => {
+  const state = engine(on, undefined)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const off = await $.command.run({
+    command: 'devops', args: 'disable', origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  expect(off.text).toContain('disabled')
+  expect(state.get('active')).toBe(false)
+  const onAgain = await $.command.run({
+    command: 'devops', args: 'enable', origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  expect(onAgain.text).toContain('enabled')
+  expect(state.get('active')).toBe(true)
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(refused.deny).toBeTruthy()
+})
+
+test('/devops skill off and skills are person-only', async ($, on) => {
+  engine(on, undefined)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const listed = await $.command.run({
+    command: 'devops', args: 'skills', origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  expect(listed.text).toContain('devops-cleanup')
+  const turned = await $.command.run({
+    command: 'devops', args: 'skill off devops-cleanup', origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  expect(turned.text).toContain('skillOverrides')
+  const refused = await $.command.run({
+    command: 'devops', args: 'skill off devops-cleanup', origin: { kind: 'peer' },
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  expect(refused.text).toContain('only the person can run it')
 })
 
 test('/devops on restores the publish check', async ($, on) => {

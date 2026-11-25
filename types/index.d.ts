@@ -5,7 +5,8 @@ declare module 'claude-code' {
     'devops-multi-agent-team': {
       languages: string[]
       /**
-       * The skill itself; off via `/devops off`, typed by the person.
+       * The skill itself; off via `/devops off` or `/devops disable`, typed by
+       * the person. Those also write enabledPlugins in .claude/settings.json.
        * While off, gates, publish checks, lint-on-commit, the monitor and the
        * DevOps session card are inactive. Default on when unset.
        */

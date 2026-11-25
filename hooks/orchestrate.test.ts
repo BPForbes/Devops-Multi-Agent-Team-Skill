@@ -182,7 +182,7 @@ test('/devops help marks gate words as the person\'s and offers no chat push', a
     presentation: { isFullscreen: false, columns: 100 },
   })
   expect(help.text).toContain('/devops push-ok      (you) allow ONE push on this tree')
-  expect(help.text).toContain('/devops on|off       (you)')
+  expect(help.text).toContain('/devops on|off | enable|disable  (you)')
   expect(help.text).not.toContain('/devops develop on|off')
   expect(help.text).toContain('/devops gates on|off (you)')
   expect(help.text).toContain('never onto a gate word')

@@ -21,11 +21,15 @@ person's typed one-shot `/devops push-ok` (no `on|off` parameter). None
 of the three can stand in for another. Chat words never authorize a
 push, and free-form `/devops` wording never changes a gate.
 
-**Skill off.** `/devops off` turns the whole skill off and lifts the
-publish, branch, lint-on-commit and monitor checks. Agents must still
-obey the human's development orders over this skill's process rules
-while the skill is on ([SKILL.md](../SKILL.md), Development bypass).
-`/devops on` restores the skill. Free-form words never flip on|off.
+**Skill off.** `/devops off` or `/devops disable` turns the whole skill
+off: session checks stop, and `.claude/settings.json` sets
+`enabledPlugins` for `devops-multi-agent-team@devops-multi-agent-team`
+to `false`. Agents must still obey the human's development orders over
+this skill's process rules while the skill is on
+([SKILL.md](../SKILL.md), Development bypass). `/devops on|enable`
+restores the skill while the plugin is loaded. After unload, set that
+key back to `true` by hand or run `claude plugin enable …`. Free-form
+words never flip on|off.
 
 The Claude mod enforces the mechanical part at the tool layer:
 `git push`, `gh` writes, the GitHub write tools and branch creation are
