@@ -34,8 +34,8 @@ import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 import { isTeamId } from '../scripts/devops-ids.mjs'
 import { RISKS, planAllocation, spinUp } from '../scripts/devops-allocation.mjs'
 import {
-  MEETING_KINDS, forwardReports, goalDone, goalVerdict, holdMeeting, leadSignOff, meetingsFor,
-  newApproach, prepareMerge, reportsFor, scheduleMeeting,
+  MEETING_KINDS, baScan, forwardReports, goalDone, goalVerdict, holdMeeting, leadSignOff,
+  meetingsFor, newApproach, pingsFor, prepareMerge, reportsFor, scheduleMeeting,
 } from '../scripts/devops-scrum.mjs'
 import {
   needsAttention, openBoard, recordRefusal, teamIntake, teamMove, teamSignOff,
@@ -1054,7 +1054,8 @@ const TOOLS = [
     description: [
       'merge-ok or merge-deny on the Done-chain step a goal waits for, by that step\'s',
       'signer (`caller`): a team member (peer), the team lead (another member when the lead',
-      'wrote the goal), or the Business Analyst. merge-ok comes before goal_done. merge-deny',
+      'wrote the goal), or the Business Analyst. merge-ok pings the BA, who scans as needed',
+      '(goal_scan); a BA hold or deny blocks it. merge-ok comes before goal_done. merge-deny',
       'needs a reason and reopens the goal; the BA may also deny any step to reopen a goal',
       'on feedback (a Done goal then waits for the client\'s review). The client answers a',
       'merge report with its own /devops merge-ok, merge-deny or push-ok.',
@@ -1073,6 +1074,31 @@ const TOOLS = [
       board: goalVerdict(board, {
         goal: args.goal, by: args.caller, team: args.team, members: teamMembers(args),
         decision: args.decision, reason: args.reason, at: now(),
+      }),
+    })),
+  },
+  {
+    name: 'goal_scan',
+    description: [
+      'The Business Analyst (`caller`) scans the Done-chain step a goal waits for, as',
+      'needed: merge-ok pings the BA (devops://reports lists open pings) and goes ahead',
+      'without a scan. `ok` lets merge-ok through; `hold` or `deny` with a reason blocks',
+      'merge-ok on that step until the BA scans ok again. merge-deny, not a scan, reopens.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, goal: { type: 'string' },
+        verdict: { enum: ['ok', 'hold', 'deny'] },
+        reason: { type: 'string', maxLength: MAX_TASK_TEXT },
+      },
+      required: ['caller', 'goal', 'verdict'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: baScan(board, {
+        goal: args.goal, ba: args.caller, verdict: args.verdict, reason: args.reason, at: now(),
       }),
     })),
   },
@@ -1541,6 +1567,7 @@ const RESOURCE_PATTERNS = [
       toOrchestration: at('to_orchestration'),
       toPerson: at('to_person'),
       reopened: at('reopened'),
+      baPings: pingsFor(board),
       decided: reportsFor(board).filter(r => ['approved', 'denied', 'reworked'].includes(r.state)),
     }
   }],

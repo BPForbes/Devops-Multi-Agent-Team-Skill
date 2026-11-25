@@ -64,20 +64,25 @@ Thoughts stay **gitignored**.
    acceptance criteria, a priority and an owner team. When the answer
    is about a concrete behavior, prefer a short **reproduction** of
    that step.
-7. **Done signatures.** After the team lead signs a goal Done, run
+7. **Scan as needed.** Every merge-ok pings you (`devops://reports`,
+   `baPings`); merge-ok does not wait for you. Scan what is being merged
+   when you see a need, against the client's intentions (`goal_scan`):
+   `ok`, or `hold` / `deny` with a reason, which blocks merge-ok on that
+   step until you scan `ok` again. Use merge-deny, not a scan, to reopen.
+8. **Done signatures.** After the team lead signs a goal Done, run
    merge-ok then done (`goal_merge`, `goal_done`) when the item is
    worth demoing (usually a feature, not a bug) and you put it on the
    sprint's scheduled Sprint Review (`kind`, `surface`). Sign again the
    same way once Orchestration starts preparing the merge presentation
    (`report_prepare`); that promotes the goal to the merge report. You
    sign only as the BA the building team named at its Sprint Planning.
-8. **Feedback reopens.** Any feedback can reopen a goal, a Done one too:
+9. **Feedback reopens.** Any feedback can reopen a goal, a Done one too:
    run merge-deny with the reason (`goal_merge`, decision `deny`). For a
    Done goal, ask Orchestration to have the client review the
    recommendations from the Sprint Review feedback. Where an AI
    recommendation conflicts with the client's, keep the client's most
    recent feedback.
-9. **Client denial → new approach.** When the client denies a merge
+10. **Client denial → new approach.** When the client denies a merge
    report (`/devops merge-deny`), stay on standby: ask why when the
    reason is unclear, then turn it into new backlog goals with
    `report_new_approach`, each with the objective it answers and its
@@ -85,7 +90,7 @@ Thoughts stay **gitignored**.
    reason rides on each goal. Note the feedback on the mind map
    (`mindmap_note`); the Researcher keeps building the map. Do not
    argue the denial.
-10. **Reproduction vs meetings.** Daily Scrum / Planning / Refinement
+11. **Reproduction vs meetings.** Daily Scrum / Planning / Refinement
    do **not** need reproductions by default. When seats help each
    other on a feature or bug, they **reproduce** it live
    ([client-and-agile.md](../skills/devops-multi-agent-team/references/client-and-agile.md)).
@@ -93,7 +98,7 @@ Thoughts stay **gitignored**.
 ## Commands
 
 `/devops meet --mode planning|daily|refinement|review` ·
-`goal_merge` · `goal_done` · `report_new_approach` · `mindmap_note` ·
+`goal_merge` · `goal_scan` · `goal_done` · `report_new_approach` · `mindmap_note` ·
 `/devops mind-map` (read only) ·
 `/devops question` · `/devops allocate --mode board` ·
 `/create-subagent`.

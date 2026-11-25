@@ -68,10 +68,11 @@ test('initialize negotiates, lists 34 tools, prompts and resources', async () =>
     for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_overview', 'mindmap_tree', 'mindmap_note', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
     const added = ['lint_check', 'lint_commands', 'config_get', 'config_set']
     for (const name of added) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 68)
+    assert.equal(tools.length, 69)
     const scrum = [
       'allocation_plan', 'board_spin_up', 'meeting_schedule', 'meeting_hold', 'goal_signoff',
       'report_forward', 'goal_merge', 'goal_done', 'report_prepare', 'report_new_approach',
+      'goal_scan',
     ]
     for (const name of scrum) {
       assert.ok(tools.includes(name), name)
@@ -618,7 +619,14 @@ test('research plans the teams, Orchestration spins up the board, the lead plans
   const reportsRead = await c.rpc('resources/read', { uri: 'devops://reports' })
   const reports = JSON.parse(reportsRead.result.contents[0].text)
   assert.equal(reports.awaitingBa.length, 1)
+  assert.deepEqual(reports.baPings.map(p => p.step), ['peer', 'lead'])
+  const scan = { dest: root, caller: 'agent-b1b1b1', goal, verdict: 'hold', reason: 'ask client' }
+  const scanned = await c.call('goal_scan', scan)
+  assert.notEqual(scanned.isError, true, scanned.text)
   const baArgs = { dest: root, caller: 'agent-b1b1b1', goal, decision: 'ok' }
+  const blocked = await c.call('goal_merge', baArgs)
+  assert.match(blocked.text, /scan holds the ba step: ask client/)
+  await c.call('goal_scan', { ...scan, verdict: 'ok', reason: undefined })
   const baOk = await c.call('goal_merge', baArgs)
   assert.notEqual(baOk.isError, true, baOk.text)
   const ba = await c.call('goal_done', { dest: root, caller: 'agent-b1b1b1', goal })

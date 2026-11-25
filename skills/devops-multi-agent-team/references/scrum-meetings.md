@@ -108,6 +108,18 @@ decision `ok`), then **done** (`goal_done`), which promotes the goal to
 the next signature. A signer who rejects the work runs **merge-deny**
 (`goal_merge`, decision `deny`) with a reason instead.
 
+**The BA scans as needed.** Every merge-ok pings the goal's Business
+Analyst (the one the building team named at Sprint Planning): the ping is
+recorded on the goal (`pings`, a `ba_pinged` history event) and listed
+under `baPings` in `devops://reports` until the BA scans that step.
+merge-ok does not wait for a scan. The BA scans what is being merged when
+it sees a need, checking that it matches the client's intentions
+(`goal_scan`): `ok`, or `hold` or `deny` with a reason. While the BA's
+latest scan of the step holds or denies it, merge-ok on that step is
+refused; a later `ok` scan lifts it. A scan never reopens the goal
+(merge-deny does), and the BA signing its own step pings no one. The
+client's push-ok is not held by a scan.
+
 1. **Peer**: when a member believes the goal is done, it looks for
    another member of its own team first (team members work on the same
    thing), and asks Orchestration only when none is free. The verifier

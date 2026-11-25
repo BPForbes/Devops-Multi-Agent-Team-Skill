@@ -105,8 +105,9 @@ Review, then while the Orchestrator prepares the merge presentation), and
 the Orchestrator delivers a merge report the person approves with
 `/devops push-ok` or denies with `/devops merge-deny REASON`; push-ok is
 the real final sign-off before any push. Every AI step is merge-ok, then
-done (`goal_merge`, `goal_done`); merge-deny with a reason reopens the
-goal. A one-file fix gets
+done (`goal_merge`, `goal_done`); merge-ok pings the BA, who scans as
+needed (`goal_scan`) and whose hold or deny blocks it; merge-deny with a
+reason reopens the goal. A one-file fix gets
 one Coder and one Reviewer, QA and Security, each on its own team that
 wrote nothing. The
 ceiling is 2 to 3 seats of each of Researcher, Coder, Reviewer, QA and

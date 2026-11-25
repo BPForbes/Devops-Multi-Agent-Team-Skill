@@ -5,8 +5,8 @@ import {
   addGoal, assignWork, createSprint, emptyBoard, moveGoal, workInbox,
 } from './devops-board.mjs'
 import {
-  clientSignOff, forwardReports, goalDone, goalVerdict, holdMeeting, leadSignOff, meetingsFor,
-  newApproach, prepareMerge, reportsFor, scheduleMeeting, timebox,
+  baScan, clientSignOff, forwardReports, goalDone, goalVerdict, holdMeeting, leadSignOff,
+  meetingsFor, newApproach, pingsFor, prepareMerge, reportsFor, scheduleMeeting, timebox,
 } from './devops-scrum.mjs'
 
 const AT = '2026-11-24T10:00:00Z'
@@ -468,6 +468,30 @@ test('merge-ok comes before done; a member verifies the goal before its lead sig
   const judgedAgain = passedSecurity(sentBack)
   judgedAgain.goals[GOAL].signoffs.pop()
   assert.throws(() => lead(judgedAgain), /peer verification since its last send-back/)
+})
+
+test('merge-ok pings the BA and goes ahead; only a BA hold or deny blocks it', () => {
+  const { board } = unverified()
+  const pinged = ok(board, DEV)
+  assert.deepEqual(pinged.goals[GOAL].pings, [{ step: 'peer', ba: BA, by: DEV, at: AT }])
+  assert.equal(pinged.goals[GOAL].history.at(-1).event, 'ba_pinged')
+  assert.deepEqual(pingsFor(pinged, { ba: BA }).map(p => p.goal), [GOAL])
+  const scan = (b, verdict, reason, ba = BA) => baScan(b, {
+    goal: GOAL, ba, verdict, reason, at: AT,
+  })
+  assert.throws(() => scan(board, 'ok', undefined, DEV), /only the goal's Business Analyst/)
+  assert.throws(() => scan(board, 'hold'), /holds or denies says why/)
+  const held = scan(board, 'hold', 'Client asked for a warning, not a fix')
+  assert.throws(() => ok(held, DEV), /scan holds the peer step: Client asked for a warning/)
+  const denied = scan(board, 'deny', 'Out of scope')
+  assert.throws(() => ok(denied, DEV), /scan denies the peer step: Out of scope/)
+  assert.equal(denied.goals[GOAL].state, 'security', 'a scan does not reopen the goal')
+  const cleared = ok(scan(held, 'ok'), DEV)
+  assert.equal(pingsFor(cleared, { ba: BA }).length, 0, 'a scan answers the ping')
+  const signed = step(cleared, DEV)
+  assert.deepEqual(signed.board.goals[GOAL].signoffs.map(s => s.step), ['peer'])
+  const leadHeld = scan(signed.board, 'hold', 'Wait for the review')
+  assert.throws(() => ok(leadHeld, LEAD), /holds the lead step/)
 })
 
 test('when the lead wrote the goal, another member signs for the lead', () => {

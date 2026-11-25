@@ -628,7 +628,9 @@ function checkSigner(next, goal, step, { by, team, members }) {
 
 /**
  * merge-ok or merge-deny on the step a goal waits for, by that step's
- * signer (checkSigner). merge-ok lets the same signer run done (sign). A
+ * signer (checkSigner). merge-ok lets the same signer run done (sign). It
+ * pings the goal's BA (recorded in `pings`) and goes ahead without a scan;
+ * only a BA scan on the step that holds or denies it blocks it (baScan). A
  * denial needs a reason and reopens the goal (reopenGoal); the goal's BA
  * and the client may also deny, to reopen a goal on feedback. A client
  * denial of the merge report sends the report back to the BA (`denied`).
@@ -648,8 +650,9 @@ export function goalVerdict(board, { goal, by, team, members, decision, reason, 
   }
   const trimmed = filled(reason) ? String(reason).trim() : undefined
   const verdict = decision === 'ok' ? 'ok' : 'deny'
+  if (verdict === 'ok') checkScan(target, step)
   target.reviews = [...(target.reviews ?? []), { step, by, verdict, at, reason: trimmed }]
-  if (verdict === 'ok') return next
+  if (verdict === 'ok') return pingAnalyst(next, goal, { step, by, at })
   const [id, report] = liveReport(next, goal) ?? []
   if (step === 'client' && by === 'client') {
     Object.assign(report, { state: 'denied', decided_at: at, decision_reason: trimmed })
@@ -662,11 +665,69 @@ export function goalVerdict(board, { goal, by, team, members, decision, reason, 
 /** The goal's BA, or the client, may deny any step to reopen the goal on feedback. */
 function mayReopen(next, goal, by) {
   if (by === 'client') return true
+  const analyst = goalAnalyst(next, goal)
+  return analyst !== undefined && by === analyst
+}
+
+/** The BA the goal's building team named at its Sprint Planning, if any. */
+function goalAnalyst(next, goal) {
   const [, report] = liveReport(next, goal) ?? []
   const sprint = report?.sprint ?? next.goals[goal].sprint
   const team = report?.team ?? allocatedTeams(next, sprint)
     .find(t => (t.goals ?? []).includes(goal))?.team
-  return team !== undefined && by === sprintAnalyst(next, sprint, team)
+  return team === undefined ? undefined : sprintAnalyst(next, sprint, team)
+}
+
+/** Refuses merge-ok while the BA's latest scan of this step holds or denies it. */
+function checkScan(target, step) {
+  const scan = (target.scans ?? []).findLast(s => s.step === step)
+  need(scan === undefined || scan.verdict === 'ok',
+    `the Business Analyst's scan ${scan?.verdict === 'hold' ? 'holds' : 'denies'} the ${step}`
+      + ` step: ${scan?.reason}; merge-ok waits for the BA's ok`)
+}
+
+/**
+ * Records that merge-ok pinged the goal's BA to scan the step as needed
+ * (`pings`, and a `ba_pinged` history event). A BA signing its own step
+ * pings no one. Returns the board.
+ */
+function pingAnalyst(next, goal, { step, by, at }) {
+  const ba = goalAnalyst(next, goal)
+  if (ba === undefined || ba === by) return next
+  const target = next.goals[goal]
+  target.pings = [...(target.pings ?? []), { step, ba, by, at }]
+  target.history.push({ at, event: 'ba_pinged', ba, step, by })
+  return next
+}
+
+/**
+ * The BA's scan of the step a goal waits for, as needed: `ok`, or `hold` or
+ * `deny` with a reason. A hold or a denial blocks merge-ok on that step until
+ * the BA's next scan is ok; it does not reopen the goal (merge-deny does).
+ */
+export function baScan(board, { goal, ba, verdict, reason, at }) {
+  const next = normalizeBoard(structuredClone(board))
+  const target = next.goals[goal]
+  need(target !== undefined, `goal is not on the board: ${goal}`)
+  const step = nextStep(target)
+  need(step !== undefined, `${goal} was signed by the client; nothing to scan`)
+  const analyst = goalAnalyst(next, goal)
+  need(analyst !== undefined && ba === analyst,
+    `only the goal's Business Analyst (${analyst ?? 'none'}) scans ${goal}`)
+  need(['ok', 'hold', 'deny'].includes(verdict), 'a scan is ok, hold or deny')
+  need(verdict === 'ok' || filled(reason), 'a scan that holds or denies says why')
+  const said = filled(reason) ? String(reason).trim() : undefined
+  target.scans = [...(target.scans ?? []), { step, by: ba, verdict, reason: said, at }]
+  target.history.push({ at, event: 'ba_scan', by: ba, step, verdict, reason: said })
+  return next
+}
+
+/** Merge-oks that pinged `ba` (any BA when unnamed) with no scan of that step since. */
+export function pingsFor(board, { ba } = {}) {
+  const open = g => p => (ba === undefined || p.ba === ba)
+    && !(g.scans ?? []).some(s => s.step === p.step && s.at >= p.at)
+  return Object.entries(normalizeBoard(board).goals)
+    .flatMap(([goal, g]) => (g.pings ?? []).filter(open(g)).map(p => ({ goal, ...p })))
 }
 
 /**
@@ -681,7 +742,7 @@ function reopenGoal(next, goal, { by, step, reason, at }) {
   const was = target.state
   Object.assign(target, {
     state: 'in_progress', judged_from: Object.keys(next.handoffs).length, signoffs: [],
-    reviews: [],
+    reviews: [], scans: [], pings: [],
   })
   delete target.blocked_from
   target.history.push({ at, event: 'reopened', by, step, reason, was })
