@@ -5,6 +5,8 @@ description: Show or change the project standards in .devops/standards.json - li
 
 # /config `[show | get PATH | set PATH VALUE | unset PATH | add PATH VALUE | remove PATH VALUE | rule RULE error|off]`
 
+Execute now. Do not reprint, summarize, or paste these instructions into chat — run the steps (tools and scripts) and report only the result.
+
 Also: `settings`, `standards`, `change the line length`, `turn off a lint rule`.
 
 Reads and changes `.devops/standards.json`; the package `standards.json` holds the defaults

@@ -5,6 +5,8 @@ description: Do until you achieve X. Persist the objective and keep looping unti
 
 # /goal
 
+Execute now. Do not reprint, summarize, or paste these instructions into chat — run the steps (tools and scripts) and report only the result.
+
 Also: `set a goal`, `do until X`, `keep going until X`.
 
 Do until you achieve **X**. Do not stop at a plan or a partial implement.
@@ -34,4 +36,3 @@ Do until you achieve **X**. Do not stop at a plan or a partial implement.
    (the client only). The skip is recorded, not reported as a pass.
    Security Clear alone never authorizes a push.
 
-Catalog: `../skills/devops-multi-agent-team/references/agent-commands.md`.

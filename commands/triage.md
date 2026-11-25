@@ -5,6 +5,8 @@ description: QA opens or updates a triage item for a bug or discovery during com
 
 # /triage
 
+Execute now. Do not reprint, summarize, or paste these instructions into chat — run the steps (tools and scripts) and report only the result.
+
 Also: `open triage`, `track this bug`, `QA triage`.
 
 **Owner: QA** (`../agents/devops-quality-engineer.md`).
@@ -22,4 +24,3 @@ Also: `open triage`, `track this bug`, `QA triage`.
    creates is process output too: throwaway clone, or a reserved
    lower-case name (`_scratch/`, `.scratch`), deleted before you report.
 
-Catalog: `../skills/devops-multi-agent-team/references/agent-commands.md`.

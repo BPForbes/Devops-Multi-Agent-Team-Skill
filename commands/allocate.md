@@ -5,6 +5,8 @@ description: Orchestrator assigns goals to pods (team hashes) and to each agent 
 
 # /allocate `--mode pod|agent|job|board` `[parent goal]`
 
+Execute now. Do not reprint, summarize, or paste these instructions into chat — run the steps (tools and scripts) and report only the result.
+
 Also: `/devops allocate`, `/devops goal --mode allocate`, `assign pods`, `assign agents`.
 
 1. **pod** — write `goal-team-<hex>.md` per team hash from the parent goal
@@ -18,4 +20,3 @@ Mint ids with `node scripts/devops-ids.mjs mint team` and `mint agent`.
 Independence rules still apply for review/security/QA
 ([role-identity.md](../skills/devops-multi-agent-team/references/role-identity.md)).
 
-Catalog: `../skills/devops-multi-agent-team/references/agent-commands.md`.

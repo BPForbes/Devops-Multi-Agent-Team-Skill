@@ -5,6 +5,8 @@ description: Reproduce a failure with exact commands before declaring a cause. N
 
 # /repro
 
+Execute now. Do not reprint, summarize, or paste these instructions into chat — run the steps (tools and scripts) and report only the result.
+
 Also: `reproduce`, `write a repro`.
 
 Reproduce the failure before declaring a cause. When one AI seat talks
@@ -63,4 +65,3 @@ seat is offline), say so on `Live:` and attach the captured output or
 screenshot paths instead. That async fallback still counts as the
 reproduction.
 
-Catalog: `../skills/devops-multi-agent-team/references/agent-commands.md`.

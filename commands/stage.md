@@ -5,6 +5,8 @@ description: Trigger one DevOps CI/CD pod, or the full loop until Security Clear
 
 # /stage `--mode <pod|full|loop>` `[goal text]`
 
+Execute now. Do not reprint, summarize, or paste these instructions into chat — run the steps (tools and scripts) and report only the result.
+
 Also: `/devops stage`, `/devops ci`, `/devops pipeline`, `run research`,
 `run the full loop`, `keep going until QA passes`.
 
@@ -41,4 +43,3 @@ Pods match the Orchestrator loop in `../skills/devops-multi-agent-team/SKILL.md`
 
 Same path as `/devops goal --mode loop` / `/goal`.
 
-Catalog: `../skills/devops-multi-agent-team/references/agent-commands.md`.

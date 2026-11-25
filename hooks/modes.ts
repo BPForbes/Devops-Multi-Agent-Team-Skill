@@ -321,7 +321,16 @@ export function takeModeFlag(
 export function parseSkillMode(word: string, rest: string): SkillMode | undefined {
   const spec = BY_ALIAS.get(word.toLowerCase())
   if (spec === undefined) return undefined
+  const hadFlag = MODE_FLAG.test(rest)
   const taken = takeModeFlag(rest, spec.modes, spec.defaultMode)
+  // `/devops tags history` (no --mode) treats the first token as the mode when it is allowed.
+  if (!hadFlag) {
+    const words = shellWords(taken.rest)
+    const first = words[0]?.toLowerCase()
+    if (first !== undefined && spec.modes.includes(first)) {
+      return { word: spec.word, mode: first, rest: words.slice(1).join(' ') }
+    }
+  }
   return { word: spec.word, mode: taken.mode, rest: taken.rest }
 }
 
@@ -449,18 +458,50 @@ export function orchestrationCard(skill: SkillMode): string {
   ].join('\n')
 }
 
-/** CLI argv for a skill mode that can shell out (mind-map / clean / question). */
+/**
+ * CLI argv for a skill mode that can shell out. Modes without a matching script
+ * (goal, stage, meet, …) return undefined so only the orchestration card is shown.
+ */
 export function scriptArgsFor(skill: SkillMode): string[] | undefined {
   if (skill.word === 'mind-map' || skill.word === 'question') return mindmapArgs(skill)
   if (skill.word === 'clean' && (skill.mode === 'brief' || skill.mode === 'scan')) {
     const statement = skill.rest || 'follow clean code principles'
     return [skill.mode, '--statement', statement]
   }
+  if (skill.word === 'tags') {
+    const extra = shellWords(skill.rest)
+    // create needs --version; without it keep the card so the seat fills the plan first.
+    if (skill.mode === 'create'
+      && !extra.some(w => w === '--version' || w.startsWith('--version='))) {
+      return undefined
+    }
+    return [skill.mode, ...extra]
+  }
+  if (skill.word === 'story') return storyArgs(skill)
+  if (skill.word === 'reuse') {
+    const terms = shellWords(skill.rest)
+    return terms.length > 0 ? ['reuse-search', ...terms] : undefined
+  }
+  return undefined
+}
+
+function storyArgs(skill: SkillMode): string[] | undefined {
+  if (skill.mode === 'graph') return ['graph']
+  if (skill.mode === 'research') return ['guide']
+  if (skill.mode === 'check') {
+    const id = shellWords(skill.rest)[0]
+    return id !== undefined ? ['check', id] : undefined
+  }
   return undefined
 }
 
 function mindmapArgs(skill: SkillMode): string[] | undefined {
-  const mode = skill.word === 'question' ? questionAsMindmap(skill.mode) : skill.mode
+  let mode = skill.word === 'question' ? questionAsMindmap(skill.mode) : skill.mode
+  // A question with no input cannot search; run the overview so the command does work.
+  if (skill.word === 'question' && skill.rest.trim() === '' && mode !== 'overview'
+    && mode !== 'status' && mode !== 'tree' && mode !== 'build') {
+    mode = 'overview'
+  }
   if (mode === 'overview') return ['overview']
   if (mode === 'status') return ['status']
   if (mode === 'build') return ['build', '--save']
@@ -497,5 +538,8 @@ function queryArgs(kind: string, rest: string): string[] | undefined {
 export function scriptNameFor(skill: SkillMode): string | undefined {
   if (skill.word === 'mind-map' || skill.word === 'question') return 'devops-mindmap.mjs'
   if (skill.word === 'clean') return 'devops-cleanup.mjs'
+  if (skill.word === 'tags') return 'devops-tags.mjs'
+  if (skill.word === 'story') return 'devops-stories.mjs'
+  if (skill.word === 'reuse') return 'devops-research.mjs'
   return undefined
 }
