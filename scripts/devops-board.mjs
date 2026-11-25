@@ -453,9 +453,10 @@ const JUDGING_JOBS = new Set(['reviewer', 'qa', 'security'])
 export const OPEN_WORK_LIMIT = 3
 
 /**
- * Gives a seat a piece of work on a goal, with what it has to do. A seat
- * already holding OPEN_WORK_LIMIT open pieces is not given more: the lead
- * picks a seat with room or leaves the goal in the backlog.
+ * Gives a seat a piece of work on a goal, with what it has to do. Work that
+ * would take a seat past OPEN_WORK_LIMIT open pieces is `held` instead: the
+ * BA checks it against the client's objectives (decideHeldWork in
+ * devops-scrum.mjs) before the seat sees it. Returns { id, board, held }.
  */
 export function assignWork(board, { goal, job, agent, team, description, by, at, mint }) {
   need(board.goals[goal] !== undefined, `goal is not on the board: ${goal}`)
@@ -468,8 +469,7 @@ export function assignWork(board, { goal, job, agent, team, description, by, at,
     `assigned_by must be orchestration or an agent hash: ${by}`,
   )
   const open = workInbox(board, agent).length
-  need(open < OPEN_WORK_LIMIT,
-    `${agent} holds ${open} open pieces of work (limit ${OPEN_WORK_LIMIT}); do not overwork it`)
+  const held = open >= OPEN_WORK_LIMIT
   if (JUDGING_JOBS.has(job) && !isExempt(board, goal, { team, agent, job })) {
     const authors = normalizeBoard(board).goals[goal].authors ?? []
     need(!authors.includes(team), `team ${team} authored this goal and cannot judge it`)
@@ -478,10 +478,11 @@ export function assignWork(board, { goal, job, agent, team, description, by, at,
   const id = mintId('work', next.assignments, mint)
   if (JUDGING_JOBS.has(job)) useException(next, goal, { team, agent, job }, { at, by: id })
   next.assignments[id] = {
-    goal, job, agent, team, description: description.trim(), state: 'assigned',
+    goal, job, agent, team, description: description.trim(), state: held ? 'held' : 'assigned',
     assigned_by: by, assigned_at: at, accepted_at: null, done_at: null,
+    ...(held ? { held: { open, limit: OPEN_WORK_LIMIT, at } } : {}),
   }
-  return { id, board: next }
+  return { id, board: next, held }
 }
 
 /** The work a seat has been given and has not finished. */

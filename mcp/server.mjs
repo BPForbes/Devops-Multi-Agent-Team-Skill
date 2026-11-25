@@ -34,9 +34,9 @@ import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 import { isTeamId } from '../scripts/devops-ids.mjs'
 import { RISKS, planAllocation, spinUp } from '../scripts/devops-allocation.mjs'
 import {
-  MEETING_KINDS, baScan, bugIssue, fileBugReport, forwardReports, goalDone, goalVerdict,
-  holdMeeting, leadSignOff, meetingsFor, newApproach, pingsFor, prepareMerge, raiseToAnalyst,
-  reportsFor, scheduleMeeting, teamSchedule,
+  MEETING_KINDS, baScan, bugIssue, decideHeldWork, fileBugReport, forwardReports, goalDone,
+  goalVerdict, holdMeeting, leadSignOff, meetingsFor, newApproach, pingsFor, prepareMerge,
+  raiseToAnalyst, recordIssue, reportsFor, scheduleMeeting, teamSchedule,
 } from '../scripts/devops-scrum.mjs'
 import {
   TEAM_DIR, needsAttention, openBoard, readMembers, recordRefusal, teamIntake, teamMove,
@@ -1269,8 +1269,8 @@ const TOOLS = [
     description: [
       'The team lead (`caller`) makes the issue from a bug report the client had fixed: a',
       'backlog goal of kind bug with the issue draft the lead files in the project repo.',
-      '`assign` ({ agent, job, description }) gives it to a seat with room; a seat holding',
-      'the open-work limit is refused, and the goal may wait in the backlog.',
+      '`assign` ({ agent, job, description }) gives it to a seat; past the seat\'s open-work',
+      'limit (3) it is held for the BA (work_decide). The goal may wait in the backlog.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -1285,6 +1285,53 @@ const TOOLS = [
     run: args => boardChange(args, board => bugIssue(board, {
       id: args.report, lead: args.caller, goal: args.goal, title: args.title,
       assign: args.assign, at: now(),
+    })),
+  },
+  {
+    name: 'bug_filed',
+    description: [
+      'The team lead (`caller`) records the real issue it filed for a bug goal: the goal and',
+      'its draft are titled "#<number> <description>", the draft names the work item hash',
+      '(kind bug), and the goal the bug touches lists the issue number.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, goal: { type: 'string' },
+        number: { type: 'integer', minimum: 1 },
+      },
+      required: ['caller', 'goal', 'number'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: recordIssue(board, {
+        goal: args.goal, lead: args.caller, number: args.number, at: now(),
+      }),
+    })),
+  },
+  {
+    name: 'work_decide',
+    description: [
+      'The team\'s Business Analyst (`caller`) decides work held past a seat\'s open-work',
+      'limit (devops://reports baPings, step load) against the client\'s objectives:',
+      '`approve` gives it to the seat, `decline` drops it, `ask` sends the client a load',
+      'report through Orchestration when the BA cannot decide (the person answers',
+      '/devops load REPORT approve|decline). decline and ask need a reason.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, work: { type: 'string' },
+        decision: { enum: ['approve', 'decline', 'ask'] },
+        reason: { type: 'string', maxLength: MAX_TASK_TEXT },
+      },
+      required: ['caller', 'work', 'decision'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => decideHeldWork(board, {
+      id: args.work, ba: args.caller, decision: args.decision, reason: args.reason, at: now(),
     })),
   },
   {
@@ -1360,7 +1407,10 @@ const TOOLS = [
   },
   {
     name: 'work_assign',
-    description: 'Give a seat a piece of work on a goal, with what it has to do.',
+    description: [
+      'Give a seat a piece of work on a goal, with what it has to do. Past the seat\'s',
+      'open-work limit (3) the work is held for the BA (work_decide).',
+    ].join(' '),
     inputSchema: {
       type: 'object',
       properties: {

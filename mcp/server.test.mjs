@@ -68,11 +68,11 @@ test('initialize negotiates, lists 34 tools, prompts and resources', async () =>
     for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_overview', 'mindmap_tree', 'mindmap_note', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
     const added = ['lint_check', 'lint_commands', 'config_get', 'config_set']
     for (const name of added) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 72)
+    assert.equal(tools.length, 74)
     const scrum = [
       'allocation_plan', 'board_spin_up', 'meeting_schedule', 'meeting_hold', 'goal_signoff',
       'report_forward', 'goal_merge', 'goal_done', 'report_prepare', 'report_new_approach',
-      'goal_scan', 'goal_raise', 'bug_report', 'bug_issue',
+      'goal_scan', 'goal_raise', 'bug_report', 'bug_issue', 'bug_filed', 'work_decide',
     ]
     for (const name of scrum) {
       assert.ok(tools.includes(name), name)

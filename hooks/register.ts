@@ -21,7 +21,7 @@ const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
 // person may run them.
 const HUMAN_ONLY_WORDS = new Set([
   'on', 'off', 'enable', 'disable', 'skill', 'skills',
-  'push-ok', 'push-reset', 'gates', 'allow-branch', 'comments', 'monitor', 'bug',
+  'push-ok', 'push-reset', 'gates', 'allow-branch', 'comments', 'monitor', 'bug', 'load',
 ])
 const ACTIVE_REF = { plugin: 'devops-multi-agent-team', key: 'active' } as const
 const SETTINGS_SCRIPT = 'scripts/devops-claude-settings.mjs'
@@ -152,6 +152,21 @@ async function bugAnswer($: EngineInterface, rest: string): Promise<string> {
     : ['--alternative', how.join(' ')]
   const args = ['bug', ids[0], decision, ...(decision === 'fix' ? picked : [])]
   const ran = await runPluginScript($, CHAIN_SCRIPT, args)
+  return ran.out ?? 'the board could not be updated'
+}
+
+const LOAD_USAGE = 'Usage: /devops load REPORT approve|decline [REASON]'
+
+/**
+ * The person's answer to the BA's load report: give the held work to the
+ * seat past its open-work limit, or decline it.
+ */
+async function loadAnswer($: EngineInterface, rest: string): Promise<string> {
+  const { ids, words } = reportIds(rest)
+  const [decision, ...why] = words
+  if (ids.length !== 1 || (decision !== 'approve' && decision !== 'decline')) return LOAD_USAGE
+  const reason = why.length > 0 ? ['--reason', why.join(' ')] : []
+  const ran = await runPluginScript($, CHAIN_SCRIPT, ['load', ids[0], decision, ...reason])
   return ran.out ?? 'the board could not be updated'
 }
 
@@ -704,6 +719,7 @@ export const register: Register = on => {
       }
     }
     if (word === 'bug') return { text: await bugAnswer($, rest) }
+    if (word === 'load') return { text: await loadAnswer($, rest) }
     if (word === 'push-reset') {
       await $.state.set(PUSH_KEY, false)
       await $.state.set(PUSH_REPORTS, [])

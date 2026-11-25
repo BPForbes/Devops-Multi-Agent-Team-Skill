@@ -824,10 +824,34 @@ export function baScan(board, { goal, ba, verdict, reason, at }) {
 
 /** Merge-oks that pinged `ba` (any BA when unnamed) with no scan of that step since. */
 export function pingsFor(board, { ba } = {}) {
+  const next = normalizeBoard(board)
   const open = g => p => (ba === undefined || p.ba === ba)
     && !(g.scans ?? []).some(s => s.step === p.step && s.at >= p.at)
-  return Object.entries(normalizeBoard(board).goals)
+  const goals = Object.entries(next.goals)
     .flatMap(([goal, g]) => (g.pings ?? []).filter(open(g)).map(p => ({ goal, ...p })))
+  return [...goals, ...heldPings(next, ba)]
+}
+
+/**
+ * Work held past a seat's open-work limit, as pings for its team's BA
+ * (step `load`), until the BA or the client decides it.
+ */
+function heldPings(next, ba) {
+  return Object.entries(next.assignments)
+    .filter(([, w]) => w.state === 'held')
+    .map(([work, w]) => ({
+      goal: w.goal, work, step: 'load', ba: teamAnalyst(next, w.team), by: w.assigned_by,
+      at: w.held.at,
+    }))
+    .filter(p => ba === undefined || p.ba === ba)
+}
+
+/** The BA the team named at its latest held Sprint Planning. */
+function teamAnalyst(next, team) {
+  return Object.values(next.meetings)
+    .filter(m => m.team === team && m.kind === 'planning' && m.state === 'held')
+    .sort((a, b) => String(a.held_at).localeCompare(String(b.held_at)))
+    .at(-1)?.record?.businessAnalyst
 }
 
 /**
@@ -1014,16 +1038,20 @@ function overrideOf(next, goal, override) {
  * The reported bugs open on a goal: issues in the project's repo it lists
  * (`bug_issues`), and bugs found in discovery (QA's triage hand-offs on the
  * goal that are not done, and bug reports on the goal the client had fixed
- * whose bug goal is not done).
+ * whose bug goal is not done). A listed issue stops counting once its bug
+ * goal is done; a filed bug report counts as its issue.
  */
 function reportedBugs(next, goal) {
-  const issues = (next.goals[goal].bug_issues ?? []).map(n => `issue #${n}`)
+  const fixed = n => Object.values(next.goals)
+    .some(g => g.kind === 'bug' && g.issue === n && g.state === 'done')
+  const issues = (next.goals[goal].bug_issues ?? []).filter(n => !fixed(n)).map(n => `issue #${n}`)
   const triage = Object.entries(next.handoffs)
     .filter(([, h]) => h.payload.goal === goal && h.payload.kind === 'triage' && h.state !== 'done')
     .map(([id]) => `triage ${id}`)
   const found = Object.entries(next.reports)
     .filter(([, r]) => r.kind === 'bug' && r.envelope.body.goal === goal
-      && BUG_TO_FIX.has(r.state) && next.goals[r.bug_goal]?.state !== 'done')
+      && BUG_TO_FIX.has(r.state) && next.goals[r.bug_goal]?.state !== 'done'
+      && next.goals[r.bug_goal]?.issue === undefined)
     .map(([id]) => `bug ${id}`)
   return [...issues, ...triage, ...found]
 }
@@ -1397,11 +1425,10 @@ export function bugIssue(board, { id, lead, goal, title, assign, at, mint }) {
   const row = next.reports[id]
   need(row?.kind === 'bug' && row.state === 'bug_fix',
     `report ${id} has no fix to make an issue of`)
-  const owner = allocatedTeams(next, row.sprint).find(t => t.team === row.team)?.lead
-  need(lead === owner, `only ${row.team}'s team lead (${owner}) makes the issue`)
+  checkReportLead(next, row, lead)
   need(isGoalId(goal) && next.goals[goal] === undefined, `${goal} is not a new goal`)
   const body = row.envelope.body
-  const draft = bugIssueDraft(body, row.fix, title)
+  const draft = bugIssueDraft(body, { goal, fix: row.fix, title })
   const added = addGoal(next, { goal, title: draft.title, at })
   Object.assign(added.goals[goal], {
     kind: 'bug', from_report: id, client_feedback: row.fix, acceptance: [body.expected],
@@ -1409,19 +1436,119 @@ export function bugIssue(board, { id, lead, goal, title, assign, at, mint }) {
   })
   Object.assign(added.reports[id], { state: 'issue_drafted', bug_goal: goal, issue_at: at })
   if (assign === undefined) return { board: added }
-  const { id: work, board: given } = assignWork(added, {
+  const { id: work, board: given, held } = assignWork(added, {
     ...assign, goal, team: row.team, by: lead, at, mint,
   })
-  return { board: given, work }
+  return { board: given, work, held }
 }
 
-/** The issue text the team lead files: the report and the client's chosen fix. */
-function bugIssueDraft(body, fix, title) {
+/** Refuses anyone but the team lead the allocation names for the report's team. */
+function checkReportLead(next, row, lead) {
+  const owner = allocatedTeams(next, row.sprint).find(t => t.team === row.team)?.lead
+  need(lead === owner, `only ${row.team}'s team lead (${owner}) makes the issue`)
+}
+
+/**
+ * The issue text the team lead files: the work item (the bug goal's hash,
+ * kind bug), the report and the client's chosen fix.
+ */
+function bugIssueDraft(body, { goal, fix, title }) {
   const lines = [
-    body.explanation, '', `Now: ${body.behavior}`, `Expected: ${body.expected}`,
+    `Work item: ${goal} (bug)`, '', body.explanation, '',
+    `Now: ${body.behavior}`, `Expected: ${body.expected}`,
     `Fix (client's choice): ${fix}`, '', 'Plan:', body.plan, '',
     'Files:', ...body.files.map(f => `- ${f}`), 'Lines:', ...body.lines.map(l => `- ${l}`),
     '', 'Snippets:', ...body.snippets.map(c => ['```', c, '```'].join('\n')),
   ]
   return { title: filled(title) ? String(title).trim() : body.title, body: lines.join('\n') }
+}
+
+/** A real issue's title: `#<number> <description>`. */
+const ISSUE_TITLE = /^#[1-9][0-9]* \S/
+const ISSUE_PREFIX = /^#[0-9]+ /
+
+/** The title of real issue `number` with `description`. */
+export function issueTitle(number, description) {
+  const text = String(description ?? '').replace(ISSUE_PREFIX, '').trim()
+  need(Number.isInteger(number) && number > 0, 'an issue number is a positive whole number')
+  need(text !== '', 'an issue title carries a description after its number')
+  return `#${number} ${text}`
+}
+
+/** Refuses an issue whose title or body breaks the format for a bug work item. */
+function checkIssue(draft, goal) {
+  need(ISSUE_TITLE.test(draft.title), `issue title "${draft.title}" is not "#<number> <text>"`)
+  need(draft.body.includes(`Work item: ${goal} (bug)`),
+    `the issue names its work item: Work item: ${goal} (bug)`)
+}
+
+/**
+ * The team lead records the real issue it filed for a bug goal: the goal and
+ * its draft are titled `#<number> <description>`, the goal keeps the number
+ * (`issue`), and the goal the bug touches lists it (`bug_issues`). Returns
+ * the new board.
+ */
+export function recordIssue(board, { goal, lead, number, at }) {
+  const next = normalizeBoard(structuredClone(board))
+  const target = next.goals[goal]
+  need(target?.kind === 'bug', `${goal} is not a work item of kind bug`)
+  need(target.issue === undefined, `${goal} already has issue #${target.issue}`)
+  checkReportLead(next, next.reports[target.from_report], lead)
+  const title = issueTitle(number, target.title)
+  const draft = { ...target.issue_draft, title }
+  checkIssue(draft, goal)
+  Object.assign(target, { title, issue: number, issue_draft: draft })
+  target.history.push({ at, event: 'issue_filed', by: lead, issue: number })
+  const touched = next.goals[target.bug_of]
+  if (touched !== undefined) {
+    touched.bug_issues = [...new Set([...(touched.bug_issues ?? []), number])]
+  }
+  return next
+}
+
+/** The BA's or the client's answers on held work, and the work state each leads to. */
+const HELD_DECISIONS = Object.freeze({ approve: 'assigned', decline: 'declined' })
+
+/**
+ * The team's BA decides work held past a seat's open-work limit against the
+ * client's objectives: approve gives it to the seat, decline drops it (with
+ * a reason), and `ask` sends the client a load report through Orchestration
+ * when the BA cannot decide. Returns { board, report }; report only on ask.
+ */
+export function decideHeldWork(board, { id, ba, decision, reason, at, mint }) {
+  const next = normalizeBoard(structuredClone(board))
+  const row = next.assignments[id]
+  need(row?.state === 'held', `work ${id} is not held for the Business Analyst`)
+  const analyst = teamAnalyst(next, row.team)
+  need(ba === analyst, `only ${row.team}'s Business Analyst (${analyst}) decides held work`)
+  need(decision === 'ask' || Object.hasOwn(HELD_DECISIONS, decision),
+    'held work is approved, declined, or asked of the client')
+  need(decision === 'approve' || filled(reason), `${decision} on held work says why`)
+  if (decision !== 'ask') return { board: settleHeld(next, id, { by: ba, decision, reason, at }) }
+  const report = mintId('report', next.reports, mint)
+  next.reports[report] = {
+    kind: 'load', work: id, goal: row.goal, team: row.team, ba, reason: String(reason).trim(),
+    state: 'load_to_person', filed_at: at,
+  }
+  row.state = 'held_for_client'
+  return { board: next, report }
+}
+
+/** The client's answer on a load report: approve or decline the held work. */
+export function decideLoad(board, { id, decision, reason, at }) {
+  const next = normalizeBoard(structuredClone(board))
+  const row = next.reports[id]
+  need(row?.kind === 'load' && row.state === 'load_to_person',
+    `report ${id} is not a load report waiting for the client`)
+  need(Object.hasOwn(HELD_DECISIONS, decision), 'the client approves or declines the held work')
+  Object.assign(row, { state: `load_${decision}d`, decided_at: at })
+  return settleHeld(next, row.work, { by: 'client', decision, reason, at })
+}
+
+/** Records the decision on held work: it reaches the seat, or it is declined. */
+function settleHeld(next, id, { by, decision, reason, at }) {
+  const row = next.assignments[id]
+  const decided = { by, decision, at, ...(filled(reason) ? { reason: String(reason).trim() } : {}) }
+  Object.assign(row, { state: HELD_DECISIONS[decision], held: { ...row.held, decided } })
+  return next
 }

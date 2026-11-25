@@ -131,6 +131,14 @@ test('the client answers a bug report: fine, a proposal, or its own alternative'
     command: 'bug', ids: ['report-b00b00'], words: ['fix'], extra: { alternative: 'Warn' }, at: AT,
   })
   assert.equal(alt.board.reports['report-b00b00'].fix, 'Warn')
+  const load = structuredClone(board)
+  load.assignments['work-aaaaaa'] = { state: 'held_for_client', held: { open: 3 } }
+  load.reports['report-10ad00'] = { kind: 'load', work: 'work-aaaaaa', state: 'load_to_person' }
+  const decided = decide(load, {
+    command: 'load', ids: ['report-10ad00'], words: ['approve'], at: AT,
+  })
+  assert.equal(decided.text, 'Load report report-10ad00: held work approved')
+  assert.equal(decided.board.assignments['work-aaaaaa'].state, 'assigned')
   const raise = who => decide(waiting(), { command: 'raise', goal: GOAL, reason: 'x', who, at: AT })
   assert.throws(() => raise({}), /types merge-ok, merge-deny, done or raise/)
   assert.throws(() => raise({ seat: 'agent-0a0a0a' }), /not waiting for the BA's first signature/)

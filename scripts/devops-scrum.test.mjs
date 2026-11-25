@@ -7,9 +7,10 @@ import {
 } from './devops-board.mjs'
 import { validateEnvelope } from './devops-envelopes.mjs'
 import {
-  baScan, bugIssue, clientSignOff, decideBug, fileBugReport, forwardReports, goalDone,
-  goalVerdict, holdMeeting, leadSignOff, meetingsFor, newApproach, pingsFor, prepareMerge,
-  raiseToAnalyst, recordMerged, recordPush, reportsFor, scheduleMeeting, teamSchedule, timebox,
+  baScan, bugIssue, clientSignOff, decideBug, decideHeldWork, decideLoad, fileBugReport,
+  forwardReports, goalDone, goalVerdict, holdMeeting, issueTitle, leadSignOff, meetingsFor,
+  newApproach, pingsFor, prepareMerge, raiseToAnalyst, recordIssue, recordMerged, recordPush,
+  reportsFor, scheduleMeeting, teamSchedule, timebox,
 } from './devops-scrum.mjs'
 
 const AT = '2026-11-24T10:00:00Z'
@@ -857,6 +858,8 @@ test('a reported bug is not signed: the BA denies it as a bug fix and the coders
   const issue = structuredClone(state.board)
   issue.goals[GOAL].bug_issues = [42]
   assert.equal(ok(issue, BA).goals[GOAL].bug_fix.reason, 'bug fix needed: issue #42')
+  issue.goals['goal-777777'] = { kind: 'bug', issue: 42, state: 'done', history: [] }
+  assert.equal(ok(issue, BA).goals[GOAL].bug_fix, undefined, 'a fixed issue no longer counts')
   const okThenBug = ok(state.board, BA)
   okThenBug.goals[GOAL].bug_issues = [42]
   const fixNeeded = done(okThenBug, BA, FIRST)
@@ -996,10 +999,71 @@ test('a bug raised at the Daily Scrum goes to the client, then to the backlog as
   assert.match(goal.issue_draft.body, /Fix \(client's choice\): Warn and load defaults/)
   assert.equal(made.board.assignments[made.work].agent, DEV)
   assert.equal(made.board.reports[filed.id].state, 'issue_drafted')
-  let busy = fixed
+  assert.match(goal.issue_draft.body, /^Work item: goal-777777 \(bug\)/)
+  assert.equal(issue(busyBoard(fixed, task)).board.goals['goal-777777'].state, 'backlog')
+})
+
+/** `board` with DEV holding OPEN_WORK_LIMIT open pieces of work on GOAL. */
+function busyBoard(board, task) {
+  let busy = board
   while (workInbox(busy, DEV).length < OPEN_WORK_LIMIT) {
     busy = assignWork(busy, { ...task, goal: GOAL, team: TEAM, by: LEAD, at: AT }).board
   }
-  assert.throws(() => issue(busy, { assign: task }), /do not overwork it/)
-  assert.equal(issue(busy).board.goals['goal-777777'].state, 'backlog', 'it may wait unassigned')
+  return busy
+}
+
+test('work past the open-work limit is held for the BA, who may ask the client', () => {
+  const planned = meet(sprintBoard(), 'planning', { record: PLAN })
+  const task = { agent: DEV, job: 'coder', description: 'One more fix' }
+  const busy = busyBoard(planned.board, task)
+  const extra = assignWork(busy, { ...task, goal: GOAL, team: TEAM, by: LEAD, at: AT })
+  assert.equal(extra.held, true)
+  assert.equal(workInbox(extra.board, DEV).length, OPEN_WORK_LIMIT, 'the seat does not see it')
+  assert.deepEqual(pingsFor(extra.board, { ba: BA }).map(p => [p.work, p.step]),
+    [[extra.id, 'load']])
+  const decide = (b, more) => decideHeldWork(b, { id: extra.id, ba: BA, at: AT, ...more })
+  assert.throws(() => decide(extra.board, { ba: DEV, decision: 'approve' }), /only team-a1a1a1/)
+  assert.throws(() => decide(extra.board, { decision: 'decline' }), /decline on held work says/)
+  const approved = decide(extra.board, { decision: 'approve' }).board
+  assert.equal(approved.assignments[extra.id].state, 'assigned')
+  assert.equal(pingsFor(approved, { ba: BA }).length, 0)
+  const asked = decide(extra.board, {
+    decision: 'ask', reason: 'Both goals are priority 1', mint: () => 'c0ffee',
+  })
+  assert.equal(asked.board.reports[asked.report].state, 'load_to_person')
+  const answer = decision => decideLoad(asked.board, {
+    id: asked.report, decision, reason: 'Ship the parser first', at: AT,
+  })
+  assert.equal(answer('decline').assignments[extra.id].state, 'declined')
+  const yes = answer('approve')
+  assert.deepEqual([yes.assignments[extra.id].held.decided.by, yes.reports[asked.report].state],
+    ['client', 'load_approved'])
+})
+
+test('a filed bug issue is titled #<number> <text>, names its work item and is listed', () => {
+  const board = structuredClone(meet(sprintBoard(), 'planning', { record: PLAN }).board)
+  const sprint = Object.keys(board.sprints)[0]
+  board.reports['report-b00b00'] = { kind: 'bug', sprint, team: TEAM }
+  board.goals['goal-777777'] = {
+    title: 'Empty config crashes', kind: 'bug', state: 'backlog', sprint: '', history: [],
+    from_report: 'report-b00b00', bug_of: GOAL,
+    issue_draft: { title: 'Empty config crashes', body: 'Work item: goal-777777 (bug)\nx' },
+  }
+  const record = (b, more = {}) => recordIssue(b, {
+    goal: 'goal-777777', lead: LEAD, number: 42, at: AT, ...more,
+  })
+  assert.throws(() => record(board, { lead: DEV }), /only team-a1a1a1's team lead/)
+  assert.throws(() => record(board, { number: 0 }), /positive whole number/)
+  assert.throws(() => record(board, { goal: GOAL }), /not a work item of kind bug/)
+  const unnamed = structuredClone(board)
+  unnamed.goals['goal-777777'].issue_draft.body = 'no hash'
+  assert.throws(() => record(unnamed), /names its work item/)
+  const filed = record(board)
+  const bug = filed.goals['goal-777777']
+  assert.deepEqual([bug.title, bug.issue_draft.title, bug.issue],
+    ['#42 Empty config crashes', '#42 Empty config crashes', 42])
+  assert.deepEqual(filed.goals[GOAL].bug_issues, [42])
+  assert.throws(() => record(filed), /already has issue #42/)
+  assert.equal(issueTitle(7, '#3 Old text'), '#7 Old text')
+  assert.throws(() => issueTitle(7, '#3 '), /description after its number/)
 })

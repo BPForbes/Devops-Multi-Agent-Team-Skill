@@ -753,3 +753,18 @@ test('the person answers a bug report; a seat may not', async ($, on) => {
     ['bug', REPORT, 'fix', '--alternative', 'warn instead'],
   ])
 })
+
+test('the person decides held work on a load report; a seat may not', async ($, on) => {
+  const runs: string[][] = []
+  engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const seatAsks = { command: 'devops', origin: { kind: 'agent' }, args: `load ${REPORT} approve` }
+  expect((await $.command.run(seatAsks)).text).toContain('only the person can run it')
+  const bare = await $.command.run({ ...PERSON, args: `load ${REPORT} maybe` })
+  expect(bare.text).toContain('Usage: /devops load')
+  await $.command.run({ ...PERSON, args: `load ${REPORT} approve` })
+  await $.command.run({ ...PERSON, args: `load ${REPORT} decline parser first` })
+  expect(chainRuns(runs)).toEqual([
+    ['load', REPORT, 'approve'], ['load', REPORT, 'decline', '--reason', 'parser first'],
+  ])
+})

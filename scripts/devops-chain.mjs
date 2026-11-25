@@ -8,8 +8,8 @@ import { BOARD_FILE, emptyBoard, normalizeBoard } from './devops-board.mjs'
 import { isAgentId } from './devops-ids.mjs'
 import { isMain } from './devops-main.mjs'
 import {
-  clientSignOff, decideBug, goalDone, goalVerdict, raiseToAnalyst, recordMerged, recordPush,
-  reportsFor,
+  clientSignOff, decideBug, decideLoad, goalDone, goalVerdict, raiseToAnalyst, recordMerged,
+  recordPush, reportsFor,
 } from './devops-scrum.mjs'
 import { UNFENCED, projectPath, updateJson } from './devops-store.mjs'
 import { TEAM_DIR, readMembers } from './devops-teams.mjs'
@@ -24,6 +24,8 @@ const USAGE = [
   '                                    delete the temporary virtual-git branches',
   '  bug REPORT fine|fix [--proposal N | --alternative TEXT]',
   '                                    the client answers a bug report',
+  '  load REPORT approve|decline [--reason TEXT]',
+  '                                    the client decides work held past a seat\'s limit',
   '  merge-ok|merge-deny|done GOAL     a seat (DEVOPS_SEAT) on its own Done-chain step',
   '    [--reason TEXT] [--kind K] [--surface S] [--demoer AGENT] [--meets]',
   '    [--override TEXT]               the BA signs over a reported bug for a big matter',
@@ -39,6 +41,11 @@ const PERSON_WORDS = Object.freeze({
     return { board: done.board, text: `Merge report approved: ${done.approved.join(', ')}` }
   },
   deny: denyReports,
+  load: (board, { ids, words, reason, at }) => {
+    const [id] = ids
+    const next = decideLoad(board, { id, decision: words[0], reason, at })
+    return { board: next, text: `Load report ${id}: held work ${next.reports[id].state.slice(5)}` }
+  },
   bug: (board, { ids, words, extra = {}, at }) => {
     const [id] = ids
     const decision = words[0]
