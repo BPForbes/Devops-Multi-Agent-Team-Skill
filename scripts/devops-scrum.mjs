@@ -1,9 +1,5 @@
-// Scrum meetings on the goal board (see references/scrum-meetings.md): each
-// team's Sprint Planning, Daily Scrums, Backlog Refinement and Retrospective,
-// plus one joint Sprint Review for the whole sprint. Team leads run meetings;
-// the Business Analyst attends Planning, Daily, Refinement and Review.
-// Orchestration schedules each Sprint Planning at spin-up. Pure functions
-// over the board.
+// Scrum meetings on the goal board (see references/scrum-meetings.md).
+// Pure functions over the board.
 import { addGoal, mintId, need, normalizeBoard } from './devops-board.mjs'
 import { isAgentId, isGoalId, isJob, isTeamId } from './devops-ids.mjs'
 
@@ -132,7 +128,7 @@ function planning(next, meeting, record) {
   return { board, record: { sprintGoal, goals: [...chosen], tasks } }
 }
 
-/** Requires the Business Analyst agent hash in attendees when the record names one. */
+/** Asserts businessAnalyst is among attendees when the field is set. */
 function requireBa(meeting, record, what) {
   const ba = record.businessAnalyst
   if (!filled(ba)) return
@@ -140,50 +136,75 @@ function requireBa(meeting, record, what) {
   need(meeting.attendees.includes(ba), `Business Analyst ${ba} must attend ${what}`)
 }
 
-/** Daily Scrum: updates, blockers, stress/strain, and lead reallocations. */
-function daily(next, meeting, record) {
-  requireBa(meeting, record, 'Daily Scrum')
-  const updates = record.updates
+/** Optional businessAnalyst field copied onto a held meeting record. */
+function baField(record) {
+  return filled(record.businessAnalyst)
+    ? { businessAnalyst: record.businessAnalyst }
+    : {}
+}
+
+/** Normalizes Daily Scrum developer updates into notes and blockers. */
+function dailyUpdates(updates, attendees) {
   need(nonEmpty(updates), 'a Daily Scrum has an update from each developer')
   for (const u of updates) {
-    need(meeting.attendees.includes(u.agent), `${u.agent} is not in this Daily Scrum`)
+    need(attendees.includes(u.agent), `${u.agent} is not in this Daily Scrum`)
     need(filled(u.done) && filled(u.today), 'an update says what was done and what is next')
   }
   const blockers = updates.flatMap(u => texts(u.blockers ?? [], 'blockers')
     .map(blocker => ({ agent: u.agent, blocker })))
-  const notes = updates.map(u => ({ agent: u.agent, done: u.done.trim(), today: u.today.trim() }))
-  const stress = Array.isArray(record.stress) ? record.stress : []
-  for (const row of stress) {
+  const notes = updates.map(u => ({
+    agent: u.agent, done: u.done.trim(), today: u.today.trim(),
+  }))
+  return { notes, blockers }
+}
+
+/** Stress rows: high-priority goals still carrying open load. */
+function parseStress(stress) {
+  const rows = Array.isArray(stress) ? stress : []
+  for (const row of rows) {
     need(isGoalId(row.goal) && Number.isInteger(row.priority) && row.priority >= 1,
       'stress names a goal and its priority (1 is first)')
   }
-  const strain = Array.isArray(record.strain) ? record.strain : []
-  for (const row of strain) {
+  return rows.map(s => ({ goal: s.goal, priority: s.priority, load: s.load ?? '' }))
+}
+
+/** Strain rows: higher-priority goals delayed while lower work continues. */
+function parseStrain(strain) {
+  const rows = Array.isArray(strain) ? strain : []
+  for (const row of rows) {
     need(isGoalId(row.goal) && filled(row.reason), 'strain names a delayed goal and why')
   }
-  const reallocations = Array.isArray(record.reallocations) ? record.reallocations : []
-  for (const move of reallocations) {
-    need(isAgentId(move.agent) && meeting.attendees.includes(move.agent),
+  return rows.map(s => ({ goal: s.goal, reason: String(s.reason).trim() }))
+}
+
+/** Lead reallocations of attendees onto higher-priority work. */
+function parseReallocations(reallocations, attendees) {
+  const rows = Array.isArray(reallocations) ? reallocations : []
+  for (const move of rows) {
+    need(isAgentId(move.agent) && attendees.includes(move.agent),
       'a reallocation names an attending agent')
     need(filled(move.to) && filled(move.reason),
       'a reallocation says where the agent goes and why')
   }
+  return rows.map(m => ({
+    agent: m.agent, to: String(m.to).trim(), reason: String(m.reason).trim(),
+    cost: filled(m.cost) ? String(m.cost).trim() : '',
+  }))
+}
+
+/** Daily Scrum: updates, blockers, stress/strain, and lead reallocations. */
+function daily(next, meeting, record) {
+  requireBa(meeting, record, 'Daily Scrum')
+  const { notes, blockers } = dailyUpdates(record.updates, meeting.attendees)
   return {
     board: next,
     record: {
       updates: notes,
       blockers,
-      stress: stress.map(s => ({
-        goal: s.goal, priority: s.priority, load: s.load ?? '',
-      })),
-      strain: strain.map(s => ({ goal: s.goal, reason: String(s.reason).trim() })),
-      reallocations: reallocations.map(m => ({
-        agent: m.agent, to: String(m.to).trim(), reason: String(m.reason).trim(),
-        cost: filled(m.cost) ? String(m.cost).trim() : '',
-      })),
-      ...(filled(record.businessAnalyst)
-        ? { businessAnalyst: record.businessAnalyst }
-        : {}),
+      stress: parseStress(record.stress),
+      strain: parseStrain(record.strain),
+      reallocations: parseReallocations(record.reallocations, meeting.attendees),
+      ...baField(record),
     },
   }
 }
@@ -215,25 +236,14 @@ function refinement(next, meeting, record) {
     board: next,
     record: {
       items: refined,
-      ...(filled(record.businessAnalyst)
-        ? { businessAnalyst: record.businessAnalyst }
-        : {}),
+      ...baField(record),
       ...(filled(record.costNotes) ? { costNotes: String(record.costNotes).trim() } : {}),
     },
   }
 }
 
-/**
- * Joint Sprint Review (once per sprint): BA roster ahead, feature demos,
- * AI questions and answers, feedback, new backlog goals. Bug fixes need not
- * appear in the demo roster.
- */
-function review(next, meeting, record) {
-  requireBa(meeting, record, 'Sprint Review')
-  const attendance = record.attendance ?? meeting.attendees
-  need(Array.isArray(attendance) && attendance.every(isAgentId),
-    'Sprint Review attendance is a list of agent hashes')
-  const roster = record.roster ?? []
+/** Demo roster: Done sprint goals; bugs may appear but are not required demos. */
+function parseRoster(next, meeting, roster) {
   need(Array.isArray(roster), 'the Business Analyst prepares a demo roster')
   for (const row of roster) {
     need(isAgentId(row.agent) && isGoalId(row.goal), 'roster rows name an agent and a goal')
@@ -245,40 +255,67 @@ function review(next, meeting, record) {
       `${row.goal} is not Done in this sprint`)
   }
   const demo = roster.filter(r => (r.kind ?? 'feature') !== 'bug').map(r => r.goal)
+  for (const g of demo) {
+    const row = next.goals[g]
+    need(row?.sprint === meeting.sprint && row.state === 'done', `${g} is not Done in this sprint`)
+  }
+  return {
+    roster: roster.map(r => ({
+      agent: r.agent, goal: r.goal, kind: r.kind ?? 'feature',
+    })),
+    demo: [...new Set(demo)],
+  }
+}
+
+/** Questions and answers captured during the joint Sprint Review. */
+function parseQuestions(questions) {
+  const rows = Array.isArray(questions) ? questions : []
+  for (const q of rows) {
+    need(isAgentId(q.from) && isAgentId(q.to) && filled(q.question),
+      'a review question names from, to and the question text')
+  }
+  return rows.map(q => ({
+    from: q.from, to: q.to, question: String(q.question).trim(),
+    answer: filled(q.answer) ? String(q.answer).trim() : '',
+  }))
+}
+
+/** Adds new backlog goals named during the Sprint Review. */
+function addReviewGoals(board, added, at) {
+  for (const g of added) {
+    need(isGoalId(g.goal) && board.goals[g.goal] === undefined, `${g.goal} is not a new goal`)
+  }
+  let next = board
+  for (const g of added) next = addGoal(next, { goal: g.goal, title: g.title, at })
+  return next
+}
+
+/**
+ * Joint Sprint Review (once per sprint): BA roster, feature demos,
+ * questions and answers, feedback and new backlog goals.
+ */
+function review(next, meeting, record) {
+  requireBa(meeting, record, 'Sprint Review')
+  const attendance = record.attendance ?? meeting.attendees
+  need(Array.isArray(attendance) && attendance.every(isAgentId),
+    'Sprint Review attendance is a list of agent hashes')
+  const { roster, demo } = parseRoster(next, meeting, record.roster ?? [])
   for (const g of (record.demo ?? demo)) {
     const row = next.goals[g]
     need(row?.sprint === meeting.sprint && row.state === 'done', `${g} is not Done in this sprint`)
   }
-  const questions = Array.isArray(record.questions) ? record.questions : []
-  for (const q of questions) {
-    need(isAgentId(q.from) && isAgentId(q.to) && filled(q.question),
-      'a review question names from, to and the question text')
-  }
-  const feedback = texts(record.feedback ?? [], 'feedback')
   const added = record.newGoals ?? []
-  for (const g of added) {
-    need(isGoalId(g.goal) && next.goals[g.goal] === undefined, `${g.goal} is not a new goal`)
-  }
-  let board = next
-  const at = meeting.held_at
-  for (const g of added) board = addGoal(board, { goal: g.goal, title: g.title, at })
+  const board = addReviewGoals(next, added, meeting.held_at)
   return {
     board,
     record: {
       attendance: [...attendance],
-      roster: roster.map(r => ({
-        agent: r.agent, goal: r.goal, kind: r.kind ?? 'feature',
-      })),
-      demo: [...new Set(demo)],
-      questions: questions.map(q => ({
-        from: q.from, to: q.to, question: String(q.question).trim(),
-        answer: filled(q.answer) ? String(q.answer).trim() : '',
-      })),
-      feedback,
+      roster,
+      demo,
+      questions: parseQuestions(record.questions),
+      feedback: texts(record.feedback ?? [], 'feedback'),
       newGoals: added.map(g => g.goal),
-      ...(filled(record.businessAnalyst)
-        ? { businessAnalyst: record.businessAnalyst }
-        : {}),
+      ...baField(record),
     },
   }
 }
