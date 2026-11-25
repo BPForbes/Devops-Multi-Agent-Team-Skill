@@ -470,21 +470,76 @@ function checkVerdicts(next, sprint, goal) {
  */
 export function leadSignOff(board, { sprint, goal, lead, at, mint }) {
   const next = normalizeBoard(structuredClone(board))
+  const row = buildingTeam(next, sprint, goal)
+  need(row.lead === lead, `only ${row.team}'s lead (${row.lead}) signs ${goal} off as done`)
+  const target = next.goals[goal]
+  need(target.state === 'security', `${goal} must pass security first (it is ${target.state})`)
+  checkVerdicts(next, sprint, goal)
+  return fileDone(next, { sprint, goal, team: row.team, lead, by: lead, at, mint })
+}
+
+/** The allocated team that builds `goal` in an open `sprint`, the goal being in it. */
+function buildingTeam(next, sprint, goal) {
   openSprint(next, sprint)
   const row = allocatedTeams(next, sprint).find(t => (t.goals ?? []).includes(goal))
   need(row !== undefined, `${goal} is not built by a team in this sprint's allocation`)
-  need(row.lead === lead, `only ${row.team}'s lead (${row.lead}) signs ${goal} off as done`)
+  need(next.goals[goal]?.sprint === sprint, `${goal} is not in this sprint`)
+  return row
+}
+
+/**
+ * Moves a goal to done and files its done report to Orchestration. `by` is
+ * who signed (the lead, or `client`); an `override` rides on the history and
+ * the report so a skipped check is never read as a pass.
+ */
+function fileDone(next, { sprint, goal, team, lead, by, at, mint, override }) {
   const target = next.goals[goal]
-  need(target?.sprint === sprint, `${goal} is not in this sprint`)
-  need(target.state === 'security', `${goal} must pass security first (it is ${target.state})`)
-  checkVerdicts(next, sprint, goal)
-  Object.assign(target, { state: 'done', done_by: lead, done_at: at })
-  target.history.push({ at, event: 'lead_signoff', by: lead, from: 'security', to: 'done' })
+  const from = target.state
+  const extra = override === undefined ? {} : { override }
+  Object.assign(target, { state: 'done', done_by: by, done_at: at })
+  delete target.blocked_from
+  const event = by === lead ? 'lead_signoff' : 'client_signoff'
+  target.history.push({ at, event, by, from, to: 'done', ...extra })
   const id = mintId('report', next.reports, mint)
   next.reports[id] = {
-    sprint, goal, team: row.team, lead, signed_at: at, state: 'to_orchestration',
+    sprint, goal, team, lead, signed_at: at, state: 'to_orchestration',
+    ...(by === lead ? {} : { signed_by: by }), ...extra,
   }
   return { id, board: next }
+}
+
+/** The default-path checks a goal has not met yet, as plain refusal texts. */
+function unmetChecks(next, sprint, goal) {
+  const state = next.goals[goal].state
+  const unmet = state === 'security' ? [] : [`${goal} has not passed security (it is ${state})`]
+  try {
+    checkVerdicts(next, sprint, goal)
+  } catch (refusal) {
+    unmet.push(refusal.message)
+  }
+  return unmet
+}
+
+/**
+ * The client's (human's) sign-off that a goal is done, whatever seat checks
+ * are still missing, so a client order never deadlocks on the board. The
+ * reason and the accepted risk are required; every unmet check is recorded
+ * as `override.skipped` on the goal and its done report, never as a pass.
+ * Callers must reach this only from the person (a human-only command), never
+ * from a seat's tool call.
+ */
+export function clientSignOff(board, { sprint, goal, reason, risk, at, mint }) {
+  const next = normalizeBoard(structuredClone(board))
+  const row = buildingTeam(next, sprint, goal)
+  need(next.goals[goal].state !== 'done', `${goal} is already done`)
+  need(filled(reason) && filled(risk), 'a client sign-off names its reason and the risk accepted')
+  const override = {
+    by: 'client', reason: String(reason).trim(), risk: String(risk).trim(),
+    skipped: unmetChecks(next, sprint, goal),
+  }
+  return fileDone(next, {
+    sprint, goal, team: row.team, lead: row.lead, by: 'client', at, mint, override,
+  })
 }
 
 /** Done reports by where they stand: `to_orchestration` (from a lead) or `to_person`. */

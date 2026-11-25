@@ -19,6 +19,12 @@ Reviewer, QA, Security, Business Analyst, and every other role).
   push and is final even without QA or Security
   ([qa-publish-policy.md](qa-publish-policy.md)). Agents never invent a
   push grant; only the client does.
+- On the board, the client may sign a goal Done without the seat chain
+  (`clientSignOff` in `scripts/devops-scrum.mjs`). It needs a reason and
+  the risk the client accepts, and it records every unmet check as
+  `override.skipped` on the goal and its done report. A skipped check is
+  never reported as a pass. Only the person reaches it; no seat tool
+  calls it. (Wiring it to a human-only `/devops` word is still open.)
 - Seats may state a risk **once** (for example Security notes what an
   override exposes). They do not argue again, stall, or reopen the point
   against a clear client order.

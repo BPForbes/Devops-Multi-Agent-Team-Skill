@@ -3,7 +3,8 @@ import test from 'node:test'
 
 import { addGoal, createSprint, emptyBoard, moveGoal } from './devops-board.mjs'
 import {
-  forwardReports, holdMeeting, leadSignOff, meetingsFor, reportsFor, scheduleMeeting, timebox,
+  clientSignOff, forwardReports, holdMeeting, leadSignOff, meetingsFor, reportsFor,
+  scheduleMeeting, timebox,
 } from './devops-scrum.mjs'
 
 const AT = '2026-11-24T10:00:00Z'
@@ -522,4 +523,39 @@ test('a goal returned from a closed sprint is judged again: old verdicts do not 
   const byAuthor = passedSecurity(again, { signer: DEV })
   assert.throws(() => sign(byAuthor), /must be clear/, 'an author stays an author after a return')
   assert.equal(sign(passedSecurity(again)).board.goals[GOAL].state, 'done')
+})
+
+test('the client signs a goal done without the seat checks; each skip is recorded', () => {
+  const planned = meet(judgedBoard(), 'planning', { record: PLAN })
+  const board = moveGoal(planned.board, { goal: GOAL, state: 'ready', at: AT })
+  const sign = more => clientSignOff(board, {
+    sprint: planned.sprint, goal: GOAL, at: AT, mint: () => 'cdecde', ...more,
+  })
+  assert.throws(() => sign({ reason: 'demo today' }), /reason and the risk/)
+  const signed = sign({ reason: 'demo today', risk: 'no QA run' })
+  const goal = signed.board.goals[GOAL]
+  assert.equal(goal.state, 'done')
+  assert.equal(goal.done_by, 'client')
+  assert.equal(goal.history.at(-1).event, 'client_signoff')
+  const [report] = reportsFor(signed.board, { state: 'to_orchestration' })
+  assert.equal(report.signed_by, 'client')
+  assert.equal(report.lead, LEAD)
+  assert.match(report.override.skipped[0], /has not passed security \(it is ready\)/)
+  assert.match(report.override.skipped[1], /no review hand-off to QA/)
+  const again = () => clientSignOff(signed.board, {
+    sprint: planned.sprint, goal: GOAL, reason: 'x', risk: 'y', at: AT,
+  })
+  assert.throws(again, /already done/)
+})
+
+test('a client sign-off after every check passed records an empty skip list', () => {
+  const planned = meet(judgedBoard(), 'planning', { record: PLAN })
+  let board = planned.board
+  for (const step of ['ready', 'in_progress', 'review', 'qa', 'security']) {
+    board = moveGoal(board, { goal: GOAL, state: step, at: AT })
+  }
+  const signed = clientSignOff(passedSecurity(board), {
+    sprint: planned.sprint, goal: GOAL, reason: 'ship it', risk: 'none known', at: AT,
+  })
+  assert.deepEqual(signed.board.goals[GOAL].history.at(-1).override.skipped, [])
 })
