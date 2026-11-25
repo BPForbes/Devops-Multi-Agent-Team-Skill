@@ -108,6 +108,8 @@ or a QA finding that does not replicate. Any seat may open one, and any seat
 may reply, so the seats can go back and forth. Only the seat that opened a
 thread resolves it. Threads stay on the board and are not posted to GitHub.
 `thread_open`, `thread_reply`, `thread_resolve` and `devops://threads/<goal>` manage them.
+A reproduction between seats uses topic `repro` and the hand-off template in
+[`commands/repro.md`](../../../commands/repro.md).
 
 ## Who reads and changes what
 

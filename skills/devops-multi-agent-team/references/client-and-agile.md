@@ -91,8 +91,10 @@ or answering a Review Q&A by re-running a step.
 
 Ask: *Are we discussing a concrete feature, bug, or behavior the other
 seat must see?* If yes → reproduce (or demo in Review). If no → text is
-enough. Record commands, URL, or path under thoughts when you did
-reproduce, so later seats do not re-ask.
+enough. When you did reproduce, hand it over with the **reproduction
+hand-off** in [`/repro`](../../../commands/repro.md) (command or URL,
+inputs, expected and actual, tree, async fallback), so later seats do
+not re-ask.
 
 See [scrum-meetings.md](scrum-meetings.md).
 
