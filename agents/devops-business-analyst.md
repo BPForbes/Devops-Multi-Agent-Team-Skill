@@ -61,9 +61,21 @@ Thoughts stay **gitignored**.
    demoing teams and the answers; file them for later refinement
    (`review-qa-<sprint>.md` under thoughts, or the meeting `questions`
    record). Turn client feedback into `newGoals` with an objective,
-   acceptance criteria, a priority and an owner team. When the answer is about a concrete behavior, prefer a
-   short **reproduction** of that step.
-7. **Reproduction vs meetings.** Daily Scrum / Planning / Refinement
+   acceptance criteria, a priority and an owner team. When the answer
+   is about a concrete behavior, prefer a short **reproduction** of
+   that step.
+7. **Done signatures.** After the team lead signs a goal Done, sign it
+   (`goal_ba_signoff`) once the building team has held its Sprint
+   Retrospective, then sign again when no feedback is open; the second
+   signature promotes the goal to Orchestration's merge report. Any open
+   thread on the goal blocks both signatures: get it resolved first.
+   You sign only as the BA named on the sprint's joint Sprint Review.
+8. **Client denial → new approach.** When the client denies a merge
+   report, turn the stated reason into new backlog goals with
+   `report_new_approach`: each with the objective it answers and its
+   acceptance criteria (priority and owner when agreed). Do not argue the
+   denial.
+9. **Reproduction vs meetings.** Daily Scrum / Planning / Refinement
    do **not** need reproductions by default. When seats help each
    other on a feature or bug, they **reproduce** it live
    ([client-and-agile.md](../skills/devops-multi-agent-team/references/client-and-agile.md)).
@@ -71,6 +83,7 @@ Thoughts stay **gitignored**.
 ## Commands
 
 `/devops meet --mode planning|daily|refinement|review` ·
+`goal_ba_signoff` · `report_new_approach` ·
 `/devops mind-map` (read only) ·
 `/devops question` · `/devops allocate --mode board` ·
 `/create-subagent`.

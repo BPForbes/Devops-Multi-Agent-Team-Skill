@@ -34,7 +34,8 @@ import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 import { isTeamId } from '../scripts/devops-ids.mjs'
 import { RISKS, planAllocation, spinUp } from '../scripts/devops-allocation.mjs'
 import {
-  MEETING_KINDS, forwardReports, holdMeeting, leadSignOff, meetingsFor, reportsFor, scheduleMeeting,
+  MEETING_KINDS, baSignOff, forwardReports, holdMeeting, leadSignOff, meetingsFor, newApproach,
+  peerVerify, reportsFor, scheduleMeeting,
 } from '../scripts/devops-scrum.mjs'
 import {
   needsAttention, openBoard, recordRefusal, teamIntake, teamMove, teamSignOff,
@@ -1047,12 +1048,35 @@ const TOOLS = [
     })),
   },
   {
+    name: 'goal_peer_verify',
+    description: [
+      'Done chain step 1: a member (`caller`) of the team that builds the goal, who did not',
+      'write it and is not its lead, verifies it once it has passed security. A later',
+      'send-back voids the verification.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, team: { type: 'string' }, sprint: { type: 'string' },
+        goal: { type: 'string' },
+      },
+      required: ['caller', 'team', 'sprint', 'goal'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: peerVerify(board, {
+        sprint: args.sprint, goal: args.goal, peer: args.caller, team: args.team, at: now(),
+      }),
+    })),
+  },
+  {
     name: 'goal_signoff',
     description: [
-      "The team lead's sign-off that a goal is done for the team: only the lead (`caller`) of",
-      'the team that builds it, once it has passed security (default path). Files a done',
-      'report to Orchestration, which reports to the client (human); the client\'s typed',
-      'push-ok stays the final sign-off and outranks missing QA/Security.',
+      "Done chain step 2: the team lead's sign-off that a goal is done for the team: only",
+      'the lead (`caller`) of the team that builds it, once it has passed security (default',
+      'path) and a team member verified it. Files a done report that waits for the BA',
+      '(goal_ba_signoff); the client\'s typed push-ok stays the push gate.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -1068,11 +1092,54 @@ const TOOLS = [
     })),
   },
   {
+    name: 'goal_ba_signoff',
+    description: [
+      'Done chain steps 3 and 4: the sprint\'s Business Analyst (`caller`, the BA of the',
+      'joint Sprint Review) signs a lead-signed goal: first after the building team\'s',
+      'retrospective, then again, which promotes the report to Orchestration. Each is',
+      'refused while a feedback thread on the goal is open.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { dest, caller: { type: 'string' }, goal: { type: 'string' } },
+      required: ['caller', 'goal'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: baSignOff(board, { goal: args.goal, ba: args.caller, at: now() }),
+    })),
+  },
+  {
+    name: 'report_new_approach',
+    description: [
+      'After the client denies a merge report, the sprint\'s Business Analyst (`caller`)',
+      'files the new approach: new backlog goals, each with the objective it answers and',
+      'its acceptance criteria (priority and owner optional). The report becomes reworked.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, report: { type: 'string' },
+        goals: { type: 'array', items: { type: 'object' }, minItems: 1 },
+      },
+      required: ['caller', 'report', 'goals'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: newApproach(board, {
+        report: args.report, ba: args.caller, goals: args.goals, at: now(),
+      }),
+    })),
+  },
+  {
     name: 'report_forward',
     description: [
-      "Orchestration only: pass the team leads' done reports on to the person with a summary.",
-      "The person's typed /devops push-ok is the final sign-off (default path: after QA",
-      'PASS and Security CLEAR; a client order may skip them, and the skip is recorded).',
+      'Orchestration only, Done chain step 5: pass the done reports the BA promoted on to',
+      'the person as one merge report: a summary and the big-picture merge plan (the real',
+      'branch, how it fits the design, the implementation, the risks). The client approves',
+      'or denies it; the person\'s typed /devops push-ok stays the push gate.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -1081,8 +1148,19 @@ const TOOLS = [
         sprint: { type: 'string' },
         ids: { type: 'array', items: { type: 'string' }, minItems: 1 },
         summary: { type: 'string', maxLength: MAX_TASK_TEXT },
+        merge: {
+          type: 'object',
+          properties: {
+            branch: { type: 'string' },
+            design: { type: 'string', maxLength: MAX_TASK_TEXT },
+            implementation: { type: 'string', maxLength: MAX_TASK_TEXT },
+            risks: { type: 'array', items: { type: 'string' } },
+          },
+          required: ['branch', 'design', 'implementation'],
+          additionalProperties: false,
+        },
       },
-      required: ['sprint', 'ids', 'summary'],
+      required: ['sprint', 'ids', 'summary', 'merge'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
@@ -1090,7 +1168,8 @@ const TOOLS = [
       if (BOUND_SEAT) throw new Error('only Orchestration reports to the person')
       return boardChange(args, board => ({
         board: forwardReports(board, {
-          sprint: args.sprint, ids: args.ids, summary: args.summary, at: now(),
+          sprint: args.sprint, ids: args.ids, summary: args.summary, merge: args.merge,
+          at: now(),
         }),
       }))
     },
@@ -1376,7 +1455,8 @@ const INBOX_TEMPLATES = [
   {
     uriTemplate: 'devops://reports',
     name: 'Done reports',
-    description: "Team leads' done reports: waiting for Orchestration, and passed to the person.",
+    description: 'Done reports by Done-chain stage: waiting for the BA, for Orchestration, '
+      + 'for the client, and decided (approved, denied, reworked).',
     mimeType: 'application/json',
   },
   {
@@ -1414,10 +1494,17 @@ const RESOURCE_PATTERNS = [
     blame: blameFor(readBoard({}), { goal }),
   })],
   [/^devops:\/\/board$/, () => boardView(readBoard({}))],
-  [/^devops:\/\/reports$/, () => ({
-    toOrchestration: reportsFor(readBoard({}), { state: 'to_orchestration' }),
-    toPerson: reportsFor(readBoard({}), { state: 'to_person' }),
-  })],
+  [/^devops:\/\/reports$/, () => {
+    const board = readBoard({})
+    const at = state => reportsFor(board, { state })
+    return {
+      awaitingBa: at('awaiting_ba'),
+      baSigned: at('ba_signed'),
+      toOrchestration: at('to_orchestration'),
+      toPerson: at('to_person'),
+      decided: reportsFor(board).filter(r => ['approved', 'denied', 'reworked'].includes(r.state)),
+    }
+  }],
   [/^devops:\/\/meetings\/(sprint-[0-9a-f]{6})$/, sprint => {
     const board = readBoard({})
     const allocation = board.allocations?.[sprint] ?? null

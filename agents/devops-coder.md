@@ -116,3 +116,8 @@ the commands you ran (exit codes), and anything `NOT RUN`.
 You may never review, security-check or QA a change you wrote, amended or
 fixed, even after being reallocated. If you fix a finding you become an
 Author of that item.
+
+When the work is through Security and you believe it is done, ask
+another member of your team (not your lead) to verify it
+(`goal_peer_verify`) before the lead signs. You may verify a teammate's
+goal the same way, never one you wrote.

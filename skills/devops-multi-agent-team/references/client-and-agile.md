@@ -19,11 +19,18 @@ Reviewer, QA, Security, Business Analyst, and every other role).
   push and is final even without QA or Security
   ([qa-publish-policy.md](qa-publish-policy.md)). Agents never invent a
   push grant; only the client does.
+- The default Done chain is peer → team lead → BA (after the retro) → BA
+  again (no open feedback) → Orchestration merge report → **client
+  approves or denies** ([scrum-meetings.md](scrum-meetings.md), Done).
+  The client's decision and the real merge are human-only; on a denial
+  the BA files the client's feedback as the new approach.
 - On the board, the client may sign a goal Done without the seat chain
   (`clientSignOff` in `scripts/devops-scrum.mjs`). It needs a reason and
   the risk the client accepts, and it records every unmet check as
-  `override.skipped` on the goal and its done report. A skipped check is
-  never reported as a pass. Only the person reaches it; no seat tool
+  `override.skipped` on the goal and its done report, along with the
+  skipped lead and BA signatures; the report goes straight to
+  Orchestration for the merge report. A skipped check is never reported
+  as a pass. Only the person reaches it; no seat tool
   calls it. (Wiring it to a human-only `/devops` word is still open.)
 - Seats may state a risk **once** (for example Security notes what an
   override exposes). They do not argue again, stall, or reopen the point
@@ -34,9 +41,9 @@ Reviewer, QA, Security, Business Analyst, and every other role).
 | Role | Job | Serves the client by |
 |------|-----|----------------------|
 | **Client (human)** | — | Sets objectives in chat; final go on every push and every override |
-| **Orchestrator** | manager of managers | Allocates teams; reports up; never codes; never blocks the client |
-| **Team lead** | manager on a team | Runs that team's meetings; reallocates under stress/strain at Daily Scrum; signs team Done and reports up |
-| **Business Analyst** | `business-analyst` | Tracks client objectives vs delivery; cost; attendance and demo roster for Sprint Review; present at Planning, Daily Scrum, Refinement, Review |
+| **Orchestrator** | manager of managers | Allocates teams; prepares the big-picture merge report (branch, design fit, implementation, risks) for the client; never codes; never blocks the client |
+| **Team lead** | manager on a team | Runs that team's meetings; reallocates under stress/strain at Daily Scrum; signs team Done after a peer verified it |
+| **Business Analyst** | `business-analyst` | Tracks client objectives vs delivery; cost; attendance and demo roster for Sprint Review; present at Planning, Daily Scrum, Refinement, Review; signs Done goals twice (after the retro, then with no open feedback); files the new approach when the client denies a merge |
 | **Researcher / Coder / Reviewer / QA / Security / …** | as today | Deliver and judge work; yield immediately to client orders |
 
 ## Stress and strain

@@ -14,6 +14,9 @@ and
 `../skills/devops-multi-agent-team/references/department-pods.md`.
 
 Async. Ticket criteria met is **not** a publish authorization.
+You are not the **team lead**: you do not sign the Done chain
+(`goal_signoff` is the team lead's). Ticket criteria you map may feed
+the BA's acceptance criteria and Orchestration's merge report.
 **Ask:** Orchestrator when criteria conflict with the plan. Thoughts
 stay **gitignored**.
 

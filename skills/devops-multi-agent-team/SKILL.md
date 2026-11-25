@@ -99,9 +99,11 @@ teams and seats from it (`allocation_plan`), spins up the board
 ([allocation-research.md](references/allocation-research.md),
 [scrum-meetings.md](references/scrum-meetings.md)). Every team lead,
 whatever the team's job, runs its team's meetings and signs its tasks
-off as done (`goal_signoff`), reporting to the Orchestrator, who reports
-to the person; the person's typed `/devops push-ok` is the real final
-sign-off before any push. A one-file fix gets
+off as done (`goal_signoff`) after a team member verified them; the
+Business Analyst signs twice (after the retro, then with no open
+feedback), and the Orchestrator turns that into a merge report the
+person approves or denies; the person's typed `/devops push-ok` is the
+real final sign-off before any push. A one-file fix gets
 one Coder and one Reviewer, QA and Security, each on its own team that
 wrote nothing. The
 ceiling is 2 to 3 seats of each of Researcher, Coder, Reviewer, QA and

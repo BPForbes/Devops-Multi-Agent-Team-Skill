@@ -119,7 +119,11 @@ A reproduction between seats uses topic `repro` and the hand-off template in
 | Researcher, Coder, Reviewer, QA, Security | `devops://board`, `handoff_inbox` | its own handoffs (`handoff_send`, `handoff_ack`, `handoff_close`) |
 
 A seat never moves a goal on its own. It sends a handoff, and Orchestration
-moves the goal when the hand-off says the step is done.
+moves the goal when the hand-off says the step is done. The Done chain is
+the one exception, as before for `goal_signoff`: each signer acts for
+itself through its own tool (`goal_peer_verify`, `goal_signoff`,
+`goal_ba_signoff`, `report_new_approach`), and the board checks who may sign
+which step ([scrum-meetings.md](scrum-meetings.md), Done).
 
 ## Storage
 

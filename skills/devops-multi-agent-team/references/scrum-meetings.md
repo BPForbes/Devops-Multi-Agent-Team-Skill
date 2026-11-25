@@ -99,11 +99,41 @@ Done / today / blockers, stress, strain and reallocations only. Do not
 run live reproductions in the standup unless a single concrete failure
 is blocking the day and a 30-second terminal or browser run clears it.
 
-## Done: lead signs off; client signs off last
+## Done: the sign-off chain; client decides last
 
-The team lead signs a goal Done (`goal_signoff`) under the same Security
-and independence rules as before. That is a **team** Done, not the
-client's final word. Orchestration reports to the client; the client's
+A goal goes Done through an ordered chain of signatures, each recorded
+on the goal (`signoffs`, plus a `<step>_signoff` history event):
+
+1. **Peer** (`goal_peer_verify`): when a member believes the goal is
+   done, another member of the building team verifies it. The verifier
+   wrote none of the goal and is not the lead. The goal has passed
+   security; a later send-back voids the verification.
+2. **Team lead** (`goal_signoff`): the lead signs under the same Security
+   and independence rules as before, and only after a current peer
+   verification. The goal becomes `done` (team Done), and a done report
+   is filed as `awaiting_ba`.
+3. **BA, first signature** (`goal_ba_signoff`): the sprint's Business
+   Analyst (the one on the joint Sprint Review) signs after the
+   building team's Sprint Retrospective. Report: `ba_signed`.
+4. **BA, second signature** (`goal_ba_signoff` again): only when no
+   feedback is open. Any open board thread on the goal (another team's
+   feedback, a question) blocks either BA signature until it is
+   resolved. Report: `to_orchestration`.
+5. **Orchestration merge report** (`report_forward`): Orchestration
+   prepares the big picture for the reports the BA promoted: the real
+   branch, how the work fits the overall design, the implementation
+   summary and the risks. Report: `to_person`.
+6. **Client decision** (human only): approve or deny, with a reason to
+   deny (design, implementation, ...). Report: `approved` or `denied`.
+   Approval is not a merge and not a push grant: the real merge stays
+   the person's own act, and a push still needs `/devops push-ok`.
+7. **New approach** (`report_new_approach`): on a denial the BA turns the
+   client's feedback into new backlog goals (objective, acceptance
+   criteria, optional priority and owner), linked to the report
+   (`from_report`). Report: `reworked`.
+
+The lead's Done is a **team** Done, not the client's final word. The
+client's
 typed `/devops push-ok` (or chat `push`) on the exact tree is the real
 final sign-off before a push, and it is final even without QA PASS or
 Security CLEAR ([qa-publish-policy.md](qa-publish-policy.md)). If the

@@ -484,6 +484,18 @@ const SEND_BACKS = new Set([
 const AUTHORING = new Set(['coder-to-review', 'research-to-coder'])
 
 /**
+ * The seats that wrote a goal's work, in any sprint: the sender of each
+ * authoring hand-off and, for research, the coder that received it. Authors
+ * stay authors across a return; only verdicts start over.
+ */
+function goalAuthors(next, goal) {
+  const ever = Object.values(next.handoffs ?? {}).filter(h => h.payload.goal === goal)
+  return new Set(ever.filter(h => AUTHORING.has(h.payload.kind)).flatMap(h => [
+    h.payload.from?.agent, ...(h.payload.kind === 'research-to-coder' ? [h.payload.to?.agent] : []),
+  ]))
+}
+
+/**
  * Refuses a sign-off unless, since the goal's last send-back or return to the
  * backlog (whichever is later) and in this order,
  * the goal was reviewed into the QA team the allocation names, that QA team
@@ -499,11 +511,7 @@ function checkVerdicts(next, sprint, goal) {
   need(qa !== undefined && security !== undefined,
     `${goal} has no QA and Security team in the allocation`)
   const all = Object.values(next.handoffs ?? {})
-  const ever = all.filter(h => h.payload.goal === goal)
-  // Authors stay authors across a return; only verdicts start over.
-  const authors = new Set(ever.filter(h => AUTHORING.has(h.payload.kind)).flatMap(h => [
-    h.payload.from?.agent, ...(h.payload.kind === 'research-to-coder' ? [h.payload.to?.agent] : []),
-  ]))
+  const authors = goalAuthors(next, goal)
   const owner = teams.find(t => (t.goals ?? []).includes(goal))?.lead
   const independent = h => !authors.has(h.payload.from?.agent) && h.payload.from?.agent !== owner
   const mine = all.slice(next.goals[goal].judged_from ?? 0).filter(h => h.payload.goal === goal)
@@ -525,11 +533,59 @@ function checkVerdicts(next, sprint, goal) {
 }
 
 /**
+ * The Done chain on a goal, in order: a team member who neither wrote the
+ * goal nor leads the team verifies it (`peer`), the team lead signs it
+ * (`lead`), the Business Analyst signs after the team's retrospective
+ * (`ba`) and once more with no feedback open (`ba_final`). Orchestration
+ * then prepares the merge report, and the client approves or denies it.
+ */
+export const SIGNOFF_STEPS = Object.freeze(['peer', 'lead', 'ba', 'ba_final'])
+
+/**
+ * Records one signature of the Done chain on the goal and in its history,
+ * refusing it unless the step before it in SIGNOFF_STEPS was signed last.
+ */
+function sign(target, { step, by, at, ...extra }) {
+  const before = SIGNOFF_STEPS[SIGNOFF_STEPS.indexOf(step) - 1]
+  need(before === undefined || target.signoffs?.at(-1)?.step === before,
+    `the ${step} signature comes right after the ${before} signature`)
+  target.signoffs = [...(target.signoffs ?? []), { step, by, at, ...extra }]
+  target.history.push({ at, event: `${step}_signoff`, by, ...extra })
+}
+
+/**
+ * A team member verifies a goal before its lead signs: a seat of the
+ * building team that is neither an author of the goal nor the lead, once
+ * the goal has passed security. A later send-back or return voids it.
+ */
+export function peerVerify(board, { sprint, goal, peer, team, at }) {
+  const next = normalizeBoard(structuredClone(board))
+  const row = buildingTeam(next, sprint, goal)
+  need(isAgentId(peer) && team === row.team, `a peer verifier is a seat of ${row.team}`)
+  need(peer !== row.lead, 'the lead signs next; a peer is another team member')
+  need(!goalAuthors(next, goal).has(peer), `${peer} wrote ${goal}; another member verifies it`)
+  const target = next.goals[goal]
+  need(target.state === 'security', `${goal} must pass security first (it is ${target.state})`)
+  sign(target, { step: 'peer', by: peer, at, seq: Object.keys(next.handoffs).length })
+  return next
+}
+
+/** Refuses the lead's sign-off without a peer verification since the last send-back. */
+function checkPeer(next, goal) {
+  const target = next.goals[goal]
+  const peer = (target.signoffs ?? []).findLast(s => s.step === 'peer')
+  const later = Object.values(next.handoffs).slice(peer?.seq ?? 0)
+  const current = peer !== undefined && peer.seq >= (target.judged_from ?? 0)
+    && !later.some(h => h.payload.goal === goal && SEND_BACKS.has(h.payload.kind))
+  need(current, `${goal} needs a team member's peer verification since its last send-back`)
+}
+
+/**
  * The team lead's sign-off that a goal is done for the team: only the lead of
- * the team that builds the goal, and only once the goal has passed security
- * (its last step). Moves the goal to done, records who signed, and files a
- * done report to Orchestration. It is not the final word: Orchestration
- * reports to the person, whose typed push-ok is the real final sign-off.
+ * the team that builds the goal, once the goal has passed security (its last
+ * step) and a team member verified it. Moves the goal to done and files a
+ * done report that waits for the Business Analyst's two signatures before
+ * it reaches Orchestration (baSignOff).
  */
 export function leadSignOff(board, { sprint, goal, lead, at, mint }) {
   const next = normalizeBoard(structuredClone(board))
@@ -538,6 +594,7 @@ export function leadSignOff(board, { sprint, goal, lead, at, mint }) {
   const target = next.goals[goal]
   need(target.state === 'security', `${goal} must pass security first (it is ${target.state})`)
   checkVerdicts(next, sprint, goal)
+  checkPeer(next, goal)
   return fileDone(next, { sprint, goal, team: row.team, lead, by: lead, at, mint })
 }
 
@@ -551,9 +608,10 @@ function buildingTeam(next, sprint, goal) {
 }
 
 /**
- * Moves a goal to done and files its done report to Orchestration. `by` is
- * who signed (the lead, or `client`); an `override` rides on the history and
- * the report so a skipped check is never read as a pass.
+ * Moves a goal to done and files its done report. `by` is who signed: the
+ * lead (the report then waits for the BA, `awaiting_ba`) or `client` (it
+ * goes straight to Orchestration, with an `override` on the history and the
+ * report so a skipped check is never read as a pass).
  */
 function fileDone(next, { sprint, goal, team, lead, by, at, mint, override }) {
   const target = next.goals[goal]
@@ -561,11 +619,12 @@ function fileDone(next, { sprint, goal, team, lead, by, at, mint, override }) {
   const extra = override === undefined ? {} : { override }
   Object.assign(target, { state: 'done', done_by: by, done_at: at })
   delete target.blocked_from
-  const event = by === lead ? 'lead_signoff' : 'client_signoff'
-  target.history.push({ at, event, by, from, to: 'done', ...extra })
+  if (by === lead) sign(target, { step: 'lead', by, at, from, to: 'done' })
+  else target.history.push({ at, event: 'client_signoff', by, from, to: 'done', ...extra })
   const id = mintId('report', next.reports, mint)
   next.reports[id] = {
-    sprint, goal, team, lead, signed_at: at, state: 'to_orchestration',
+    sprint, goal, team, lead, signed_at: at,
+    state: by === lead ? 'awaiting_ba' : 'to_orchestration',
     ...(by === lead ? {} : { signed_by: by }), ...extra,
   }
   return { id, board: next }
@@ -575,19 +634,22 @@ function fileDone(next, { sprint, goal, team, lead, by, at, mint, override }) {
 function unmetChecks(next, sprint, goal) {
   const state = next.goals[goal].state
   const unmet = state === 'security' ? [] : [`${goal} has not passed security (it is ${state})`]
-  try {
-    checkVerdicts(next, sprint, goal)
-  } catch (refusal) {
-    unmet.push(refusal.message)
+  for (const check of [() => checkVerdicts(next, sprint, goal), () => checkPeer(next, goal)]) {
+    try {
+      check()
+    } catch (refusal) {
+      unmet.push(refusal.message)
+    }
   }
-  return unmet
+  return [...unmet, 'the team lead sign-off', "the Business Analyst's two signatures"]
 }
 
 /**
  * The client's (human's) sign-off that a goal is done, whatever seat checks
  * are still missing, so a client order never deadlocks on the board. The
- * reason and the accepted risk are required; every unmet check is recorded
- * as `override.skipped` on the goal and its done report, never as a pass.
+ * reason and the accepted risk are required; every unmet check and every
+ * skipped signature is recorded as `override.skipped` on the goal and its
+ * done report, never as a pass. The report goes straight to Orchestration.
  * Callers must reach this only from the person (a human-only command), never
  * from a seat's tool call.
  */
@@ -605,30 +667,146 @@ export function clientSignOff(board, { sprint, goal, reason, risk, at, mint }) {
   })
 }
 
-/** Done reports by where they stand: `to_orchestration` (from a lead) or `to_person`. */
+/** The Business Analyst named on the sprint's held joint Sprint Review. */
+function sprintAnalyst(next, sprint) {
+  return Object.values(next.meetings)
+    .find(m => m.sprint === sprint && m.kind === 'review' && m.state === 'held')
+    ?.record?.businessAnalyst
+}
+
+/** Refuses the BA's signature while a feedback thread on the goal is open. */
+function checkNoFeedback(next, goal) {
+  const open = Object.entries(next.threads)
+    .filter(([, t]) => t.goal === goal && t.state === 'open')
+    .map(([id]) => id)
+  need(open.length === 0,
+    `feedback on ${goal} is open (${open.join(', ')}); it is resolved before the BA signs`)
+}
+
+/** The BA signature a report waits for, by report state, and where it goes next. */
+const BA_STEPS = Object.freeze({
+  awaiting_ba: { step: 'ba', then: 'ba_signed' },
+  ba_signed: { step: 'ba_final', then: 'to_orchestration' },
+})
+
+/**
+ * The Business Analyst's signatures on a goal its lead signed done. The
+ * first (`ba`) comes after the building team's Sprint Retrospective; the
+ * second (`ba_final`) promotes the done report to Orchestration. Either is
+ * refused while a feedback thread on the goal is open. Only the BA of the
+ * sprint's joint Sprint Review signs. Returns the new board.
+ */
+export function baSignOff(board, { goal, ba, at }) {
+  const next = normalizeBoard(structuredClone(board))
+  need(next.goals[goal] !== undefined, `goal is not on the board: ${goal}`)
+  const report = Object.values(next.reports)
+    .find(r => r.goal === goal && BA_STEPS[r.state] !== undefined)
+  need(report !== undefined, `${goal} has no lead-signed done report waiting for the BA`)
+  const analyst = sprintAnalyst(next, report.sprint)
+  need(analyst !== undefined && ba === analyst,
+    `only the sprint's Business Analyst (${analyst ?? 'none yet'}) signs ${goal}`)
+  need(report.state !== 'awaiting_ba' || held(next, report.sprint, report.team).includes('retro'),
+    `${report.team} holds its Sprint Retrospective before the BA signs ${goal}`)
+  checkNoFeedback(next, goal)
+  const { step, then } = BA_STEPS[report.state]
+  sign(next.goals[goal], { step, by: ba, at })
+  report.state = then
+  return next
+}
+
+/**
+ * Done reports by where they stand: `awaiting_ba` and `ba_signed` (BA
+ * signatures), `to_orchestration`, `to_person` (merge report), then the
+ * client's `approved` or `denied`, and `reworked` once the BA filed the new
+ * approach.
+ */
 export function reportsFor(board, { state } = {}) {
   return Object.entries(normalizeBoard(board).reports)
     .filter(([, r]) => state === undefined || r.state === state)
     .map(([id, r]) => ({ id, ...r }))
 }
 
+/** The big-picture merge plan Orchestration attaches to the reports it forwards. */
+function mergePlan(merge) {
+  const plan = merge ?? {}
+  need(filled(plan.branch) && filled(plan.design) && filled(plan.implementation),
+    'a merge report names the real branch, how it fits the design, and the implementation')
+  return {
+    branch: String(plan.branch).trim(), design: String(plan.design).trim(),
+    implementation: String(plan.implementation).trim(),
+    risks: texts(plan.risks ?? [], 'risks'),
+  }
+}
+
 /**
- * Orchestration passes the leads' done reports on to the person, with its
- * summary. The person's typed /devops push-ok on the exact tree, after QA PASS
- * and Security CLEAR, stays the real final sign-off; this only tells them.
+ * Orchestration passes the done reports the BA promoted on to the person
+ * as one merge report: a summary and the big-picture merge plan (the real
+ * branch, the design fit, the implementation, the risks). The client then
+ * approves or denies it (clientDecision); the person's typed /devops push-ok
+ * on the exact tree stays the push gate.
  */
-export function forwardReports(board, { sprint, ids, summary, at }) {
+export function forwardReports(board, { sprint, ids, summary, merge, at }) {
   const next = normalizeBoard(structuredClone(board))
   need(next.sprints[sprint] !== undefined, `unknown sprint: ${sprint}`)
   need(Array.isArray(ids) && ids.length > 0, 'forward one done report or more')
   need(String(summary ?? '').trim() !== '', 'a report to the person needs a summary')
+  const plan = mergePlan(merge)
   for (const id of ids) {
     const row = next.reports[id]
     need(row !== undefined, `unknown report: ${id}`)
-    need(row.state === 'to_orchestration', `report ${id} was already passed to the person`)
+    need(row.state === 'to_orchestration',
+      `report ${id} is ${row.state}; only a report the BA promoted goes to the person`)
     need(row.sprint === sprint,
       `report ${id} belongs to ${row.sprint}; forward one sprint at a time`)
-    Object.assign(row, { state: 'to_person', forwarded_at: at, summary: summary.trim() })
+    Object.assign(row, {
+      state: 'to_person', forwarded_at: at, summary: summary.trim(), merge: plan,
+    })
   }
   return next
+}
+
+/**
+ * The client's (human's) decision on Orchestration's merge report: approve,
+ * or deny with the reason (design, implementation, ...). It does not merge
+ * or push: the real merge stays the person's own act, and a push still
+ * needs push-ok. Callers must reach this only from the person, never from a
+ * seat's tool call.
+ */
+export function clientDecision(board, { ids, decision, reason, at }) {
+  need(decision === 'approve' || decision === 'deny', 'the client approves or denies the merge')
+  need(decision === 'approve' || filled(reason), 'a denial says why')
+  need(Array.isArray(ids) && ids.length > 0, 'decide one merge report or more')
+  const next = normalizeBoard(structuredClone(board))
+  for (const id of ids) {
+    const row = next.reports[id]
+    need(row?.state === 'to_person', `report ${id} is not waiting for the client`)
+    Object.assign(row, {
+      state: decision === 'approve' ? 'approved' : 'denied', decided_at: at,
+      ...(filled(reason) ? { decision_reason: String(reason).trim() } : {}),
+    })
+  }
+  return next
+}
+
+/**
+ * After the client denies a merge report, the Business Analyst turns the
+ * client's feedback into the new approach: new backlog goals through the
+ * Sprint Review `newGoals` path, each with the objective it answers and its
+ * acceptance criteria, linked back to the report, which becomes `reworked`.
+ */
+export function newApproach(board, { report: id, ba, goals, at }) {
+  const next = normalizeBoard(structuredClone(board))
+  const row = next.reports[id]
+  need(row?.state === 'denied', `report ${id} was not denied by the client`)
+  const analyst = sprintAnalyst(next, row.sprint)
+  need(ba === analyst, `only the sprint's Business Analyst (${analyst}) files the new approach`)
+  need(nonEmpty(goals), 'a new approach adds one backlog goal or more')
+  need(goals.every(g => filled(g.objective) && nonEmpty(g.acceptance)),
+    'each new-approach goal states the objective it answers and its acceptance criteria')
+  const added = addReviewGoals(next, goals, at)
+  for (const g of goals) added.goals[g.goal].from_report = id
+  Object.assign(added.reports[id], {
+    state: 'reworked', reworked_at: at, new_goals: goals.map(g => g.goal),
+  })
+  return added
 }

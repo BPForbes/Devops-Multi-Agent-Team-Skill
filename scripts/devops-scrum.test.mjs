@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  addGoal, assignWork, createSprint, emptyBoard, moveGoal, workInbox,
+  addGoal, assignWork, createSprint, emptyBoard, moveGoal, openThread, resolveThread, workInbox,
 } from './devops-board.mjs'
 import {
-  clientSignOff, forwardReports, holdMeeting, leadSignOff, meetingsFor, reportsFor,
-  scheduleMeeting, timebox,
+  baSignOff, clientDecision, clientSignOff, forwardReports, holdMeeting, leadSignOff,
+  meetingsFor, newApproach, peerVerify, reportsFor, scheduleMeeting, timebox,
 } from './devops-scrum.mjs'
 
 const AT = '2026-11-24T10:00:00Z'
@@ -55,6 +55,9 @@ function passedSecurity(board, options = {}) {
   next.handoffs[id(1)] = done(reviewed)
   next.handoffs[id(2)] = done(toSecurity)
   next.handoffs[id(3)] = done(verdict)
+  // DEV, a member who wrote nothing, verified the goal after these verdicts.
+  const peer = { step: 'peer', by: DEV, at: AT, seq: count + 3 }
+  next.goals[GOAL].signoffs = [...(next.goals[GOAL].signoffs ?? []), peer]
   return next
 }
 
@@ -412,27 +415,120 @@ test('a goal is done only by its own team lead\'s sign-off, after security', () 
   assert.equal(done.goals[GOAL].done_by, LEAD)
 })
 
-test('the lead reports done to Orchestration, which reports to the person', () => {
+/** GOAL at security with its verdicts in, the fixture's peer signature taken off. */
+function unverified() {
   const planned = meet(judgedBoard(), 'planning', { record: PLAN })
   let board = planned.board
   for (const step of ['ready', 'in_progress', 'review', 'qa', 'security']) {
     board = moveGoal(board, { goal: GOAL, state: step, at: AT })
   }
-  const signed = leadSignOff(passedSecurity(board), {
-    sprint: planned.sprint, goal: GOAL, lead: LEAD, at: AT, mint: () => 'abcabc',
+  board = passedSecurity(board)
+  board.goals[GOAL].signoffs = []
+  return { ...planned, board }
+}
+
+const MERGE = {
+  branch: 'main', design: 'one guard in the parser module', implementation: 'empty check',
+  risks: ['configs that relied on the crash'],
+}
+
+test('a member who did not write the goal verifies it before its lead signs', () => {
+  const { sprint, board } = unverified()
+  const lead = b => leadSignOff(b, { sprint, goal: GOAL, lead: LEAD, at: AT })
+  assert.throws(() => lead(board), /needs a team member's peer verification/)
+  const peer = (agent, team = TEAM) => peerVerify(board, {
+    sprint, goal: GOAL, peer: agent, team, at: AT,
   })
-  assert.equal(signed.id, 'report-abcabc')
-  const waiting = reportsFor(signed.board, { state: 'to_orchestration' })
-  assert.deepEqual(waiting.map(r => [r.goal, r.team, r.lead]), [[GOAL, TEAM, LEAD]])
-  const forward = summary => ({ sprint: planned.sprint, ids: [signed.id], summary, at: AT })
-  assert.throws(() => forwardReports(signed.board, forward(' ')),
-    /needs a summary/)
-  const told = forwardReports(signed.board, {
-    sprint: planned.sprint, ids: [signed.id], summary: 'Parser fix done', at: AT,
+  assert.throws(() => peer(LEAD), /the lead signs next/)
+  assert.throws(() => peer(DEV, JUDGE_TEAM), /a peer verifier is a seat of team-a1a1a1/)
+  const verified = peer(DEV)
+  const done = lead(verified).board
+  assert.deepEqual(done.goals[GOAL].signoffs.map(s => s.step), ['peer', 'lead'])
+  const sentBack = structuredClone(verified)
+  sentBack.handoffs['handoff-f0f0f0'] = {
+    payload: { goal: GOAL, kind: 'security-send-back' }, state: 'done',
+  }
+  const judgedAgain = passedSecurity(sentBack)
+  judgedAgain.goals[GOAL].signoffs.pop()
+  assert.throws(() => lead(judgedAgain), /peer verification since its last send-back/)
+})
+
+test('Done chain: lead, BA after the retro, BA again with no feedback, Orchestration', () => {
+  const state = unverified()
+  const { sprint } = state
+  const verified = peerVerify(state.board, { sprint, goal: GOAL, peer: DEV, team: TEAM, at: AT })
+  const signed = leadSignOff(verified, {
+    sprint, goal: GOAL, lead: LEAD, at: AT, mint: () => 'abcabc',
   })
-  assert.equal(reportsFor(told, { state: 'to_person' }).length, 1)
-  const again = () => forwardReports(told, forward('x'))
-  assert.throws(again, /already passed to the person/)
+  assert.deepEqual(reportsFor(signed.board, { state: 'awaiting_ba' }).map(r => r.id),
+    ['report-abcabc'])
+  const forward = (b, merge = MERGE) => forwardReports(b, {
+    sprint, ids: [signed.id], summary: 'Parser fix done', merge, at: AT,
+  })
+  assert.throws(() => forward(signed.board), /only a report the BA promoted/)
+  const ba = (b, who = BA) => baSignOff(b, { goal: GOAL, ba: who, at: AT })
+  assert.throws(() => ba(signed.board), /Business Analyst \(none yet\)/)
+  const roster = [{ agent: DEV, goal: GOAL, kind: 'feature' }]
+  let next = meet({ ...state, board: signed.board }, 'review', {
+    attendees: [LEAD, DEV, BA], record: { ...EMPTY_REVIEW, roster },
+  })
+  assert.throws(() => ba(next.board), /holds its Sprint Retrospective before the BA signs/)
+  next = meet(next, 'retro', { record: { actions: ['Pair on parsers'] } })
+  assert.throws(() => ba(next.board, DEV), /only the sprint's Business Analyst/)
+  const first = ba(next.board)
+  assert.equal(reportsFor(first, { state: 'ba_signed' }).length, 1)
+  const opened = openThread(first, {
+    goal: GOAL, item: 'item-a1a1a1', topic: 'feedback', agent: JUDGE_LEAD, team: JUDGE_TEAM,
+    body: 'Warn instead of failing?', at: AT, mint: () => 'f1f1f1',
+  })
+  assert.throws(() => ba(opened.board), /feedback on goal-111111 is open \(thread-f1f1f1\)/)
+  const settled = resolveThread(opened.board, { thread: opened.id, agent: JUDGE_LEAD, at: AT })
+  const second = ba(settled)
+  assert.deepEqual(second.goals[GOAL].signoffs.map(s => s.step),
+    ['peer', 'lead', 'ba', 'ba_final'])
+  assert.equal(reportsFor(second, { state: 'to_orchestration' }).length, 1)
+  assert.throws(() => forward(second, { branch: 'main' }), /names the real branch/)
+  const told = forward(second)
+  const [report] = reportsFor(told, { state: 'to_person' })
+  assert.deepEqual(report.merge.risks, ['configs that relied on the crash'])
+  assert.throws(() => forward(told), /only a report the BA promoted/)
+})
+
+test('the client approves or denies the merge; the BA turns a denial into a new approach', () => {
+  const state = unverified()
+  const { sprint } = state
+  const verified = peerVerify(state.board, { sprint, goal: GOAL, peer: DEV, team: TEAM, at: AT })
+  const signed = leadSignOff(verified, { sprint, goal: GOAL, lead: LEAD, at: AT })
+  const roster = [{ agent: DEV, goal: GOAL, kind: 'feature' }]
+  let next = meet({ ...state, board: signed.board }, 'review', {
+    attendees: [LEAD, DEV, BA], record: { ...EMPTY_REVIEW, roster },
+  })
+  next = meet(next, 'retro', { record: { actions: ['x'] } })
+  const ba = b => baSignOff(b, { goal: GOAL, ba: BA, at: AT })
+  const told = forwardReports(ba(ba(next.board)), {
+    sprint, ids: [signed.id], summary: 'Parser fix', merge: MERGE, at: AT,
+  })
+  const decide = (decision, reason) => clientDecision(told, {
+    ids: [signed.id], decision, reason, at: AT,
+  })
+  assert.equal(decide('approve').reports[signed.id].state, 'approved')
+  assert.throws(() => decide('deny'), /a denial says why/)
+  const denied = decide('deny', 'Warn, do not silently accept')
+  assert.equal(denied.reports[signed.id].decision_reason, 'Warn, do not silently accept')
+  const goal = {
+    goal: 'goal-555555', title: 'Warn on empty config', objective: 'Warn, do not accept',
+    acceptance: ['empty config warns once'], priority: 1, owner: TEAM,
+  }
+  const rework = goals => newApproach(denied, { report: signed.id, ba: BA, goals, at: AT })
+  assert.throws(() => rework([{ ...goal, acceptance: undefined }]), /objective it answers/)
+  const reworked = rework([goal])
+  assert.equal(reworked.reports[signed.id].state, 'reworked')
+  assert.equal(reworked.goals['goal-555555'].from_report, signed.id)
+  assert.equal(reworked.goals['goal-555555'].priority, 1)
+  const notDenied = () => newApproach(decide('approve'), {
+    report: signed.id, ba: BA, goals: [goal], at: AT,
+  })
+  assert.throws(notDenied, /was not denied by the client/)
 })
 
 test('an allocated goal cannot be walked to done another way, nor start as done', () => {
@@ -531,6 +627,8 @@ test('the verdicts count only in order: review into QA, then QA to Security, the
   const reorder = order => {
     const next = structuredClone(board)
     order.forEach((h, i) => { next.handoffs[`handoff-e0e0e${i}`] = structuredClone(h) })
+    const seq = Object.keys(next.handoffs).length
+    next.goals[GOAL].signoffs = [{ step: 'peer', by: DEV, at: AT, seq }]
     return next
   }
   assert.throws(() => sign(reorder([clear, review, toSecurity])), /must be clear/)
@@ -628,7 +726,7 @@ test('the client signs a goal done without the seat checks; each skip is recorde
   assert.throws(again, /already done/)
 })
 
-test('a client sign-off after every check passed records an empty skip list', () => {
+test('a client sign-off after every check passed skips only the signatures', () => {
   const planned = meet(judgedBoard(), 'planning', { record: PLAN })
   let board = planned.board
   for (const step of ['ready', 'in_progress', 'review', 'qa', 'security']) {
@@ -637,5 +735,6 @@ test('a client sign-off after every check passed records an empty skip list', ()
   const signed = clientSignOff(passedSecurity(board), {
     sprint: planned.sprint, goal: GOAL, reason: 'ship it', risk: 'none known', at: AT,
   })
-  assert.deepEqual(signed.board.goals[GOAL].history.at(-1).override.skipped, [])
+  assert.deepEqual(signed.board.goals[GOAL].history.at(-1).override.skipped,
+    ['the team lead sign-off', "the Business Analyst's two signatures"])
 })
