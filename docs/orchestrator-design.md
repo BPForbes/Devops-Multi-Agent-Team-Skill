@@ -9,6 +9,11 @@ is not planned yet.
 Read the schemas in `docs/schemas/envelopes.schema.json`. The envelopes
 below are the wire format; this document says what they mean.
 
+The Done chain's signature items (merge-ok, merge-deny, done, the BA's
+scan, the merge report and the client's decision) are `chain.signature`
+envelopes (`Signature`), recorded on the board by
+`scripts/devops-scrum.mjs`; see references/scrum-meetings.md, Done.
+
 ## Terms
 
 - **Manager** means the team lead: the seat that plans sprints, sets
@@ -214,7 +219,7 @@ The states, and which seat may make each transition:
 | in_qa | in_progress | the QA seat (triage send-back, with blame) |
 | in_security | ready_for_human | the security seat (`Handoff` sign-off clear) |
 | in_security | in_progress | the security seat (send-back, with blame) |
-| ready_for_human | done | the team lead (manager), who signs it off for the team and reports to Orchestration, which reports to the person; the person's typed one-shot push-ok on the exact tree, after QA PASS and Security CLEAR, is the real final sign-off (`/devops off` turns the skill off) |
+| ready_for_human | done | the team lead (manager), who signs it off for the team and reports to Orchestration, which reports to the person; the person's typed one-shot push-ok on the exact tree is the real final sign-off (final even without QA PASS / Security CLEAR, which are recorded as overrides; `/devops off` turns the skill off) |
 | blocked | in_progress | the assigned seat, after the blocker is cleared (`Unblock`) |
 | failed | queued | manager (retry decision, counted against max attempts) |
 | any | blocked | the manager (escalation) |
@@ -223,8 +228,9 @@ Every transition is an event. A transition not in this table is refused,
 and the refusal is logged. `ready_for_human` is not `done`: the team lead
 signs the item off as done and reports it up; Orchestration reports to the
 person. The person gives the real final sign-off before the push: a typed
-one-shot push-ok on the exact tree, after QA PASS and Security CLEAR
-(`/devops off` turns the skill off).
+one-shot push-ok on the exact tree (final; a missing QA PASS or Security
+CLEAR is recorded as an override so development is not deadlocked;
+`/devops off` turns the skill off).
 
 The item state names extend the existing goal states; they do not replace
 them. A goal's state is derived from its items: a goal is `done` when all
@@ -377,13 +383,14 @@ unchanged).
   versions are refused. Ids must match their pattern, so no id can carry
   a path separator or `..` (path traversal).
 - **Gates.** Gate commands are accepted only from the human channel
-  (`composer` origin, exact typed command). Every gate change is logged.
-  Free-form words never change a gate (rule 3).
-- **Push.** A push needs the human's one-shot push-ok. It also needs QA
-  PASS (rule 2) and Security CLEAR on the exact tree while the skill is
-  on. `/devops off` turns the skill off and lifts the checks. The
-  manager cannot push, approve, or change gates. The role table says so,
-  and a test checks it.
+  (`composer` origin). Every gate change is logged. Person-typed aliases
+  such as `push` map onto gate words; agents cannot flip gates.
+- **Push.** A push needs the human's one-shot push-ok (or chat `push`)
+  on the exact tree while the skill is on. The human's grant is final and
+  overrides a missing QA PASS or Security CLEAR (recorded) so the mod
+  does not deadlock development. `/devops off` turns the skill off and
+  lifts the checks. The manager cannot push, approve, or change gates.
+  The role table says so, and a test checks it.
 
 ### 10.1 Security requirements (from the security review of this design)
 
@@ -546,7 +553,7 @@ its retries. Alternative: a digest every N ticks. Why it matters: it sets how
 often you are pulled in. Per-sprint keeps you out of the loop unless needed.
 
 **Q3. Seat identity.** Default: per-seat credentials (phase 2). The current
-alternative, the `DEVOPS_SEAT` environment binding, is not authentication: a
+alternative, the `DEVOPS_SEAT` (and `DEVOPS_TEAM`) environment binding, is not authentication: a
 seat with its own shell can set its own environment. Why it matters: every
 role check (manager-only assignment, server-only ticks, no push) depends on
 knowing who sent a message. Until credentials exist, those checks are advisory.
@@ -569,7 +576,10 @@ masking a real one.
 item at a time. A seat may also hold items in review or waiting on a question.
 Alternative: one primary plus one secondary at once. Why it matters: the team
 lead also codes and reviews, so a lead holding two active items is the most
-likely way for a pod to stall unnoticed.
+likely way for a pod to stall unnoticed. Built on the goal board: a seat
+holding three open pieces of assigned work (`OPEN_WORK_LIMIT`, assigned or
+accepted) has any more held for the team's BA, who approves or declines it
+against the client's objectives, or asks the client.
 
 **Q7. What "done" means for a goal.** Default: a goal is done when all its
 items are done, and every item's done needs the human push-ok. Question: may a
@@ -744,6 +754,12 @@ active task references, and its status. The server signs with the seat's key
 (section 14, Q11): the profile is the identity that signs each commit. Commit
 signing and envelope authentication use the same profile.
 
+Built: at spin-up each team lead gets a `seat.setup` envelope (section
+"SeatSetup"): the recommended `DEVOPS_SEAT`/`DEVOPS_TEAM`, the versions of
+the systems involved and the setup steps. The server applies nothing; the
+receiving seat sets itself up. The BA's bug report to the person is a
+`bug.report` envelope (section "BugReport").
+
 ### 16.9 The team lead codes (Q13, Q14)
 
 The team lead is a coder on the team, with added authority to delegate and
@@ -846,11 +862,15 @@ evidence (a test, a lint, a build). It is a gate, but not the push gate.
 
 ### 16.16 Human in the loop: a typed push-ok
 
-The person authorizes a push only by typing /devops push-ok, after QA PASS and
-Security CLEAR on that tree. Free-form words never change a gate (rule 3); the
-orchestrator may turn them into a question or a skill mode, never into a push.
+The person authorizes a push by typing /devops push-ok (aliases push / go /
+publish, or chat "push" / "push it") on the current tree. That grant is
+final: it authorizes one push even when QA PASS or Security CLEAR is
+missing, and the miss is recorded as an override so development is not
+deadlocked. Agents cannot flip gates. If the human's order conflicts with
+skill protocol, seats and the mod obey the human.
 
 ### 16.17 Tree binding: what is built
 
-- Built (mod, PR 7): push-ok is bound to HEAD^{tree}, any later commit voids
-  it, a push may send only HEAD, and there is no override.
+- Built (mod): push-ok is bound to HEAD^{tree}, any later commit voids it,
+  a push may send only HEAD, and a human grant overrides a missing seat
+  verdict (recorded).

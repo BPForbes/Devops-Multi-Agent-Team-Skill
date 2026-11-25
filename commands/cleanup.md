@@ -19,4 +19,6 @@ Prefer `/devops clean` so the orchestration card names `cleanup_brief` /
 4. Coders (`devops-cleaner`) do one small step at a time in a worktree; tests after every step.
 5. Reviewers check that only structure changed; QA compares the scan (`compare`) and reruns everything; Security only if
    sensitive paths are touched.
-6. Nobody pushes before QA's PASS and the person's go.
+6. Nobody pushes without the person's go. Default path waits for QA's PASS; a
+   client order to push sooner wins and the skipped gate is recorded, never
+   reported as passed.

@@ -70,7 +70,12 @@ backup a ref, `git filter-repo --force --path <path>
 after a prior push does **not** unpublish forge blobs.
 
 4. Push once. The Client authorizes this rewrite for this
-   skill’s final publish only.
+   skill’s final publish only, by approving the merge reports it
+   carries; the PR branch the Client reviews holds the compressed
+   history.
+5. After the Client merges the real PR, and never before, delete the
+   temporary virtual-git branches with `devops-chain.mjs merged`
+   ([virtual-git.md](virtual-git.md), step 8).
 
 ## Scratch files (Reviewer, Security, QA)
 

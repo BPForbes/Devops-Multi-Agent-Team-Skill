@@ -18,8 +18,14 @@ Async. When the brief for a department is done, **join that
 department's Coder**. On QA triage,
 **join the Coder who picks the item up** and stay until Reviewers
 take the rewrite. Do not start a Coder whose research is unfinished
-(new work). **Ask:** Answer Coder questions. Thoughts stay
-**gitignored**. **Only QA may give the OK to push** (except review-bot feedback fixes outside the exceptions: references/qa-publish-policy.md).
+(new work) unless the client ordered it. **Ask:** Answer Coder
+questions. Thoughts stay **gitignored**.
+
+**Client over skill.** The human is the Agile **client** and supreme
+authority over every AI seat, including Orchestration. If they say do X
+(for example start coding before the brief), obey even without research
+sign-off, record the override, and keep going
+([client-and-agile.md](../skills/devops-multi-agent-team/references/client-and-agile.md)).
 
 ## Stories
 

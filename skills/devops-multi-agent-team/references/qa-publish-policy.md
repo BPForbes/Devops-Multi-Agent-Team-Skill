@@ -15,27 +15,41 @@ feedback fix outside the exceptions in "Review-bot feedback" below is
 gated instead by an independent Reviewer's Satisfied, the
 repository's CI and the human's go.
 
-**What authorizes a push.** Three things, all on the exact tree being
-pushed: QA's `Publish gate: PASS`, Security's `Security: CLEAR`, and the
-person's typed one-shot `/devops push-ok` (no `on|off` parameter). None
-of the three can stand in for another. Chat words never authorize a
-push, and free-form `/devops` wording never changes a gate.
+**What authorizes a push (default).** Three things on the exact tree:
+QA's `Publish gate: PASS`, Security's `Security: CLEAR`, and the
+person's typed one-shot `/devops push-ok` (no `on|off` parameter;
+aliases `push` / `go` / `publish`, or chat `push` / `push it`).
+
+**Client (human) override.** The human is the Agile **client** and the
+supreme authority over every AI seat
+([client-and-agile.md](client-and-agile.md)). Their push authorization
+is final and overrides a missing or mismatched QA PASS or Security
+CLEAR so the mod does not deadlock development. Each override is
+recorded (tree, rule, what was published, time) and applies to that
+tree and one push only. Agents cannot grant a push. Saying `push` in
+chat is the same as `/devops push-ok` when it comes from the client.
+If the client orders work without seat sign-off, do the work. That
+publish-gate override is the QA PASS / Security CLEAR note. The board
+has its own client risk (`/devops push-ok --risk REASON`) for a missing
+Review, QA or Security hand-off, or for a dependency not yet approved.
+That risk is not a PASS or a CLEAR.
 
 **Skill off.** `/devops off` or `/devops disable` turns the whole skill
 off: session checks stop, and `.claude/settings.json` sets
 `enabledPlugins` for `devops-multi-agent-team@devops-multi-agent-team`
-to `false`. Agents must still obey the human's development orders over
-this skill's process rules while the skill is on
-([SKILL.md](../SKILL.md), Development bypass). `/devops on|enable`
+to `false`. Agents must still obey the client's orders over every AI
+seat while the skill is on ([SKILL.md](../SKILL.md), Client authority).
+`/devops on|enable`
 restores the skill while the plugin is loaded. After unload, set that
 key back to `true` by hand or run `claude plugin enable …`. Free-form
 words never flip on|off.
 
 The Claude mod enforces the mechanical part at the tool layer:
-`git push`, `gh` writes, the GitHub write tools and branch creation are
-refused until all three hold for the current tree (while the skill is
-on), a push may send only `HEAD`, and merges are refused outright: the
-person merges on GitHub (see the README, "The mod").
+`git push`, `gh` writes and the GitHub write tools need the person's
+push-ok on the current tree (while the skill is on); seat verdicts are
+the default path, not a hard stop against the human. A push may send
+only `HEAD`, and merges are refused outright: the person merges on
+GitHub (see the README, "The mod").
 
 ## Fast validation
 

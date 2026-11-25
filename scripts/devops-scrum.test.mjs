@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { addGoal, createSprint, emptyBoard, moveGoal } from './devops-board.mjs'
 import {
-  forwardReports, holdMeeting, leadSignOff, meetingsFor, reportsFor, scheduleMeeting, timebox,
+  OPEN_WORK_LIMIT, addGoal, assignWork, createSprint, emptyBoard, moveGoal, openThread,
+  unreadThreads, workInbox,
+} from './devops-board.mjs'
+import { validateEnvelope } from './devops-envelopes.mjs'
+import {
+  baScan, bugIssue, clientSignOff, decideBug, decideHeldWork, decideLoad, fileBugReport,
+  forwardReports, goalDone, goalVerdict, holdMeeting, issueTitle, leadSignOff, meetingsFor,
+  newApproach, pingsFor, prepareMerge, raiseToAnalyst, recordIssue, recordMerged, recordPush,
+  reportsFor, scheduleMeeting, teamSchedule, timebox,
 } from './devops-scrum.mjs'
 
 const AT = '2026-11-24T10:00:00Z'
@@ -12,6 +19,8 @@ const LEAD = 'agent-a1a1a1'
 const DEV = 'agent-c0c0c0'
 const GOAL = 'goal-111111'
 const NEXT = 'goal-222222'
+/** The Business Analyst: required at Planning, Refinement and the Sprint Review. */
+const BA = 'agent-b1b1b1'
 
 const OTHER_TEAM = 'team-d4d4d4'
 const OTHER_LEAD = 'agent-d4d4d4'
@@ -50,6 +59,12 @@ function passedSecurity(board, options = {}) {
   next.handoffs[id(1)] = done(reviewed)
   next.handoffs[id(2)] = done(toSecurity)
   next.handoffs[id(3)] = done(verdict)
+  // DEV, a member who wrote nothing, verified the goal after these verdicts.
+  const peer = { step: 'peer', by: DEV, at: AT, seq: count + 3 }
+  const target = next.goals[GOAL]
+  target.signoffs = [...(target.signoffs ?? []), peer]
+  const merged = ['peer', 'lead'].map((s, i) => ({ step: s, by: [DEV, LEAD][i], verdict: 'ok' }))
+  target.reviews = [...(target.reviews ?? []), ...merged]
   return next
 }
 
@@ -60,7 +75,9 @@ const nextHex = () => {
 }
 
 function meet(state, kind, options = {}) {
-  const { minutes, attendees = [LEAD, DEV], record, by = LEAD, team = TEAM, lead = LEAD } = options
+  const {
+    minutes, attendees = [LEAD, DEV, BA], record, by = LEAD, team = TEAM, lead = LEAD,
+  } = options
   const made = scheduleMeeting(state.board, {
     sprint: state.sprint, team, kind, lead, at: AT, mint: nextHex,
   })
@@ -71,6 +88,7 @@ function meet(state, kind, options = {}) {
 }
 
 const PLAN = {
+  businessAnalyst: BA,
   sprintGoal: 'Parser takes an empty config',
   goals: [GOAL],
   tasks: [{ goal: GOAL, job: 'coder', title: 'Fix it' }],
@@ -101,7 +119,7 @@ test('meetings come in order: planning first, review once, the retrospective las
   assert.throws(() => meet(fresh, 'daily', { record: { updates: [] } }), /Sprint Planning first/)
   const planned = meet(fresh, 'planning', { record: PLAN })
   assert.throws(() => meet(planned, 'planning', { record: PLAN }), /already held/)
-  assert.throws(() => meet(planned, 'retro', { record: { actions: ['x'] } }), /after the review/)
+  assert.throws(() => meet(planned, 'retro', { record: { actions: ['x'] } }), /after the joint/)
 })
 
 test('a Daily Scrum records each developer and collects the blockers', () => {
@@ -114,9 +132,90 @@ test('a Daily Scrum records each developer and collects the blockers', () => {
   assert.throws(() => meet(planned, 'daily', stranger), /not in this Daily Scrum/)
 })
 
+/** Minimal joint Sprint Review record (BA present; no demos required). */
+const EMPTY_REVIEW = { businessAnalyst: BA, roster: [], feedback: [] }
+const withBa = (attendees = [LEAD, BA]) => ({ attendees, record: EMPTY_REVIEW })
+
+test('Daily Scrum records stress, strain and lead reallocations with the BA present', () => {
+  const planned = meet(sprintBoard(), 'planning', { record: PLAN })
+  const record = {
+    businessAnalyst: BA,
+    updates: [UPDATE],
+    stress: [{ goal: GOAL, priority: 1, load: '2 seats open' }],
+    strain: [{ goal: GOAL, reason: 'blocked on CI' }],
+    reallocations: [{
+      agent: DEV, to: GOAL, reason: 'priority 1 delayed', cost: 'defers polish',
+    }],
+  }
+  const daily = meet(planned, 'daily', {
+    minutes: 12, attendees: [LEAD, DEV, BA], record,
+  })
+  const held = daily.board.meetings[daily.id].record
+  assert.equal(held.strain[0].goal, GOAL)
+  assert.equal(held.reallocations[0].agent, DEV)
+  assert.equal(held.businessAnalyst, BA)
+  const missing = {
+    minutes: 5, attendees: [LEAD, DEV], record: { ...record, updates: [UPDATE] },
+  }
+  assert.throws(() => meet(planned, 'daily', missing), /Business Analyst/)
+})
+
+test('a Daily Scrum reallocation onto a goal and job moves the seat\'s board work', () => {
+  const planned = meet(sprintBoard(), 'planning', { record: PLAN })
+  const given = assignWork(planned.board, {
+    goal: NEXT, job: 'coder', agent: DEV, team: TEAM, description: 'polish', by: LEAD, at: AT,
+  })
+  const state = { ...planned, board: given.board }
+  const move = {
+    agent: DEV, to: 'parser fix', reason: 'priority 1 delayed',
+    goal: GOAL, job: 'coder', from: given.id,
+  }
+  const record = { businessAnalyst: BA, updates: [UPDATE], reallocations: [move] }
+  const daily = meet(state, 'daily', { minutes: 10, attendees: [LEAD, DEV, BA], record })
+  const held = daily.board.meetings[daily.id].record.reallocations[0]
+  assert.equal(daily.board.assignments[given.id].state, 'released')
+  assert.deepEqual(workInbox(daily.board, DEV).map(w => [w.id, w.goal]), [[held.work, GOAL]])
+  const half = { ...record, reallocations: [{ ...move, job: undefined, from: undefined }] }
+  const halfMove = { minutes: 10, attendees: [LEAD, DEV, BA], record: half }
+  const refused = () => meet(state, 'daily', halfMove)
+  assert.throws(refused, /both its goal and its job/)
+})
+
+test('a free-text reallocation is record-only and does not move board work', () => {
+  const planned = meet(sprintBoard(), 'planning', { record: PLAN })
+  const given = assignWork(planned.board, {
+    goal: NEXT, job: 'coder', agent: DEV, team: TEAM, description: 'polish', by: LEAD, at: AT,
+  })
+  const state = { ...planned, board: given.board }
+  const note = { agent: DEV, to: 'parser fix', reason: 'priority 1 delayed' }
+  const record = { businessAnalyst: BA, updates: [UPDATE], reallocations: [note] }
+  const daily = meet(state, 'daily', { minutes: 10, attendees: [LEAD, DEV, BA], record })
+  const held = daily.board.meetings[daily.id].record.reallocations[0]
+  assert.equal(held.work, undefined)
+  assert.equal(held.to, 'parser fix')
+  assert.equal(daily.board.assignments[given.id].state, 'assigned')
+  assert.deepEqual(workInbox(daily.board, DEV).map(w => w.goal), [NEXT])
+})
+
+test('Planning, Refinement and the Sprint Review need the Business Analyst; Daily does not', () => {
+  const { businessAnalyst, ...noBa } = PLAN
+  assert.equal(businessAnalyst, BA)
+  assert.throws(() => meet(sprintBoard(), 'planning', { record: noBa }),
+    /Sprint Planning needs the Business Analyst/)
+  const planned = meet(sprintBoard(), 'planning', { record: PLAN })
+  assert.equal(planned.board.meetings[planned.id].record.businessAnalyst, BA)
+  const refine = { record: { items: [{ goal: NEXT, points: 3, priority: 1 }] } }
+  assert.throws(() => meet(planned, 'refinement', refine), /Refinement needs the Business/)
+  assert.throws(() => meet(planned, 'review', { record: { roster: [] } }), /Review needs the/)
+  const daily = meet(planned, 'daily', { minutes: 5, record: { updates: [UPDATE] } })
+  assert.equal(daily.board.meetings[daily.id].state, 'held')
+})
+
 test('Backlog Refinement sizes and orders upcoming goals, not ones already in the sprint', () => {
   const planned = meet(sprintBoard(), 'planning', { record: PLAN })
-  const refine = item => meet(planned, 'refinement', { record: { items: [item] } })
+  const refine = item => meet(planned, 'refinement', {
+    record: { businessAnalyst: BA, items: [item] },
+  })
   const refined = refine({ goal: NEXT, points: 5, priority: 1 })
   assert.equal(refined.board.goals[NEXT].points, 5)
   assert.equal(refined.board.goals[NEXT].priority, 1)
@@ -124,9 +223,61 @@ test('Backlog Refinement sizes and orders upcoming goals, not ones already in th
   assert.throws(() => refine({ goal: NEXT, points: 21, priority: 1 }), /1 to 13/)
 })
 
-test('the Sprint Review demos only Done goals and adds feedback goals to the backlog', () => {
+test('backlog goals carry the client objective, acceptance criteria, priority and owner', () => {
+  const planned = meet(sprintBoard(), 'planning', { record: PLAN })
+  const item = {
+    goal: NEXT, points: 3, priority: 2, objective: 'Configs never crash the parser',
+    acceptance: ['empty file parses', 'unknown key warns once'],
+  }
+  const refined = meet(planned, 'refinement', { record: { businessAnalyst: BA, items: [item] } })
+  const row = refined.board.goals[NEXT]
+  assert.equal(row.objective, 'Configs never crash the parser')
+  assert.deepEqual(row.acceptance, ['empty file parses', 'unknown key warns once'])
+  const bad = { businessAnalyst: BA, items: [{ ...item, acceptance: [''] }] }
+  assert.throws(() => meet(planned, 'refinement', { record: bad }), /acceptance must be/)
+  const added = {
+    goal: 'goal-444444', title: 'Warn on unknown keys', priority: 1, owner: TEAM,
+    objective: 'Unknown keys warn once',
+    acceptance: ['warns with the key name'],
+  }
+  const review = goals => ({ record: { ...EMPTY_REVIEW, newGoals: goals } })
+  const reviewed = meet(planned, 'review', review([added]))
+  assert.equal(reviewed.board.goals['goal-444444'].objective, 'Unknown keys warn once')
+  assert.deepEqual(
+    [reviewed.board.goals['goal-444444'].priority, reviewed.board.goals['goal-444444'].owner],
+    [1, TEAM],
+  )
+  for (const drop of ['objective', 'acceptance', 'priority', 'owner']) {
+    const missing = { ...added, goal: 'goal-454545' }
+    delete missing[drop]
+    assert.throws(() => meet(planned, 'review', review([missing])), /Sprint Review goal/)
+  }
+  const refinedBare = meet(planned, 'refinement', {
+    record: { businessAnalyst: BA, items: [{ goal: NEXT, points: 2, priority: 1 }] },
+  })
+  assert.equal(refinedBare.board.goals[NEXT].objective, undefined)
+  assert.throws(() => meet(planned, 'review', review([{ ...added, owner: 'A1' }])),
+    /owner is a team hash/)
+  const dependent = meet(planned, 'refinement', {
+    record: { businessAnalyst: BA, items: [{ ...item, dependsOn: [GOAL] }] },
+  })
+  assert.deepEqual(dependent.board.goals[NEXT].depends_on, [GOAL])
+  const badDeps = { businessAnalyst: BA, items: [{ ...item, dependsOn: ['A1'] }] }
+  assert.throws(() => meet(planned, 'refinement', { record: badDeps }), /dependsOn lists/)
+  const bugs = meet(planned, 'refinement', {
+    record: { businessAnalyst: BA, items: [{ ...item, bugIssues: [42, 42] }] },
+  })
+  assert.deepEqual(bugs.board.goals[NEXT].bug_issues, [42])
+  const badBugs = { businessAnalyst: BA, items: [{ ...item, bugIssues: ['#42'] }] }
+  assert.throws(() => meet(planned, 'refinement', { record: badBugs }), /bugIssues lists/)
+})
+
+test('the joint Sprint Review demos Done features, records Q&A, and adds backlog goals', () => {
   let state = meet(judgedBoard(), 'planning', { record: PLAN })
-  assert.throws(() => meet(state, 'review', { record: { demo: [GOAL] } }), /not Done/)
+  assert.throws(() => meet(state, 'review', {
+    attendees: [LEAD, BA],
+    record: { businessAnalyst: BA, roster: [{ agent: LEAD, goal: GOAL, kind: 'feature' }] },
+  }), /not Done/)
   let board = state.board
   for (const step of ['ready', 'in_progress', 'review', 'qa', 'security']) {
     board = moveGoal(board, { goal: GOAL, state: step, at: AT })
@@ -134,17 +285,42 @@ test('the Sprint Review demos only Done goals and adds feedback goals to the bac
   const signoff = { sprint: state.sprint, goal: GOAL, lead: LEAD, at: AT }
   board = leadSignOff(passedSecurity(board), signoff).board
   state = { ...state, board }
-  const newGoals = [{ goal: 'goal-333333', title: 'Warn on unknown keys' }]
-  const record = { demo: [GOAL], feedback: ['Show the key name'], newGoals }
-  const reviewed = meet(state, 'review', { record })
+  const newGoals = [{
+    goal: 'goal-333333', title: 'Warn on unknown keys', priority: 2, owner: TEAM,
+    objective: 'Unknown keys warn once', acceptance: ['the key name is in the warning'],
+  }]
+  const record = {
+    businessAnalyst: BA,
+    attendance: [LEAD, DEV, BA],
+    roster: [{ agent: DEV, goal: GOAL, kind: 'feature', surface: 'terminal' }],
+    questions: [{
+      from: BA, to: DEV, question: 'Does empty config warn?', answer: 'Yes, once.',
+    }],
+    feedback: ['Show the key name'],
+    newGoals,
+  }
+  const ownDemo = { attendees: [LEAD, DEV, BA], record: { ...record, demo: [GOAL] } }
+  assert.throws(() => meet(state, 'review', ownDemo), /come from the roster/)
+  const empty = { ...record, roster: [] }
+  assert.throws(() => meet(state, 'review', { attendees: [LEAD, DEV, BA], record: empty }),
+    /lists every Done goal of the sprint.*goal-111111/)
+  const reviewed = meet(state, 'review', { attendees: [LEAD, DEV, BA], record })
   assert.equal(reviewed.board.goals['goal-333333'].sprint, '')
-  const daily = { minutes: 5, record: { updates: [UPDATE] } }
+  assert.equal(reviewed.board.meetings[reviewed.id].record.questions[0].answer, 'Yes, once.')
+  assert.equal(reviewed.board.meetings[reviewed.id].record.roster[0].surface, 'terminal')
+  const daily = { minutes: 5, attendees: [LEAD, DEV], record: { updates: [UPDATE] } }
   assert.throws(() => meet(reviewed, 'daily', daily), /in review/)
+  assert.throws(() => meet(reviewed, 'review', {
+    attendees: [LEAD, BA], record: { businessAnalyst: BA, roster: [] },
+  }), /already held its joint/)
 })
 
 test('the retrospective agrees an improvement and closes the sprint after every team', () => {
   let state = meet(sprintBoard(), 'planning', { record: PLAN })
-  state = meet(state, 'review', { record: { demo: [], feedback: [] } })
+  state = meet(state, 'review', {
+    attendees: [LEAD, BA],
+    record: { businessAnalyst: BA, roster: [], feedback: [] },
+  })
   assert.throws(() => meet(state, 'retro', { record: { actions: [] } }), /one improvement or more/)
   const record = { wentWell: ['fast review'], bottlenecks: ['CI queue'], actions: ['Cache it'] }
   const retro = meet(state, 'retro', { record })
@@ -175,20 +351,28 @@ test('only the lead the allocation names runs a team\'s meetings, for an allocat
 test('the sprint closes only when every allocated team held its retrospective', () => {
   const both = sprintBoard(2, { two: true })
   let state = meet(both, 'planning', { record: PLAN })
-  state = meet(state, 'review', { record: { demo: [], feedback: [] } })
+  // One joint Sprint Review for the whole sprint (hosted by TEAM).
+  state = meet(state, 'review', {
+    attendees: [LEAD, BA],
+    record: { businessAnalyst: BA, roster: [], feedback: [] },
+  })
   state = meet(state, 'retro', { record: { actions: ['Cache it'] } })
   assert.equal(state.board.sprints[state.sprint].status, 'active', 'A2 has not held its retro')
-  const other = { lead: OTHER_LEAD, by: OTHER_LEAD, attendees: [OTHER_LEAD], team: OTHER_TEAM }
+  const other = {
+    lead: OTHER_LEAD, by: OTHER_LEAD, attendees: [OTHER_LEAD, BA], team: OTHER_TEAM,
+  }
   const plan2 = { ...PLAN, goals: [NEXT], tasks: [{ goal: NEXT, job: 'coder', title: 'Do it' }] }
   state = meet(state, 'planning', { ...other, record: plan2 })
-  state = meet(state, 'review', { ...other, record: { demo: [], feedback: [] } })
   state = meet(state, 'retro', { ...other, record: { actions: ['Pair on CI'] } })
   assert.equal(state.board.sprints[state.sprint].status, 'closed')
 })
 
 test('a closed sprint holds no more meetings, even ones scheduled before it closed', () => {
   let state = meet(sprintBoard(), 'planning', { record: PLAN })
-  state = meet(state, 'review', { record: { demo: [], feedback: [] } })
+  state = meet(state, 'review', {
+    attendees: [LEAD, BA],
+    record: { businessAnalyst: BA, roster: [], feedback: [] },
+  })
   const early = scheduleMeeting(state.board, {
     sprint: state.sprint, team: TEAM, kind: 'daily', lead: LEAD, at: AT, mint: nextHex,
   })
@@ -203,8 +387,15 @@ test('planning takes only backlog goals, and a review adds only new goals', () =
   const again = { ...PLAN, goals: [GOAL] }
   const unknown = { record: { ...again, goals: ['goal-999999'] } }
   assert.throws(() => meet(sprintBoard(), 'planning', unknown), /not a backlog goal/)
-  const existing = { demo: [], feedback: [], newGoals: [{ goal: NEXT, title: 'x' }] }
-  assert.throws(() => meet(planned, 'review', { record: existing }), /not a new goal/)
+  const existing = {
+    businessAnalyst: BA,
+    roster: [],
+    feedback: [],
+    newGoals: [{ goal: NEXT, title: 'x' }],
+  }
+  assert.throws(() => meet(planned, 'review', {
+    attendees: [LEAD, BA], record: existing,
+  }), /not a new goal/)
 })
 
 test('a team plans only its own streams, not another team\'s', () => {
@@ -232,9 +423,11 @@ function judgedBoard() {
 }
 
 test('every team lead runs its own meetings, the judging team\'s lead too', () => {
-  const judge = { team: JUDGE_TEAM, lead: JUDGE_LEAD, by: JUDGE_LEAD, attendees: [JUDGE_LEAD] }
+  const judge = {
+    team: JUDGE_TEAM, lead: JUDGE_LEAD, by: JUDGE_LEAD, attendees: [JUDGE_LEAD, BA],
+  }
   const tasks = [{ goal: GOAL, job: 'qa', title: 'QA it' }]
-  const record = { sprintGoal: 'Judge the parser fix', goals: [GOAL], tasks }
+  const record = { businessAnalyst: BA, sprintGoal: 'Judge the parser fix', goals: [GOAL], tasks }
   const planned = meet(judgedBoard(), 'planning', { ...judge, record })
   assert.equal(planned.board.meetings[planned.id].state, 'held')
   const updates = [{ agent: JUDGE_LEAD, done: 'plan', today: 'test' }]
@@ -244,7 +437,7 @@ test('every team lead runs its own meetings, the judging team\'s lead too', () =
 
 test('the sprint waits for the judging team\'s retrospective too', () => {
   let state = meet(judgedBoard(), 'planning', { record: PLAN })
-  state = meet(state, 'review', { record: { demo: [], feedback: [] } })
+  state = meet(state, 'review', withBa())
   state = meet(state, 'retro', { record: { actions: ['Cache it'] } })
   assert.equal(state.board.sprints[state.sprint].status, 'active')
 })
@@ -271,27 +464,207 @@ test('a goal is done only by its own team lead\'s sign-off, after security', () 
   assert.equal(done.goals[GOAL].done_by, LEAD)
 })
 
-test('the lead reports done to Orchestration, which reports to the person', () => {
+/** GOAL at security with its verdicts in, the fixture's peer signature taken off. */
+function unverified() {
   const planned = meet(judgedBoard(), 'planning', { record: PLAN })
   let board = planned.board
   for (const step of ['ready', 'in_progress', 'review', 'qa', 'security']) {
     board = moveGoal(board, { goal: GOAL, state: step, at: AT })
   }
-  const signed = leadSignOff(passedSecurity(board), {
-    sprint: planned.sprint, goal: GOAL, lead: LEAD, at: AT, mint: () => 'abcabc',
-  })
+  board = passedSecurity(board)
+  Object.assign(board.goals[GOAL], { signoffs: [], reviews: [] })
+  return { ...planned, board }
+}
+
+const MERGE = {
+  branch: 'main', design: 'one guard in the parser module', implementation: 'empty check',
+  risks: ['configs that relied on the crash'],
+}
+const MATE = 'agent-c1c1c1'
+const ok = (b, by, team = TEAM, more = {}) => goalVerdict(b, {
+  goal: GOAL, by, team, decision: 'ok', at: AT, ...more,
+})
+const deny = (b, by, reason, team = TEAM) => goalVerdict(b, {
+  goal: GOAL, by, team, decision: 'deny', reason, at: AT,
+})
+const done = (b, by, more = {}) => goalDone(b, {
+  goal: GOAL, by, team: TEAM, at: AT, mint: () => 'abcabc', ...more,
+})
+/** merge-ok then done by the same signer, as the chain asks. */
+const step = (b, by, more = {}) => done(ok(b, by, TEAM, more), by, more)
+
+test('merge-ok comes before done; a member verifies the goal before its lead signs', () => {
+  const { sprint, board } = unverified()
+  const lead = b => leadSignOff(b, { sprint, goal: GOAL, lead: LEAD, at: AT })
+  assert.throws(() => lead(board), /needs a team member's peer verification/)
+  assert.throws(() => done(board, DEV), /runs merge-ok on the peer step before done/)
+  assert.throws(() => ok(board, LEAD), /the lead signs next/)
+  assert.throws(() => ok(board, DEV, JUDGE_TEAM), /acts here as a seat of team-a1a1a1/)
+  assert.throws(() => ok(board, DEV, TEAM, { members: [LEAD, MATE] }), /not a member/)
+  const verified = step(board, DEV).board
+  assert.throws(() => done(verified, LEAD), /runs merge-ok on the lead step before done/)
+  assert.throws(() => ok(verified, DEV), /only team-a1a1a1's lead/)
+  const signed = step(verified, LEAD)
   assert.equal(signed.id, 'report-abcabc')
-  const waiting = reportsFor(signed.board, { state: 'to_orchestration' })
-  assert.deepEqual(waiting.map(r => [r.goal, r.team, r.lead]), [[GOAL, TEAM, LEAD]])
-  const forward = summary => ({ sprint: planned.sprint, ids: [signed.id], summary, at: AT })
-  assert.throws(() => forwardReports(signed.board, forward(' ')),
-    /needs a summary/)
-  const told = forwardReports(signed.board, {
-    sprint: planned.sprint, ids: [signed.id], summary: 'Parser fix done', at: AT,
+  assert.deepEqual(signed.board.goals[GOAL].signoffs.map(s => s.step), ['peer', 'lead'])
+  const sentBack = structuredClone(verified)
+  sentBack.handoffs['handoff-f0f0f0'] = {
+    payload: { goal: GOAL, kind: 'security-send-back' }, state: 'done',
+  }
+  const judgedAgain = passedSecurity(sentBack)
+  judgedAgain.goals[GOAL].signoffs.pop()
+  assert.throws(() => lead(judgedAgain), /peer verification since its last send-back/)
+})
+
+test('merge-ok pings the BA and goes ahead; only a BA hold or deny blocks it', () => {
+  const { board } = unverified()
+  const pinged = ok(board, DEV)
+  assert.deepEqual(pinged.goals[GOAL].pings, [{ step: 'peer', ba: BA, by: DEV, at: AT }])
+  assert.equal(pinged.goals[GOAL].history.at(-1).event, 'ba_pinged')
+  assert.deepEqual(pingsFor(pinged, { ba: BA }).map(p => p.goal), [GOAL])
+  const scan = (b, verdict, reason, ba = BA) => baScan(b, {
+    goal: GOAL, ba, verdict, reason, at: AT,
   })
-  assert.equal(reportsFor(told, { state: 'to_person' }).length, 1)
-  const again = () => forwardReports(told, forward('x'))
-  assert.throws(again, /already passed to the person/)
+  assert.throws(() => scan(board, 'ok', undefined, DEV), /only the goal's Business Analyst/)
+  assert.throws(() => scan(board, 'hold'), /holds or denies says why/)
+  const held = scan(board, 'hold', 'Client asked for a warning, not a fix')
+  assert.throws(() => ok(held, DEV), /scan holds the peer step: Client asked for a warning/)
+  const denied = scan(board, 'deny', 'Out of scope')
+  assert.throws(() => ok(denied, DEV), /scan denies the peer step: Out of scope/)
+  assert.equal(denied.goals[GOAL].state, 'security', 'a scan does not reopen the goal')
+  const cleared = ok(scan(held, 'ok'), DEV)
+  assert.equal(pingsFor(cleared, { ba: BA }).length, 0, 'a scan answers the ping')
+  const signed = step(cleared, DEV)
+  assert.deepEqual(signed.board.goals[GOAL].signoffs.map(s => s.step), ['peer'])
+  const leadHeld = scan(signed.board, 'hold', 'Wait for the review')
+  assert.throws(() => ok(leadHeld, LEAD), /holds the lead step/)
+})
+
+test('when the lead wrote the goal, another member signs for the lead', () => {
+  const { board } = unverified()
+  board.handoffs['handoff-a0a0a0'] = {
+    payload: { goal: GOAL, kind: 'coder-to-review', from: { agent: LEAD, team: TEAM } },
+    state: 'done',
+  }
+  const verified = step(board, DEV).board
+  assert.throws(() => ok(verified, LEAD), /wrote goal-111111; another member looks at it/)
+  assert.throws(() => ok(verified, DEV), /the peer cannot also sign for the lead/)
+  const signed = step(verified, MATE)
+  assert.equal(signed.board.reports[signed.id].signed_by, MATE)
+  assert.equal(signed.board.reports[signed.id].lead, LEAD)
+})
+
+/** GOAL signed by its peer and lead, the sprint's Sprint Review scheduled. */
+/** The client's expectations on GOAL, and the BA's first-signature details that meet them. */
+const EXPECTED = { objective: 'Empty config parses', acceptance: ['empty config loads'] }
+const FIRST = { demoer: DEV, meets: true }
+
+function leadSigned() {
+  const state = unverified()
+  Object.assign(state.board.goals[GOAL], structuredClone(EXPECTED))
+  const signed = step(step(state.board, DEV).board, LEAD)
+  const review = scheduleMeeting(signed.board, {
+    sprint: state.sprint, team: TEAM, kind: 'review', lead: LEAD, at: AT, mint: nextHex,
+  })
+  return { ...state, board: review.board, report: signed.id, review: review.id }
+}
+
+test('Done chain: BA signs on the demo list, again while Orchestration prepares', () => {
+  const state = leadSigned()
+  const { sprint, report } = state
+  const forward = (b, merge = MERGE) => forwardReports(b, {
+    sprint, ids: [report], summary: 'Parser fix done', merge, at: AT,
+  })
+  assert.throws(() => forward(state.board), /is awaiting_ba, not to_orchestration/)
+  assert.throws(() => ok(state.board, DEV), /only team-a1a1a1's Business Analyst/)
+  const unscheduled = structuredClone(state.board)
+  delete unscheduled.meetings[state.review]
+  assert.throws(() => step(unscheduled, BA, FIRST), /schedule .*'s Sprint Review first/)
+  assert.throws(() => step(state.board, BA, { ...FIRST, kind: 'chore' }), /demo kind/)
+  assert.throws(() => step(state.board, BA, { meets: FIRST.meets }), /agent hash of the seat/)
+  assert.throws(() => step(state.board, BA, { demoer: DEV }),
+    /confirms the goal meets its acceptance criteria/)
+  const first = step(state.board, BA, { ...FIRST, surface: 'terminal' }).board
+  const signed = first.goals[GOAL].signoffs.at(-1)
+  assert.deepEqual(signed.demo, { kind: 'feature', agent: DEV, surface: 'terminal' })
+  assert.deepEqual(signed.expectations, EXPECTED)
+  assert.throws(() => step(first, BA), /Orchestration prepares the merge presentation/)
+  const prepare = b => prepareMerge(b, { ids: [report], at: AT })
+  const preparing = prepare(first)
+  assert.throws(() => prepare(preparing), /is preparing, not ba_signed/)
+  const second = step(preparing, BA).board
+  assert.deepEqual(second.goals[GOAL].signoffs.map(s => s.step),
+    ['peer', 'lead', 'ba', 'ba_final'])
+  assert.throws(() => forward(second, { branch: 'main' }), /names the real branch/)
+  const told = forward(second)
+  assert.deepEqual(reportsFor(told, { state: 'to_person' })[0].merge.risks,
+    ['configs that relied on the crash'])
+  assert.throws(() => done(told, BA), /client's push-ok signs the merge report/)
+  assert.throws(() => ok(told, BA), /only the client signs the merge report/)
+  assert.throws(() => clientSignOff(told, { at: AT }), /names the merge reports/)
+  const approved = clientSignOff(told, { ids: [report], at: AT })
+  assert.deepEqual(approved.approved, [report])
+  assert.equal(approved.board.reports[report].state, 'approved')
+  assert.equal(approved.board.goals[GOAL].signoffs.at(-1).step, 'client')
+  assert.throws(() => clientSignOff(approved.board, { ids: [report], at: AT }),
+    /not waiting for the client/)
+})
+
+/** GOAL's merge report delivered to the client. */
+function delivered() {
+  const state = leadSigned()
+  const first = step(state.board, BA, FIRST).board
+  const second = step(prepareMerge(first, { ids: [state.report], at: AT }), BA).board
+  const told = forwardReports(second, {
+    sprint: state.sprint, ids: [state.report], summary: 'Parser fix', merge: MERGE, at: AT,
+  })
+  return { ...state, board: told }
+}
+
+test('a client denial goes back to the BA, whose new approach keeps the client feedback', () => {
+  const { board, report } = delivered()
+  assert.throws(() => deny(board, 'client'), /merge-deny says why/)
+  const denied = deny(board, 'client', 'Warn, do not silently accept')
+  assert.equal(denied.reports[report].state, 'denied')
+  assert.equal(denied.reports[report].decision_reason, 'Warn, do not silently accept')
+  const goal = {
+    goal: 'goal-555555', title: 'Warn on empty config', objective: 'Warn, do not accept',
+    acceptance: ['empty config warns once'], priority: 1, owner: TEAM,
+  }
+  const rework = (b, goals, ba = BA) => newApproach(b, { report, ba, goals, at: AT })
+  assert.throws(() => rework(denied, [{ ...goal, acceptance: undefined }]), /objective it answers/)
+  assert.throws(() => rework(denied, [goal], DEV), /only team-a1a1a1's Business Analyst/)
+  const reworked = rework(denied, [goal])
+  const optional = {
+    goal: 'goal-666666', title: 'Name the key', objective: 'Warn, do not accept',
+    acceptance: ['empty config warns once'],
+  }
+  const withoutRank = rework(denied, [optional])
+  assert.equal(withoutRank.goals['goal-666666'].priority, undefined)
+  assert.equal(withoutRank.goals['goal-666666'].owner, undefined)
+  assert.equal(reworked.reports[report].state, 'reworked')
+  assert.equal(reworked.goals['goal-555555'].from_report, report)
+  assert.equal(reworked.goals['goal-555555'].client_feedback, 'Warn, do not silently accept')
+  assert.throws(() => rework(clientSignOff(board, { ids: [report], at: AT }).board, [goal]),
+    /was not denied by the client/)
+})
+
+test('merge-deny with a reason reopens the goal; a Done goal asks for the client review', () => {
+  const { board } = unverified()
+  const verified = step(board, DEV).board
+  assert.throws(() => deny(verified, LEAD), /merge-deny says why/)
+  assert.throws(() => deny(verified, JUDGE_LEAD, 'no'), /only team-a1a1a1's lead/)
+  const reopened = deny(verified, LEAD, 'No test for an empty file')
+  const goal = reopened.goals[GOAL]
+  assert.equal(goal.state, 'in_progress')
+  assert.deepEqual([goal.signoffs, goal.reviews], [[], []])
+  assert.equal(goal.history.at(-1).reason, 'No test for an empty file')
+  const { board: signed, report } = leadSigned()
+  const byBa = deny(signed, BA, 'Sprint Review: show the key name')
+  assert.equal(byBa.reports[report].state, 'reopened')
+  assert.equal(byBa.reports[report].needs_client_review, true)
+  assert.equal(byBa.goals[GOAL].history.at(-1).was, 'done')
+  assert.throws(() => deny(signed, DEV, 'x'), /only team-a1a1a1's Business Analyst/)
 })
 
 test('an allocated goal cannot be walked to done another way, nor start as done', () => {
@@ -303,9 +676,11 @@ test('an allocated goal cannot be walked to done another way, nor start as done'
 })
 
 test('the judging team plans only judging work on the goals it judges', () => {
-  const judge = { team: JUDGE_TEAM, lead: JUDGE_LEAD, by: JUDGE_LEAD, attendees: [JUDGE_LEAD] }
+  const judge = {
+    team: JUDGE_TEAM, lead: JUDGE_LEAD, by: JUDGE_LEAD, attendees: [JUDGE_LEAD, BA],
+  }
   const tasks = [{ goal: GOAL, job: 'coder', title: 'Rewrite it' }]
-  const record = { sprintGoal: 'Judge it', goals: [GOAL], tasks }
+  const record = { businessAnalyst: BA, sprintGoal: 'Judge it', goals: [GOAL], tasks }
   assert.throws(() => meet(judgedBoard(), 'planning', { ...judge, record }), /does not belong here/)
 })
 
@@ -388,6 +763,9 @@ test('the verdicts count only in order: review into QA, then QA to Security, the
   const reorder = order => {
     const next = structuredClone(board)
     order.forEach((h, i) => { next.handoffs[`handoff-e0e0e${i}`] = structuredClone(h) })
+    const seq = Object.keys(next.handoffs).length
+    next.goals[GOAL].signoffs = [{ step: 'peer', by: DEV, at: AT, seq }]
+    next.goals[GOAL].reviews = shuffled.goals[GOAL].reviews
     return next
   }
   assert.throws(() => sign(reorder([clear, review, toSecurity])), /must be clear/)
@@ -397,7 +775,7 @@ test('the verdicts count only in order: review into QA, then QA to Security, the
 
 test('a closing sprint returns its unfinished goals to the backlog, free for later', () => {
   let state = meet(sprintBoard(), 'planning', { record: PLAN })
-  state = meet(state, 'review', { record: { demo: [], feedback: [] } })
+  state = meet(state, 'review', withBa())
   state = meet(state, 'retro', { record: { actions: ['Cache it'] } })
   assert.equal(state.board.sprints[state.sprint].status, 'closed')
   assert.equal(state.board.goals[GOAL].sprint, '')
@@ -435,15 +813,16 @@ test('a goal returned from a closed sprint is judged again: old verdicts do not 
     board = moveGoal(board, { goal: GOAL, state: step, at: AT })
   }
   state = { ...state, board: passedSecurity(board) }
-  const close = (s, team, lead) => {
-    const who = { team, lead, by: lead, attendees: [lead] }
+  const close = (s, team, lead, { holdReview = false } = {}) => {
+    const who = { team, lead, by: lead, attendees: [lead, BA] }
     const tasks = [{ goal: GOAL, job: 'qa', title: 'x' }]
-    const record = { sprintGoal: 'x', goals: [GOAL], tasks }
+    const record = { businessAnalyst: BA, sprintGoal: 'x', goals: [GOAL], tasks }
     let next = team === TEAM ? s : meet(s, 'planning', { ...who, record })
-    next = meet(next, 'review', { ...who, record: { demo: [], feedback: [] } })
+    if (holdReview) next = meet(next, 'review', { ...who, record: EMPTY_REVIEW })
     return meet(next, 'retro', { ...who, record: { actions: ['x'] } })
   }
-  state = close(state, TEAM, LEAD)
+  // One joint review (hosted by TEAM), then each team's retro.
+  state = close(state, TEAM, LEAD, { holdReview: true })
   state = close(state, JUDGE_TEAM, JUDGE_LEAD)
   state = close(state, SEC_TEAM, SEC_LEAD)
   assert.equal(state.board.sprints[state.sprint].status, 'closed')
@@ -459,4 +838,350 @@ test('a goal returned from a closed sprint is judged again: old verdicts do not 
   const byAuthor = passedSecurity(again, { signer: DEV })
   assert.throws(() => sign(byAuthor), /must be clear/, 'an author stays an author after a return')
   assert.equal(sign(passedSecurity(again)).board.goals[GOAL].state, 'done')
+})
+
+test('every signature item is a valid chain.signature envelope', () => {
+  const { board, report } = delivered()
+  const scanned = baScan(board, { goal: GOAL, ba: BA, verdict: 'ok', at: AT })
+  const approved = clientSignOff(scanned, { ids: [report], at: AT }).board
+  const envelopes = Object.values(approved.signatures)
+  for (const envelope of envelopes) {
+    const checked = validateEnvelope(envelope)
+    assert.equal(checked.ok, true, `${envelope.id}: ${checked.errors.join('; ')}`)
+  }
+  const items = envelopes.map(e => `${e.body.step}:${e.body.verdict}:${e.signer}`)
+  for (const item of [
+    `peer:ok:${DEV}`, `peer:signed:${DEV}`, `lead:signed:${LEAD}`, `ba:signed:${BA}`,
+    `ba_final:signed:${BA}`, 'report:signed:orchestration', `scan:ok:${BA}`,
+    'client:ok:client', 'client:signed:client',
+  ]) assert.ok(items.includes(item), item)
+  const sigs = approved.goals[GOAL].signoffs.map(s => approved.signatures[s.sig].body.step)
+  assert.deepEqual(sigs, ['peer', 'lead', 'ba', 'ba_final', 'client'])
+  const denied = deny(leadSigned().board, BA, 'Sprint Review: name the key')
+  const last = Object.values(denied.signatures).at(-1)
+  assert.deepEqual([last.body.verdict, last.body.reason], ['deny', 'Sprint Review: name the key'])
+  assert.equal(validateEnvelope(last).ok, true)
+})
+
+/** A QA triage hand-off on GOAL (a bug found in discovery), still open. */
+function withTriage(board) {
+  const next = structuredClone(board)
+  next.goals[GOAL].author_agents = [DEV]
+  next.handoffs['handoff-b0b0b0'] = {
+    payload: {
+      goal: GOAL, kind: 'triage', item: 'item-a1a1a1',
+      from: { agent: JUDGE_LEAD, team: JUDGE_TEAM }, to: { agent: DEV, team: TEAM },
+    },
+    state: 'sent',
+  }
+  return next
+}
+
+test('a reported bug is not signed: the BA denies it as a bug fix and the coders hear', () => {
+  const state = leadSigned()
+  const talk = openThread(state.board, {
+    goal: GOAL, item: 'item-a1a1a1', topic: 'bug', agent: JUDGE_LEAD, team: JUDGE_TEAM,
+    body: 'Is this a bug?', at: AT,
+  })
+  assert.equal(step(talk.board, BA, FIRST).board.reports[state.report].state, 'ba_signed')
+  const found = ok(withTriage(state.board), BA)
+  const fix = found.goals[GOAL].bug_fix
+  assert.equal(fix.reason, 'bug fix needed: triage handoff-b0b0b0')
+  assert.equal(found.goals[GOAL].state, 'backlog', 'an unfixed bug waits in the backlog')
+  assert.equal(found.sprints[state.sprint].goals.includes(GOAL), false)
+  assert.equal(found.reports[state.report].state, 'reopened')
+  assert.equal(fix.issue_draft.title, `Bug fix needed: ${found.goals[GOAL].title}`)
+  assert.deepEqual(unreadThreads(found, DEV).map(t => t.topic), ['bug fix needed'])
+  const issue = structuredClone(state.board)
+  issue.goals[GOAL].bug_issues = [42]
+  assert.equal(ok(issue, BA).goals[GOAL].bug_fix.reason, 'bug fix needed: issue #42')
+  issue.goals['goal-777777'] = { kind: 'bug', issue: 42, state: 'done', history: [] }
+  assert.equal(ok(issue, BA).goals[GOAL].bug_fix, undefined, 'a fixed issue no longer counts')
+  const okThenBug = ok(state.board, BA)
+  okThenBug.goals[GOAL].bug_issues = [42]
+  const fixNeeded = done(okThenBug, BA, FIRST)
+  assert.equal(fixNeeded.bugFixNeeded.reason, 'bug fix needed: issue #42')
+  const last = Object.values(fixNeeded.board.signatures).at(-1)
+  assert.deepEqual([last.body.step, last.body.verdict], ['ba', 'deny'])
+})
+
+test('the BA signs a bug that is a client objective; one found in development is raised first',
+  () => {
+    const state = leadSigned()
+    const bug = structuredClone(state.board)
+    bug.goals[GOAL].kind = 'bug'
+    const signed = step(bug, BA, { meets: true }).board.goals[GOAL].signoffs.at(-1)
+    assert.deepEqual([signed.expectations, signed.demo], [EXPECTED, undefined])
+    delete bug.goals[GOAL].objective
+    assert.throws(() => step(bug, BA, { meets: true }), /the team lead raises it to the BA first/)
+    const raise = (by, reason = 'Found while fixing the parser') => raiseToAnalyst(bug, {
+      goal: GOAL, lead: by, reason, at: AT,
+    })
+    assert.throws(() => raise(DEV), /only agent-a1a1a1, who signed the lead step/)
+    assert.throws(() => raise(LEAD, ' '), /says why/)
+    const raised = raise(LEAD)
+    assert.deepEqual(raised.goals[GOAL].pings.at(-1), { step: 'ba', ba: BA, by: LEAD, at: AT })
+    const after = step(raised, BA)
+    const sig = Object.values(after.board.signatures).at(-1)
+    assert.deepEqual([sig.body.step, sig.body.raised.by], ['ba', LEAD])
+    assert.equal(validateEnvelope(sig).ok, true)
+  })
+
+test('the BA may sign over a reported bug for a big matter, with the reason on record', () => {
+  const state = leadSigned()
+  const found = withTriage(state.board)
+  const reason = 'The client demo needs it; the triage is cosmetic'
+  const peerStep = unverified().board
+  assert.throws(() => ok(peerStep, DEV, TEAM, { override: reason }), /only the Business Analyst/)
+  const over = step(found, BA, { ...FIRST, override: reason })
+  assert.equal(over.bugFixNeeded, undefined)
+  const sig = Object.values(over.board.signatures).at(-1)
+  assert.deepEqual(sig.body.override, { reason, bugs: ['triage handoff-b0b0b0'] })
+  assert.equal(sig.body.verdict, 'signed')
+  assert.equal(validateEnvelope(sig).ok, true)
+})
+
+/** GOAL at security, peer-verified, with no Review, QA or Security hand-off. */
+function unverdicted() {
+  const planned = meet(judgedBoard(), 'planning', { record: PLAN })
+  let board = planned.board
+  for (const step of ['ready', 'in_progress', 'review', 'qa', 'security']) {
+    board = moveGoal(board, { goal: GOAL, state: step, at: AT })
+  }
+  const target = board.goals[GOAL]
+  target.signoffs = [{ step: 'peer', by: DEV, at: AT, seq: 0 }]
+  target.reviews = [
+    { step: 'peer', by: DEV, verdict: 'ok', at: AT },
+    { step: 'lead', by: LEAD, verdict: 'ok', at: AT },
+  ]
+  return { ...planned, board }
+}
+
+/** Skipped checks stay skips: no clear hand-off, no pass verdict, roster has none. */
+function assertSkipsAreNotPasses(board, goal) {
+  const risks = board.goals[goal].risks ?? []
+  assert.ok(risks.length > 0)
+  for (const risk of risks) {
+    assert.equal(risk.who, 'client')
+    assert.equal(risk.skipped.some(item => /pass|clear|ok/i.test(item.check)), false)
+  }
+  for (const envelope of Object.values(board.signatures)) {
+    if (envelope.body.risk === undefined) continue
+    const checked = validateEnvelope(envelope)
+    assert.equal(checked.ok, true, checked.errors.join('; '))
+    if (envelope.body.verdict === 'ok') assert.equal(envelope.body.step, 'client')
+  }
+  const cleared = Object.values(board.handoffs).some(h => h.payload.result === 'clear')
+  assert.equal(cleared, false)
+}
+
+test('the client can record missing Review, QA and Security checks; the lead can then sign', () => {
+  const state = unverdicted()
+  const sign = () => leadSignOff(state.board, {
+    sprint: state.sprint, goal: GOAL, lead: LEAD, at: AT,
+  })
+  assert.throws(sign, /no review hand-off to QA/)
+  const reason = 'Ship the demo; Review, QA and Security have not handed it on'
+  assert.throws(() => clientSignOff(state.board, { goals: [GOAL], at: AT }),
+    /a risk override needs a reason/)
+  const waived = clientSignOff(state.board, { goals: [GOAL], risk: reason, at: AT })
+  assert.equal(waived.risks, 1)
+  assert.deepEqual(waived.board.goals[GOAL].risks[0].skipped.map(item => item.check),
+    ['review', 'qa', 'security'])
+  const done = leadSignOff(waived.board, { sprint: state.sprint, goal: GOAL, lead: LEAD, at: AT })
+  const report = done.id
+  assert.equal(done.board.goals[GOAL].state, 'done')
+  assert.equal(done.board.reports[report].risks[0].reason, reason)
+  assert.equal(done.board.goals[GOAL].signoffs.at(-1).risk.who, 'client')
+  assertSkipsAreNotPasses(done.board, GOAL)
+  const reviewed = meet({ ...state, board: done.board }, 'review', {
+    attendees: [LEAD, DEV, BA],
+    record: {
+      businessAnalyst: BA,
+      roster: [{ agent: DEV, goal: GOAL, kind: 'feature' }],
+      feedback: [],
+    },
+  })
+  const row = reviewed.board.meetings[reviewed.id].record.roster[0]
+  assert.deepEqual(Object.keys(row), ['agent', 'goal', 'kind'])
+  assert.equal(JSON.stringify(row).includes('pass'), false)
+})
+
+test('push-ok approves an item on its own; only a dependency can hold it back', () => {
+  const { board, report } = delivered()
+  const approve = b => clientSignOff(b, { ids: [report], at: AT })
+  const unrelated = structuredClone(board)
+  unrelated.reports['report-999999'] = { goal: NEXT, state: 'denied' }
+  assert.equal(approve(unrelated).board.reports[report].state, 'approved')
+  const dependent = structuredClone(board)
+  dependent.goals[GOAL].depends_on = [NEXT]
+  assert.throws(() => approve(dependent), /waits on goal-222222, which is not signed off yet/)
+  const deniedDep = structuredClone(unrelated)
+  deniedDep.goals[GOAL].depends_on = [NEXT]
+  assert.throws(() => approve(deniedDep), /goal-222222, which the client denied/)
+  const reason = 'Ship this item; the dependency is still open'
+  assert.throws(() => clientSignOff(dependent, { ids: [report], risk: ' ', at: AT }),
+    /a risk override needs a reason/)
+  const over = clientSignOff(dependent, { ids: [report], risk: reason, at: AT })
+  assert.equal(over.board.reports[report].state, 'approved')
+  assert.equal(over.board.goals[NEXT].signoffs, undefined)
+  assert.equal(over.board.reports[report].risks[0].skipped[0].check, 'dependency')
+  assert.equal(over.board.reports[report].risks[0].reason, reason)
+  const skipped = Object.values(over.board.signatures).find(e => e.body.verdict === 'skipped')
+  assert.equal(skipped.signer, 'client')
+  assert.equal(validateEnvelope(skipped).ok, true)
+  const clientOk = Object.values(over.board.signatures)
+    .find(e => e.body.step === 'client' && e.body.verdict === 'ok')
+  assert.equal(clientOk.body.risk.skipped[0].detail.includes(NEXT), true)
+  assert.notEqual(over.board.goals[NEXT].signoffs?.at(-1)?.step, 'client')
+  const signedDep = structuredClone(dependent)
+  signedDep.goals[NEXT].signoffs = [{ step: 'client', by: 'client', at: AT }]
+  const approved = approve(signedDep).board
+  assert.equal(approved.reports[report].state, 'approved')
+  const pushed = recordPush(approved, { ids: [report], by: LEAD, tree: 'a'.repeat(40), at: AT })
+  assert.deepEqual([pushed.reports[report].pushed_by, pushed.goals[GOAL].history.at(-1).event],
+    [LEAD, 'pushed'])
+  assert.throws(() => recordPush(board, { ids: [report], by: LEAD, tree: 'a', at: AT }),
+    /is not approved/)
+  assert.throws(() => recordMerged(approved, { ids: [report], by: LEAD, at: AT }), /not pushed/)
+  pushed.reports[report].merge.side = ['local/item-a1a1a1-agent-c0c0c0-1']
+  const merged = recordMerged(pushed, { ids: [report], by: LEAD, at: AT })
+  assert.deepEqual(merged.side, ['local/item-a1a1a1-agent-c0c0c0-1'])
+  assert.equal(merged.board.reports[report].merged_by, LEAD)
+})
+
+test('the Sprint Review roster shows the demoer the BA scheduled', () => {
+  const state = leadSigned()
+  const first = step(state.board, BA, FIRST).board
+  const roster = agent => [{ agent, goal: GOAL, kind: 'feature' }]
+  const hold = agent => meet({ ...state, board: first }, 'review', {
+    record: { ...EMPTY_REVIEW, roster: roster(agent) },
+  })
+  assert.throws(() => hold(LEAD), /the BA scheduled agent-c0c0c0 to demo goal-111111/)
+  const held = hold(DEV).board
+  const record = Object.values(held.meetings).find(m => m.kind === 'review' && m.record).record
+  assert.equal(record.roster[0].agent, DEV)
+  const row = record.schedule.find(r => r.team === TEAM)
+  assert.deepEqual(row.demos, [{ goal: GOAL, kind: 'feature', agent: DEV }])
+  assert.ok(row.goals.includes(GOAL) && row.tasks.length > 0)
+  assert.deepEqual(teamSchedule(held, { sprint: state.sprint }), record.schedule)
+  assert.deepEqual(teamSchedule(held, { sprint: 'sprint-ffffff' }), [])
+})
+
+/** A bug DEV raised at the Daily Scrum on GOAL, as the team discussed it. */
+const BUG = {
+  agent: DEV, title: 'Empty config crashes', behavior: 'parse() throws on {}',
+  expected: 'an empty config loads the defaults', goal: GOAL,
+  solutions: ['guard in parse()', 'default object in load()'], snippets: ['parse({})'],
+}
+/** The BA's bug report on BUG for the client. */
+const BUG_REPORT = {
+  issue: 'parse() throws on an empty config', reason: 'new projects start with {}',
+  proposals: ['guard in parse()', 'default object in load()'], files: ['src/parse.js'],
+  lines: ['src/parse.js:12-14'], snippets: ['if (!cfg.keys) throw new Error()'],
+  explanation: 'An empty config file crashes the app on start.',
+  plan: 'Add the guard, then a test that loads {}',
+}
+
+test('a bug raised at the Daily Scrum goes to the client, then to the backlog as an issue', () => {
+  const planned = meet(sprintBoard(), 'planning', { record: PLAN })
+  const unsolved = { record: { updates: [UPDATE], bugs: [{ ...BUG, solutions: [] }] } }
+  assert.throws(() => meet(planned, 'daily', unsolved), /one possible solution or more/)
+  const daily = meet(planned, 'daily', { record: { updates: [UPDATE], bugs: [BUG] } })
+  const file = (b, more = {}) => fileBugReport(b, {
+    meeting: daily.id, index: 0, ba: BA, report: BUG_REPORT, at: AT, mint: () => 'b00b00', ...more,
+  })
+  assert.throws(() => file(daily.board, { ba: DEV }), /only team-a1a1a1's Business Analyst/)
+  const away = { attendees: [LEAD, DEV], record: { updates: [UPDATE], bugs: [BUG] } }
+  const absent = meet(planned, 'daily', away)
+  assert.throws(() => file(absent.board, { meeting: absent.id }), /Business Analyst attends/)
+  assert.throws(() => file(daily.board, { report: { ...BUG_REPORT, lines: [] } }), /files, lines/)
+  const filed = file(daily.board)
+  const row = filed.board.reports[filed.id]
+  assert.deepEqual([row.state, validateEnvelope(row.envelope).ok], ['bug_to_person', true])
+  assert.throws(() => file(filed.board), /reported already/)
+  const decide = more => decideBug(filed.board, { id: filed.id, at: AT, ...more })
+  assert.equal(decide({ decision: 'fine' }).reports[filed.id].state, 'bug_fine')
+  assert.throws(() => decide({ decision: 'fix' }), /picks one proposal/)
+  assert.throws(() => decide({ decision: 'fix', proposal: 3 }), /from 1 to 2/)
+  const fixed = decide({ decision: 'fix', alternative: 'Warn and load defaults' })
+  assert.equal(fixed.reports[filed.id].fix, 'Warn and load defaults')
+  const issue = (b, more = {}) => bugIssue(b, {
+    id: filed.id, lead: LEAD, goal: 'goal-777777', at: AT, mint: nextHex, ...more,
+  })
+  assert.throws(() => issue(fixed, { lead: DEV }), /only team-a1a1a1's team lead/)
+  const task = { agent: DEV, job: 'coder', description: 'Fix the empty config' }
+  const made = issue(fixed, { assign: task })
+  const goal = made.board.goals['goal-777777']
+  assert.deepEqual([goal.kind, goal.state, goal.sprint, goal.bug_of], ['bug', 'backlog', '', GOAL])
+  assert.match(goal.issue_draft.body, /Fix \(client's choice\): Warn and load defaults/)
+  assert.equal(made.board.assignments[made.work].agent, DEV)
+  assert.equal(made.board.reports[filed.id].state, 'issue_drafted')
+  assert.match(goal.issue_draft.body, /^Work item: goal-777777 \(bug\)/)
+  assert.equal(issue(busyBoard(fixed, task)).board.goals['goal-777777'].state, 'backlog')
+})
+
+/** `board` with DEV holding OPEN_WORK_LIMIT open pieces of work on GOAL. */
+function busyBoard(board, task) {
+  let busy = board
+  while (workInbox(busy, DEV).length < OPEN_WORK_LIMIT) {
+    busy = assignWork(busy, { ...task, goal: GOAL, team: TEAM, by: LEAD, at: AT }).board
+  }
+  return busy
+}
+
+test('work past the open-work limit is held for the BA, who may ask the client', () => {
+  const planned = meet(sprintBoard(), 'planning', { record: PLAN })
+  const task = { agent: DEV, job: 'coder', description: 'One more fix' }
+  const busy = busyBoard(planned.board, task)
+  const extra = assignWork(busy, { ...task, goal: GOAL, team: TEAM, by: LEAD, at: AT })
+  assert.equal(extra.held, true)
+  assert.equal(workInbox(extra.board, DEV).length, OPEN_WORK_LIMIT, 'the seat does not see it')
+  assert.deepEqual(pingsFor(extra.board, { ba: BA }).map(p => [p.work, p.step]),
+    [[extra.id, 'load']])
+  const decide = (b, more) => decideHeldWork(b, { id: extra.id, ba: BA, at: AT, ...more })
+  assert.throws(() => decide(extra.board, { ba: DEV, decision: 'approve' }), /only team-a1a1a1/)
+  assert.throws(() => decide(extra.board, { decision: 'decline' }), /decline on held work says/)
+  const approved = decide(extra.board, { decision: 'approve' }).board
+  assert.equal(approved.assignments[extra.id].state, 'assigned')
+  assert.equal(pingsFor(approved, { ba: BA }).length, 0)
+  const asked = decide(extra.board, {
+    decision: 'ask', reason: 'Both goals are priority 1', mint: () => 'c0ffee',
+  })
+  assert.equal(asked.board.reports[asked.report].state, 'load_to_person')
+  const answer = decision => decideLoad(asked.board, {
+    id: asked.report, decision, reason: 'Ship the parser first', at: AT,
+  })
+  assert.equal(answer('decline').assignments[extra.id].state, 'declined')
+  const yes = answer('approve')
+  assert.deepEqual([yes.assignments[extra.id].held.decided.by, yes.reports[asked.report].state],
+    ['client', 'load_approved'])
+})
+
+test('a filed bug issue is titled #<number> <text>, names its work item and is listed', () => {
+  const board = structuredClone(meet(sprintBoard(), 'planning', { record: PLAN }).board)
+  const sprint = Object.keys(board.sprints)[0]
+  board.reports['report-b00b00'] = { kind: 'bug', sprint, team: TEAM }
+  board.goals['goal-777777'] = {
+    title: 'Empty config crashes', kind: 'bug', state: 'backlog', sprint: '', history: [],
+    from_report: 'report-b00b00', bug_of: GOAL,
+    issue_draft: { title: 'Empty config crashes', body: 'Work item: goal-777777 (bug)\nx' },
+  }
+  const record = (b, more = {}) => recordIssue(b, {
+    goal: 'goal-777777', lead: LEAD, number: 42, at: AT, ...more,
+  })
+  assert.throws(() => record(board, { lead: DEV }), /only team-a1a1a1's team lead/)
+  assert.throws(() => record(board, { number: 0 }), /positive whole number/)
+  assert.throws(() => record(board, { goal: GOAL }), /not a work item of kind bug/)
+  const unnamed = structuredClone(board)
+  unnamed.goals['goal-777777'].issue_draft.body = 'no hash'
+  assert.throws(() => record(unnamed), /names its work item/)
+  const filed = record(board)
+  const bug = filed.goals['goal-777777']
+  assert.deepEqual([bug.title, bug.issue_draft.title, bug.issue],
+    ['#42 Empty config crashes', '#42 Empty config crashes', 42])
+  assert.deepEqual(filed.goals[GOAL].bug_issues, [42])
+  assert.throws(() => record(filed), /already has issue #42/)
+  assert.equal(issueTitle(7, '#3 Old text'), '#7 Old text')
+  assert.throws(() => issueTitle(7, '#3 '), /description after its number/)
 })

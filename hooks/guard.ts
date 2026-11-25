@@ -316,12 +316,49 @@ export function splitArgs(args: string): { word: string; rest: string } {
   return space === -1 ? { word: trimmed, rest: '' } : { word: trimmed.slice(0, space), rest: trimmed.slice(space).trim() }
 }
 
+/** Words the person can type in chat to authorize one push on the current tree. */
+const CHAT_PUSH_WORDS = new Set(['push', 'push it', 'push now'])
+
 /**
- * Free-form chat never changes a gate or authorizes a push (rule 3). Only the
- * exact typed command does, so the only intent recognised here is an empty one.
+ * True when the person's own chat message is a push approval. Only the person's
+ * composer counts; messages from any other origin never authorize a push.
+ */
+export function chatAuthorizesPush(text: string, origin: string | undefined): boolean {
+  return origin === 'composer' && CHAT_PUSH_WORDS.has(text.trim().toLowerCase())
+}
+
+const BRANCH_INTENT = /^(allow-branch|branch|cut(?:\s+a)?\s+branch)\s+/i
+
+/**
+ * Map free-form /devops wording (and chat aliases like "push") onto a known
+ * gate subcommand so the person's word is final and development is not stuck.
+ * Empty args → status. Unknown wording → undefined (skill modes may claim it).
  */
 export function interpretDevopsIntent(args: string): { word: string; rest: string } | undefined {
-  return args.trim() === '' ? { word: 'status', rest: '' } : undefined
+  const trimmed = args.trim()
+  if (trimmed === '') return { word: 'status', rest: '' }
+  const lower = trimmed.toLowerCase()
+  if (/^(push-ok|push|go|publish|ship)(?:\s|$)/.test(lower)) {
+    return { word: 'push-ok', rest: '' }
+  }
+  if (/^(push-reset|withdraw|revoke(?:\s+push)?)(?:\s|$)/.test(lower)) {
+    return { word: 'push-reset', rest: '' }
+  }
+  if (/^(allow-branch|branch|cut(?:\s+a)?\s+branch)\b/.test(lower)) {
+    const name = branchNameOf(trimmed.replace(BRANCH_INTENT, '').trim())
+    return { word: 'allow-branch', rest: name ?? '' }
+  }
+  if (/^gates?\s+(on|off)\b/.test(lower)) {
+    return { word: 'gates', rest: lower.includes('off') ? 'off' : 'on' }
+  }
+  if (/^monitor\s+(on|off)\b/.test(lower)) {
+    return { word: 'monitor', rest: lower.includes('off') ? 'off' : 'on' }
+  }
+  if (/^comments?\s+(warn|strict|off)\b/.test(lower)) {
+    const mode = /warn|strict|off/.exec(lower)?.[0] ?? ''
+    return { word: 'comments', rest: mode }
+  }
+  return undefined
 }
 
 /** The tree hash a QA note approved: the 40-hex value on a line that names the tree. */

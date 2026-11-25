@@ -13,7 +13,8 @@ See [thoughts-layout.md](thoughts-layout.md).
 **Authors:** <agent-hash>[, …]   **Teams:** <team-hash>[, …]
 **Reviewers:** <agent-hash>[, …] (must not share an Authors team hash)
 **Status:** In review | Changes requested | Satisfied — ready for security | Closed
-**Push policy:** Only QA may give the OK to push (review-bot feedback fixes: qa-publish-policy.md).
+**Push policy:** Client (human) authorizes every push; QA PASS is the
+default path (qa-publish-policy.md, client-and-agile.md).
 
 ## Research brief
 ### Local docs / Online media / Recommendations

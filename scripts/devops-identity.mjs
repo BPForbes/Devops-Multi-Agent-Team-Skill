@@ -35,13 +35,17 @@ export function sendersOf(kind) {
 }
 
 /**
- * Refuses an envelope whose `from` is not the identity the server bound, or
- * whose kind the sender's role may not send. Returns { ok, reason }.
+ * Refuses an envelope whose `from` is not the identity the server bound (the
+ * seat, and the team hash when one is bound), or whose kind the sender's role
+ * may not send. Returns { ok, reason }.
  */
-export function checkSender({ boundSeat, boundRole, envelope }) {
+export function checkSender({ boundSeat, boundRole, boundTeam, envelope }) {
   if (boundSeat === undefined) return { ok: false, reason: 'no seat is bound' }
   if (envelope.from?.agent !== boundSeat) {
     return { ok: false, reason: `envelope says ${envelope.from?.agent}, not ${boundSeat}` }
+  }
+  if (boundTeam !== undefined && envelope.from?.team !== boundTeam) {
+    return { ok: false, reason: `envelope says ${envelope.from?.team}, not ${boundTeam}` }
   }
   if (!sendersOf(envelope.kind).includes(boundRole)) {
     return { ok: false, reason: `a ${boundRole} may not send ${envelope.kind}` }

@@ -4,6 +4,38 @@ Every DevOps role **reads** this file and
 [department-pods.md](department-pods.md). Do not paste either
 into an agent prompt.
 
+## Client authority (every seat, including Orchestration)
+
+The human is the Agile **client** and the **supreme authority** over
+every AI seat: Orchestrator, team lead, Business Analyst, Researcher,
+Coder, Reviewer, QA, Security, Cleaner, CI, Verifier, Ticket Lead,
+Communicator, Integrator, and every other job
+([client-and-agile.md](client-and-agile.md)).
+
+- If the client says do **X**, that seat **must** do X even without
+  Research, Review, Security, QA, or any other AI sign-off.
+- Seats may state a risk **once**. They do not stall, refuse, or
+  re-argue the skill against a clear client order.
+- Record what was skipped under `devops-skill/thoughts/non-final/`.
+- Default path still runs the seats in order; only the client
+  authorizes a push (`/devops push-ok` or chat `push`).
+- Orchestration obeys the same rule: it never blocks the client to
+  protect process.
+
+## Reproduction between seats (AI ↔ AI)
+
+When one seat talks to another about a **concrete** feature, bug,
+finding or blocker, **reproduce** it live instead of only writing about
+it ([client-and-agile.md](client-and-agile.md), Show live):
+
+- Prefer **GUI**, **browser**, or **terminal** (`/repro`,
+  `/browser-automation`, shell).
+- Do **not** reproduce in Daily Scrum / standup, Planning, or
+  Refinement by default — those are talk meetings.
+- Sprint Review uses a **demo** roster for features / improvements;
+  answers about behavior may still use a short reproduction.
+- Record the commands, URL or path so later seats reuse it.
+
 ## Identity hashes (team, agent, jobs, items)
 
 Every subagent is told apart by **hashes and job labels**, never by
@@ -21,6 +53,42 @@ by every agent on that pod:
   spawned onto that pod records the same team hash.
 - Used to block a pod from judging **its own pod's work**
   (Independence below).
+- The team hash names the team **as a whole**: sprint meetings and
+  schedules use it. The board's joint schedule ties each team hash to its
+  goals, planned tasks and demos for the Daily Scrum, the Sprint Review
+  and the other meetings ([scrum-meetings.md](scrum-meetings.md), Team
+  schedule).
+- Many agents belong to one team, so a single seat is named by its agent
+  hash (the demo roster shows the demoer's agent hash); its team follows
+  from the team board's members or the hand-offs. The envelope header's
+  `from.team` stays: it is set when the seat is bound with `DEVOPS_TEAM`,
+  so the server can refuse a call under another team, and hand-offs keep
+  `from.team` and `to.team`.
+
+#### Seat setup payload
+
+Spin-up does not set `DEVOPS_SEAT` or `DEVOPS_TEAM` for any seat. It
+hands each team lead a `seat.setup` payload (`board_spin_up` returns them
+as `setup`; Orchestration delivers each): the recommended settings for
+the lead (`settings`) and for its members (`member_settings`, each seat
+using its own agent hash), the versions of the systems involved (node,
+plugin, MCP server, envelope schema) and the setup steps. The seat that
+receives it checks the versions and does the setup itself, with the same
+steps as below.
+
+#### Reproduce a seat binding
+
+To reproduce a seat's binding (for example to replay its typed
+`/devops merge-ok GOAL`), follow these steps and record them in the
+reproduction hand-off ([/repro](../../../commands/repro.md)):
+
+1. Read the seat's agent hash and its team hash from the team board
+   (`.devops/teams/<team>.json`, `members`) or from its hand-offs.
+2. Start the session or the MCP server with both set:
+   `DEVOPS_SEAT=agent-<hex> DEVOPS_TEAM=team-<hex>`.
+3. Run the step (`node scripts/devops-chain.mjs merge-ok GOAL --dest .`,
+   or the typed word) and copy its output into the hand-off's `Actual:`.
+4. Unset both afterwards; an unbound session acts for no seat.
 
 ### 2. Agent hash
 
@@ -58,7 +126,7 @@ Each **agent** gets its own **agent hash**, unique for the PR:
 
 `researcher` | `coder` | `reviewer` | `security` | `qa` | `ci` |
 `verifier` | `integrator` | `communicator` | `cleaner` |
-`ticket-lead` (never a capital letter).
+`ticket-lead` | `business-analyst` (never a capital letter).
 
 It is fixed for the agent's life in the PR. Allocation uses it to
 find who is naturally a coder, reviewer, and so on when staffing.
@@ -153,9 +221,9 @@ Orchestrator or the human:
 
 The three seats answer in writing (`## Q&A` in the review thread or a
 SendMessage reply) and say plainly when they do not know. An answer is
-advice: only QA may OK a push (except review-bot feedback fixes outside
-the exceptions: references/qa-publish-policy.md), and a seat's answer
-never authorizes one.
+advice: only the client (human) authorizes a push; QA's PASS is the
+default path (references/qa-publish-policy.md,
+references/client-and-agile.md). A seat's answer never authorizes one.
 
 Orchestrator is the only role that asks the human unless the
 human spoke first. Coder ↔ Reviewer use thread `## Q&A` and

@@ -7,7 +7,7 @@
 // secret.
 
 import fs from 'node:fs'
-import { UNFENCED, updateJson } from '../scripts/devops-store.mjs'
+import { UNFENCED, projectPath, updateJson } from '../scripts/devops-store.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -28,16 +28,19 @@ import {
   acceptWork, allowSameTeam, ackHandoff, addGoal, assignWork, blameFor, closeHandoff,
   completeWork, createSprint, emptyBoard, GOAL_STATES, inboxFor, markThreadRead, moveGoal,
   normalizeBoard, openThread, replyThread, resolveThread, routeHandoff, sendHandoff, sprintView,
-  threadsFor, unreadThreads, workInbox, backlogView, MAX_SPRINT_WEEKS,
+  threadsFor, unreadThreads, workInbox, backlogView, BOARD_FILE, MAX_SPRINT_WEEKS,
 } from '../scripts/devops-board.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 import { isTeamId } from '../scripts/devops-ids.mjs'
 import { RISKS, planAllocation, spinUp } from '../scripts/devops-allocation.mjs'
 import {
-  MEETING_KINDS, forwardReports, holdMeeting, leadSignOff, meetingsFor, reportsFor, scheduleMeeting,
+  MEETING_KINDS, baScan, bugIssue, decideHeldWork, fileBugReport, forwardReports, goalDone,
+  goalVerdict, holdMeeting, leadSignOff, meetingsFor, newApproach, pingsFor, prepareMerge,
+  raiseToAnalyst, recordIssue, reportsFor, scheduleMeeting, teamSchedule,
 } from '../scripts/devops-scrum.mjs'
 import {
-  needsAttention, openBoard, recordRefusal, teamIntake, teamMove, teamSignOff,
+  TEAM_DIR, needsAttention, openBoard, readMembers, recordRefusal, teamIntake, teamMove,
+  teamSignOff,
 } from '../scripts/devops-teams.mjs'
 
 const PKG = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'))
@@ -67,11 +70,18 @@ const INSTRUCTIONS = [
 
 let clientRoots = []
 
-// When DEVOPS_SEAT is set, this server acts only for that seat.
+// When DEVOPS_SEAT is set, this server acts only for that seat; with
+// DEVOPS_TEAM too, only under that team hash.
 const BOUND_SEAT = process.env.DEVOPS_SEAT
+const BOUND_TEAM = process.env.DEVOPS_TEAM
 
 /** Limits on what allocation research and meetings may send: a task, not a document. */
 const MAX_TASK_TEXT = 4000
+/** The BA's reason for signing over an open reported bug (a big matter). */
+const OVERRIDE = {
+  type: 'string', maxLength: MAX_TASK_TEXT,
+  description: 'BA only: sign over an open reported bug for a big matter; the reason.',
+}
 const MAX_STREAMS = 64
 const MAX_STREAM_NAME = 80
 const MAX_ATTENDEES = 64
@@ -112,8 +122,12 @@ function refuseForeignSeat(message) {
   if (message.method !== 'tools/call') return false
   const args = message.params?.arguments ?? {}
   const claimed = args.caller ?? args.agent
-  if (!BOUND_SEAT || claimed === undefined || claimed === BOUND_SEAT) return false
-  const error = `this server is bound to ${BOUND_SEAT}; it cannot act as ${claimed}`
+  const seatOk = !BOUND_SEAT || claimed === undefined || claimed === BOUND_SEAT
+  const teamOk = !BOUND_SEAT || !BOUND_TEAM || args.team === undefined || args.team === BOUND_TEAM
+  if (seatOk && teamOk) return false
+  const error = seatOk
+    ? `this server is bound to ${BOUND_TEAM}; it cannot act for ${args.team}`
+    : `this server is bound to ${BOUND_SEAT}; it cannot act as ${claimed}`
   reply(message.id, { isError: true, content: [{ type: 'text', text: error }] })
   return true
 }
@@ -159,26 +173,14 @@ const dest = { type: 'string', description: 'Project folder. Defaults to the fir
 const langs = { description: '"auto" (detect) or a list of language ids from list_languages. Layers do not restrict: any id works anywhere.', anyOf: [{ type: 'string', enum: ['auto'] }, { type: 'array', items: { type: 'string' } }] }
 const svcs = { description: '"auto" (detect), "none", or a list of service ids from list_services (docker, ollama, aws, ...).', anyOf: [{ type: 'string', enum: ['auto', 'none'] }, { type: 'array', items: { type: 'string' } }] }
 
-const BOARD_FILE = path.join('devops-skill', 'thoughts', 'non-final', 'board.json')
 const now = () => new Date().toISOString()
 const GOAL_STATE = {
   type: 'string', enum: ['backlog', 'ready', 'in_progress', 'review', 'qa', 'security', 'done'],
 }
 
-/**
- * The board file's path inside the project. Refuses a symbolic link on the way,
- * so a read or write cannot be redirected outside the project.
- */
+/** The board file's path inside the project (projectPath refuses symbolic links). */
 function boardFile(args, rel = BOARD_FILE) {
-  const root = fs.realpathSync(projectDir(args))
-  let at = root
-  for (const part of rel.split(path.sep)) {
-    at = path.join(at, part)
-    if (fs.existsSync(at) && fs.lstatSync(at).isSymbolicLink()) {
-      throw new Error(`refusing to use a symbolic link for the board: ${at}`)
-    }
-  }
-  return at
+  return projectPath(projectDir(args), rel)
 }
 
 function readBoard(args) {
@@ -191,12 +193,15 @@ function readBoard(args) {
   }
 }
 
-const TEAM_DIR = path.join('.devops', 'teams')
-
 /** A team's own board file, under the project's teams folder. */
 function teamFile(args) {
   if (!isTeamId(args.team)) throw new Error('team must look like team-<hex>')
   return boardFile(args, path.join(TEAM_DIR, `${args.team}.json`))
+}
+
+/** The seat hashes listed on the team's own board, when it has one. */
+function teamMembers(args) {
+  return isTeamId(args.team) ? readMembers(teamFile(args)) : undefined
 }
 
 function boardOrThrow(current, team) {
@@ -976,6 +981,8 @@ const TOOLS = [
       'Orchestration only: from allocation research, plan the teams, open the sprint, put',
       'each stream on the backlog as a goal, record the allocation, and hand each authoring',
       'team lead its Sprint Planning (scheduled for the lead to hold with meeting_hold).',
+      'Each lead also gets a seat.setup payload (recommended DEVOPS_SEAT/DEVOPS_TEAM, system',
+      'versions, setup steps); spin-up applies nothing, the seat sets itself up.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -994,8 +1001,12 @@ const TOOLS = [
     run: args => {
       if (BOUND_SEAT) throw new Error('only Orchestration may spin up the board')
       const plan = planAllocation(args.research)
+      const versions = {
+        node: process.versions.node, plugin: PKG.version, mcp_server: PKG.version, schema: '1',
+      }
       return boardChange(args, board => spinUp(board, plan, {
         name: args.name, weeks: args.weeks ?? 1, goals: args.goals, teams: args.teams, at: now(),
+        versions,
       }))
     },
   },
@@ -1021,7 +1032,12 @@ const TOOLS = [
     name: 'meeting_hold',
     description: [
       'The team lead (`caller`) holds a scheduled meeting: attendees, minutes (within its',
-      'timebox) and the record its kind needs (references/scrum-meetings.md).',
+      'timebox) and the record its kind needs (scrum-meetings.md, client-and-agile.md).',
+      'Daily: stress/strain + reallocations (no repro by default). Review: joint demos',
+      'of features/improvements; the roster lists every Done goal. AI↔AI on a',
+      'feature/bug: reproduce live. record.businessAnalyst (an attendee) is required at',
+      'planning, refinement and review, and optional at daily. Daily record.bugs: each bug',
+      'its finder raised { agent, title, behavior, expected, solutions, snippets, goal? }.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -1043,32 +1059,289 @@ const TOOLS = [
     })),
   },
   {
-    name: 'goal_signoff',
+    name: 'goal_merge',
     description: [
-      "The team lead's sign-off that a goal is done for the team: only the lead (`caller`) of",
-      'the team that builds it, once it has passed security. Files a done report to',
-      "Orchestration, which reports to the person; the person's typed push-ok stays",
-      'the final sign-off.',
+      'merge-ok or merge-deny on the Done-chain step a goal waits for, by that step\'s',
+      'signer (`caller`): a team member (peer), the team lead (another member when the lead',
+      'wrote the goal), or the Business Analyst. merge-ok pings the BA, who scans as needed',
+      '(goal_scan); a BA hold or deny blocks it. merge-ok comes before goal_done. merge-deny',
+      'needs a reason and reopens the goal; the BA may also deny any step to reopen a goal',
+      'on feedback (a Done goal then waits for the client\'s review). The client answers a',
+      'merge report with its own /devops merge-ok, merge-deny or push-ok.',
     ].join(' '),
     inputSchema: {
       type: 'object',
       properties: {
-        dest, caller: { type: 'string' }, sprint: { type: 'string' }, goal: { type: 'string' },
+        dest, caller: { type: 'string' }, team: { type: 'string' }, goal: { type: 'string' },
+        decision: { enum: ['ok', 'deny'] }, reason: { type: 'string', maxLength: MAX_TASK_TEXT },
+        override: OVERRIDE,
+      },
+      required: ['caller', 'goal', 'decision'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: goalVerdict(board, {
+        goal: args.goal, by: args.caller, team: args.team, members: teamMembers(args),
+        decision: args.decision, reason: args.reason, override: args.override, at: now(),
+      }),
+    })),
+  },
+  {
+    name: 'goal_scan',
+    description: [
+      'The Business Analyst (`caller`) scans the Done-chain step a goal waits for, as',
+      'needed: merge-ok pings the BA (devops://reports lists open pings) and goes ahead',
+      'without a scan. `ok` lets merge-ok through; `hold` or `deny` with a reason blocks',
+      'merge-ok on that step until the BA scans ok again. merge-deny, not a scan, reopens.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, goal: { type: 'string' },
+        verdict: { enum: ['ok', 'hold', 'deny'] },
+        reason: { type: 'string', maxLength: MAX_TASK_TEXT },
+      },
+      required: ['caller', 'goal', 'verdict'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: baScan(board, {
+        goal: args.goal, ba: args.caller, verdict: args.verdict, reason: args.reason, at: now(),
+      }),
+    })),
+  },
+  {
+    name: 'goal_done',
+    description: [
+      '"done" on the Done-chain step a goal waits for, after the same caller\'s merge-ok',
+      '(goal_merge): the peer verifies, the lead signs (filing the done report), the',
+      'Business Analyst signs when the goal meets its acceptance criteria (`meets`) and goes',
+      'on the scheduled Sprint Review\'s demo list (`kind`, `surface`, `demoer`), and again',
+      'once Orchestration prepares the merge presentation. A goal with an open reported bug',
+      '(bug issue, triage, a bug report the client had fixed) is denied as "bug fix needed",',
+      'goes to the backlog and the coders are told, unless the BA signs over it for a big',
+      'matter (`override`, its reason). A bug goal (kind bug) is signed against its client',
+      'objective, or once its lead raised it (goal_raise), without a demo.',
+      'Each step is a chain.signature envelope. The client\'s push-ok signs last.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, team: { type: 'string' }, goal: { type: 'string' },
+        kind: { enum: ['feature', 'improvement', 'bug'] },
+        surface: { enum: ['gui', 'browser', 'terminal', 'other'] },
+        demoer: { type: 'string', description: 'BA first signature: the demoing seat hash.' },
+        meets: {
+          type: 'boolean',
+          description: 'BA first signature: the goal meets its acceptance criteria.',
+        },
+        override: OVERRIDE,
+      },
+      required: ['caller', 'goal'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => goalDone(board, {
+      goal: args.goal, by: args.caller, team: args.team, members: teamMembers(args),
+      kind: args.kind, surface: args.surface, demoer: args.demoer, meets: args.meets,
+      override: args.override, at: now(),
+    })),
+  },
+  {
+    name: 'goal_raise',
+    description: [
+      'A bug goal found during development (no client objective): the seat that signed its',
+      'lead step (`caller`) raises it to the Business Analyst with a reason, so the BA may',
+      'sign it. Pings the BA.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, goal: { type: 'string' },
+        reason: { type: 'string', maxLength: MAX_TASK_TEXT },
+      },
+      required: ['caller', 'goal', 'reason'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: raiseToAnalyst(board, {
+        goal: args.goal, lead: args.caller, reason: args.reason, at: now(),
+      }),
+    })),
+  },
+  {
+    name: 'goal_signoff',
+    description: [
+      "The lead step's done (goal_done does the same for every step): the team lead",
+      '(`caller`), or another member when the lead wrote the goal, after its merge-ok, once',
+      'the goal has passed security and a team member verified it. Files a done report that',
+      'waits for the Business Analyst.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, team: { type: 'string' }, sprint: { type: 'string' },
+        goal: { type: 'string' },
       },
       required: ['caller', 'sprint', 'goal'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => boardChange(args, board => leadSignOff(board, {
-      sprint: args.sprint, goal: args.goal, lead: args.caller, at: now(),
+      sprint: args.sprint, goal: args.goal, lead: args.caller, team: args.team,
+      members: teamMembers(args), at: now(),
+    })),
+  },
+  {
+    name: 'report_prepare',
+    description: [
+      'Orchestration only: start preparing the merge presentation for done reports the BA',
+      'signed once. This opens the BA\'s second signature; report_forward then delivers the',
+      'merge report to the client.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { dest, ids: { type: 'array', items: { type: 'string' }, minItems: 1 } },
+      required: ['ids'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      if (BOUND_SEAT) throw new Error('only Orchestration prepares the merge presentation')
+      return boardChange(args, board => ({
+        board: prepareMerge(board, { ids: args.ids, at: now() }),
+      }))
+    },
+  },
+  {
+    name: 'report_new_approach',
+    description: [
+      'After the client denies a merge report, the building team\'s Business Analyst',
+      '(`caller`) files the new approach: new backlog goals, each with the objective it',
+      'answers and its acceptance criteria (priority and owner optional), carrying the',
+      'client\'s reason, which wins over a conflicting AI recommendation. The report becomes',
+      'reworked.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, report: { type: 'string' },
+        goals: { type: 'array', items: { type: 'object' }, minItems: 1 },
+      },
+      required: ['caller', 'report', 'goals'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: newApproach(board, {
+        report: args.report, ba: args.caller, goals: args.goals, at: now(),
+      }),
+    })),
+  },
+  {
+    name: 'bug_report',
+    description: [
+      'The Business Analyst (`caller`) reports a bug the team raised at a held Daily Scrum',
+      '(record.bugs[index]) to the client through Orchestration: a bug.report with the',
+      'issue, the reason, proposals, files, lines, code snippets, an easy-to-read',
+      'explanation and the plan of attack. The person answers with /devops bug REPORT',
+      'fine|fix N|fix ALTERNATIVE.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, meeting: { type: 'string' },
+        index: { type: 'integer', minimum: 0 }, report: { type: 'object' },
+      },
+      required: ['caller', 'meeting', 'index', 'report'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => fileBugReport(board, {
+      meeting: args.meeting, index: args.index, ba: args.caller, report: args.report, at: now(),
+    })),
+  },
+  {
+    name: 'bug_issue',
+    description: [
+      'The team lead (`caller`) makes the issue from a bug report the client had fixed: a',
+      'backlog goal of kind bug with the issue draft the lead files in the project repo.',
+      '`assign` ({ agent, job, description }) gives it to a seat; past the seat\'s open-work',
+      'limit (3) it is held for the BA (work_decide). The goal may wait in the backlog.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, report: { type: 'string' }, goal: { type: 'string' },
+        title: { type: 'string', maxLength: MAX_TASK_TEXT }, assign: { type: 'object' },
+      },
+      required: ['caller', 'report', 'goal'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => bugIssue(board, {
+      id: args.report, lead: args.caller, goal: args.goal, title: args.title,
+      assign: args.assign, at: now(),
+    })),
+  },
+  {
+    name: 'bug_filed',
+    description: [
+      'The team lead (`caller`) records the real issue it filed for a bug goal: the goal and',
+      'its draft are titled "#<number> <description>", the draft names the work item hash',
+      '(kind bug), and the goal the bug touches lists the issue number.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, goal: { type: 'string' },
+        number: { type: 'integer', minimum: 1 },
+      },
+      required: ['caller', 'goal', 'number'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: recordIssue(board, {
+        goal: args.goal, lead: args.caller, number: args.number, at: now(),
+      }),
+    })),
+  },
+  {
+    name: 'work_decide',
+    description: [
+      'The team\'s Business Analyst (`caller`) decides work held past a seat\'s open-work',
+      'limit (devops://reports baPings, step load) against the client\'s objectives:',
+      '`approve` gives it to the seat, `decline` drops it, `ask` sends the client a load',
+      'report through Orchestration when the BA cannot decide (the person answers',
+      '/devops load REPORT approve|decline). decline and ask need a reason.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, work: { type: 'string' },
+        decision: { enum: ['approve', 'decline', 'ask'] },
+        reason: { type: 'string', maxLength: MAX_TASK_TEXT },
+      },
+      required: ['caller', 'work', 'decision'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => decideHeldWork(board, {
+      id: args.work, ba: args.caller, decision: args.decision, reason: args.reason, at: now(),
     })),
   },
   {
     name: 'report_forward',
     description: [
-      "Orchestration only: pass the team leads' done reports on to the person with a summary.",
-      "The person's typed /devops push-ok, after QA PASS and Security CLEAR, is the",
-      'final sign-off.',
+      'Orchestration only: deliver the done reports the BA signed twice to the client as one',
+      'merge report: a summary and the big-picture merge plan (the real branch, how it fits',
+      'the design, the implementation, the risks). The client\'s /devops push-ok (or',
+      'merge-ok) approves it and grants the push; merge-deny sends it back to the BA. The',
+      'approval lets the virtual history move into real history, compressed on the PR branch.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -1077,8 +1350,24 @@ const TOOLS = [
         sprint: { type: 'string' },
         ids: { type: 'array', items: { type: 'string' }, minItems: 1 },
         summary: { type: 'string', maxLength: MAX_TASK_TEXT },
+        merge: {
+          type: 'object',
+          properties: {
+            branch: { type: 'string' },
+            design: { type: 'string', maxLength: MAX_TASK_TEXT },
+            implementation: { type: 'string', maxLength: MAX_TASK_TEXT },
+            risks: { type: 'array', items: { type: 'string' } },
+            side: {
+              type: 'array', items: { type: 'string' },
+              description: 'Temporary virtual-git branches (local/ refs, side worktree paths) '
+                + 'deleted once the real PR is merged.',
+            },
+          },
+          required: ['branch', 'design', 'implementation'],
+          additionalProperties: false,
+        },
       },
-      required: ['sprint', 'ids', 'summary'],
+      required: ['sprint', 'ids', 'summary', 'merge'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
@@ -1086,7 +1375,8 @@ const TOOLS = [
       if (BOUND_SEAT) throw new Error('only Orchestration reports to the person')
       return boardChange(args, board => ({
         board: forwardReports(board, {
-          sprint: args.sprint, ids: args.ids, summary: args.summary, at: now(),
+          sprint: args.sprint, ids: args.ids, summary: args.summary, merge: args.merge,
+          at: now(),
         }),
       }))
     },
@@ -1117,7 +1407,10 @@ const TOOLS = [
   },
   {
     name: 'work_assign',
-    description: 'Give a seat a piece of work on a goal, with what it has to do.',
+    description: [
+      'Give a seat a piece of work on a goal, with what it has to do. Past the seat\'s',
+      'open-work limit (3) the work is held for the BA (work_decide).',
+    ].join(' '),
     inputSchema: {
       type: 'object',
       properties: {
@@ -1372,13 +1665,15 @@ const INBOX_TEMPLATES = [
   {
     uriTemplate: 'devops://reports',
     name: 'Done reports',
-    description: "Team leads' done reports: waiting for Orchestration, and passed to the person.",
+    description: 'Done reports by Done-chain stage: waiting for the BA, for Orchestration, '
+      + 'for the client, and decided (approved, denied, reworked).',
     mimeType: 'application/json',
   },
   {
     uriTemplate: 'devops://meetings/{sprint}',
     name: 'Sprint meetings',
-    description: "A sprint's allocation and its teams' meetings (scheduled and held).",
+    description: "A sprint's allocation, its teams' meetings (scheduled and held) and the "
+      + 'joint schedule by team hash (goals, tasks, demos).',
     mimeType: 'application/json',
   },
   {
@@ -1410,14 +1705,28 @@ const RESOURCE_PATTERNS = [
     blame: blameFor(readBoard({}), { goal }),
   })],
   [/^devops:\/\/board$/, () => boardView(readBoard({}))],
-  [/^devops:\/\/reports$/, () => ({
-    toOrchestration: reportsFor(readBoard({}), { state: 'to_orchestration' }),
-    toPerson: reportsFor(readBoard({}), { state: 'to_person' }),
-  })],
+  [/^devops:\/\/reports$/, () => {
+    const board = readBoard({})
+    const at = state => reportsFor(board, { state })
+    return {
+      awaitingBa: at('awaiting_ba'),
+      baSigned: at('ba_signed'),
+      preparing: at('preparing'),
+      toOrchestration: at('to_orchestration'),
+      toPerson: at('to_person'),
+      reopened: at('reopened'),
+      baPings: pingsFor(board),
+      decided: reportsFor(board).filter(r => ['approved', 'denied', 'reworked'].includes(r.state)),
+    }
+  }],
   [/^devops:\/\/meetings\/(sprint-[0-9a-f]{6})$/, sprint => {
     const board = readBoard({})
     const allocation = board.allocations?.[sprint] ?? null
-    return { allocation, meetings: meetingsFor(board, { sprint }) }
+    return {
+      allocation,
+      meetings: meetingsFor(board, { sprint }),
+      schedule: teamSchedule(board, { sprint }),
+    }
   }],
 ]
 

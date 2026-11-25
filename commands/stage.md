@@ -35,7 +35,9 @@ Pods match the Orchestrator loop in `../skills/devops-multi-agent-team/SKILL.md`
 4. Stop only when **Security is Clear** and QA records **`Publish gate: PASS`**.
 5. **Orchestrator notifies the human** that the gate is ready and **waits**.
 6. Do **not** push. Tell the person QA passed and Security is clear; they
-   type `/devops push-ok`.
+   type `/devops push-ok`. If they waive a missing board check or an
+   unapproved dependency, that is `--risk REASON` on the same word, and
+   it is recorded as a skip, not a pass.
 
 Same path as `/devops goal --mode loop` / `/goal`.
 

@@ -47,16 +47,30 @@ exist; the real branch stays clean until the work is approved.
    not an author re-approves the integrated tree
    ([department-pods.md](department-pods.md), Team board). Only mechanical
    conflicts are resolved by the Orchestrator, who then counts as an Author.
-6. **Compress and push once.** Closed thoughts move to `final/`
-   (local). Keep-commits are replayed with their messages, process files are
-   folded away, and the Orchestrator pushes **once, after the human
-   authorizes that push** ([thoughts-layout.md](thoughts-layout.md), One push).
+6. **Compress and push once (IMPORTANT).** Virtual history moves into
+   real history only when the person approves the merge reports for it
+   (`/devops push-ok REPORT...`, or `merge-ok` / `done` naming them;
+   [scrum-meetings.md](scrum-meetings.md), Done). The PR branch the person
+   sees and reviews then carries **compressed** history: closed thoughts
+   move to `final/` (local), keep-commits are replayed with their messages,
+   process files are folded away, and the Orchestrator pushes **once,
+   after the human authorizes that push**
+   ([thoughts-layout.md](thoughts-layout.md), One push).
 7. **Folding several AI branches** (for example `cursor/*`, `claude/*`,
    `codex/*` branches that all land in one place): use a non-fast-forward
    merge so the combine point is visible: `git merge --no-ff <other>
    -m "merge: …"`. Never a silent fast-forward. If the project has a
    one-release-file-per-PR rule, fold the duplicates into the single PR-owned
    file (the profile's "Release rules").
+8. **Delete the side branches after the merge (IMPORTANT).** The
+   temporary virtual-git branches (`local/` refs and side worktrees) are
+   kept until the person merges the real PR, never deleted before.
+   Orchestration lists them in the merge report's plan (`side`). Once the
+   PR is merged, it runs `node scripts/devops-chain.mjs merged --base
+   <base> REPORT...`: the command refuses until each report's pushed tree
+   is on the base, records the merge on the report, then deletes the
+   listed `local/` refs and side worktrees (never the main worktree) and
+   names anything it left alone.
 
 Goal hashes travel with the virtual PR: each commit in a seat's
 worktree ends with a `Goal: goal-<hex>` trailer, and the Push JSON has

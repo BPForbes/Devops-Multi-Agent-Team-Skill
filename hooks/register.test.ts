@@ -50,10 +50,15 @@ function fakeGit(argv: string[], git: Record<string, string | undefined>) {
 }
 
 /** The fake session's notes and git output; a test sets only what it needs. */
-interface Setup { security?: string; git?: Record<string, string | undefined>; cwd?: string | null }
+interface Setup {
+  security?: string; git?: Record<string, string | undefined>; cwd?: string | null
+  runs?: string[][]
+  chainRefuses?: string
+  chainWaiting?: string
+}
 
 function engine(on: any, note: string | undefined, setup: Setup = {}) {
-  const { security, git = {}, cwd = '/work' } = setup
+  const { security, git = {}, cwd = '/work', runs, chainRefuses, chainWaiting } = setup
   const state = new Map<string, unknown>()
   on('state.get', (_: unknown, e: { key: string }) => ({ value: { value: state.get(e.key), version: 1 } }))
   on('state.set', (_: unknown, e: { key: string; value: unknown }) => {
@@ -71,7 +76,20 @@ function engine(on: any, note: string | undefined, setup: Setup = {}) {
   on('ui.status', () => ({ value: undefined }))
   on('process.run', (_: unknown, e: { argv?: string[] }) => {
     const argv = e.argv ?? []
+    runs?.push(argv)
     if (argv[0] === 'git') return { value: fakeGit(argv, git) }
+    if (argv.some(a => a.endsWith('devops-chain.mjs'))) {
+      const refused = chainRefuses !== undefined
+      if (argv[2] === 'waiting' && chainWaiting !== undefined) {
+        return { value: { exitCode: 0, stdout: `${chainWaiting}\n`, stderr: '' } }
+      }
+      return {
+        value: {
+          exitCode: refused ? 2 : 0, stdout: refused ? '' : `board: ${argv[2]}\n`,
+          stderr: refused ? `devops-chain: ${chainRefuses}\n` : '',
+        },
+      }
+    }
     if (argv.some(a => a.includes('devops-claude-settings.mjs'))) {
       const action = argv.find(a => ['enable', 'disable', 'skills', 'skill', 'show'].includes(a))
         ?? 'show'
@@ -286,13 +304,15 @@ test('a project\'s own wording replaces the default sentence', async ($, on) => 
   assert.ok(!String(section?.text).includes('DEFAULT PROMPT'))
 })
 
-test('a BLOCKED QA note refuses even with push-ok', async ($, on) => {
+test('a BLOCKED QA note yields to push-ok and records the override', async ($, on) => {
   const state = engine(on, BLOCKED_NOTE, { security: CLEAR_NOTE })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', TREE)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(refused.isError ?? refused.deny).toBeTruthy()
-  expect(state.get('pushAuthorized')).toBe(TREE)
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.isError).not.toBe(true)
+  expect(state.get('pushAuthorized')).toBe(false)
+  const overrides = state.get('overrides') as { rule: string; verdict: string }[]
+  expect(overrides.some(row => row.rule === 'qa-pass' && row.verdict === 'BLOCKED')).toBe(true)
 })
 
 test('a GitHub write tool needs push-ok and the QA check; the grant is consumed', async ($, on) => {
@@ -314,46 +334,59 @@ test('push-ok given for another tree does not allow this push', async ($, on) =>
   expect(refused.isError ?? refused.deny).toBeTruthy()
 })
 
-test('a push with no security note is refused, even with a PASS and push-ok', async ($, on) => {
+test('push-ok without a security note still pushes and records override', async ($, on) => {
   const state = engine(on, PASS_NOTE)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', TREE)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(refused.isError ?? refused.deny).toBeTruthy()
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.isError).not.toBe(true)
+  expect(state.get('pushAuthorized')).toBe(false)
+  const overrides = state.get('overrides') as { rule: string }[]
+  expect(overrides.some(row => row.rule === 'security-clear')).toBe(true)
 })
 
-test('a BLOCKED security note refuses the push', async ($, on) => {
+test('a BLOCKED security note yields to push-ok and records the override', async ($, on) => {
   const state = engine(on, PASS_NOTE, { security: `Security: BLOCKED\ntree: ${TREE}\n` })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', TREE)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(refused.isError ?? refused.deny).toBeTruthy()
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.isError).not.toBe(true)
+  const overrides = state.get('overrides') as { rule: string; verdict: string }[]
+  const blocked = (row: { rule: string; verdict: string }) =>
+    row.rule === 'security-clear' && row.verdict === 'BLOCKED'
+  expect(overrides.some(blocked)).toBe(true)
 })
 
-test('push-ok with a QA PASS for another tree is refused, and the grant is kept', async ($, on) => {
+test('push-ok with QA PASS for another tree still pushes and records override', async ($, on) => {
   const otherTree = `Publish gate: PASS\ntree: ${'b'.repeat(40)}\n`
   const state = engine(on, otherTree, { security: CLEAR_NOTE })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', TREE)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(refused.isError ?? refused.deny).toBeTruthy()
-  expect(state.get('pushAuthorized')).toBe(TREE)
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.isError).not.toBe(true)
+  expect(state.get('pushAuthorized')).toBe(false)
+  const overrides = state.get('overrides') as { rule: string }[]
+  expect(overrides.some(row => row.rule === 'qa-pass')).toBe(true)
 })
 
-test('push-ok with no QA note is refused', async ($, on) => {
+test('push-ok with no QA note authorizes the push and records the override', async ($, on) => {
   const state = engine(on, undefined, { security: CLEAR_NOTE })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', TREE)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(refused.isError ?? refused.deny).toBeTruthy()
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.isError).not.toBe(true)
+  expect(state.get('pushAuthorized')).toBe(false)
+  const overrides = state.get('overrides') as { rule: string; verdict: string }[]
+  expect(overrides.some(row => row.rule === 'qa-pass' && row.verdict === 'none')).toBe(true)
 })
 
-test('a GitHub write tool with push-ok but no QA PASS is refused', async ($, on) => {
+test('a GitHub write tool with push-ok but no QA PASS is allowed and recorded', async ($, on) => {
   const state = engine(on, undefined, { security: CLEAR_NOTE })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', TREE)
   const call = { tool: 'mcp__github__create_pull_request', owner: 'o', repo: 'r' }
-  expect((await $.tool.call(call)).deny).toBeTruthy()
+  expect((await $.tool.call(call)).deny).toBeUndefined()
+  expect(state.get('pushAuthorized')).toBe(false)
 })
 
 test('a push chained after a step that can move HEAD is refused', async ($, on) => {
@@ -448,13 +481,15 @@ test('a GitHub server under another name is gated the same way', async ($, on) =
   expect(state.get('pushAuthorized')).toBe(false)
 })
 
-test('gates off still checks every push; it only lifts the branch gate', async ($, on) => {
+test('gates off lifts branch gate; push-ok alone still authorizes a push', async ($, on) => {
   const state = engine(on, undefined)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('gates', false)
+  const without = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(without.deny).toBeTruthy()
   state.set('pushAuthorized', TREE)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(refused.deny).toBeTruthy()
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.deny).toBeUndefined()
   const branch = await $.tool.call({ tool: 'Bash', command: 'git checkout -b topic' })
   expect(branch.deny).toBeUndefined()
 })
@@ -492,9 +527,11 @@ test('/devops disable and enable persist via settings and restore gates', async 
   })
   expect(onAgain.text).toContain('enabled')
   expect(state.get('active')).toBe(true)
-  state.set('pushAuthorized', TREE)
   const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
   expect(refused.deny).toBeTruthy()
+  state.set('pushAuthorized', TREE)
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.deny).toBeUndefined()
 })
 
 test('/devops skill off and skills are person-only', async ($, on) => {
@@ -521,7 +558,6 @@ test('/devops on restores the publish check', async ($, on) => {
   const state = engine(on, undefined)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('active', false)
-  state.set('pushAuthorized', TREE)
   await $.command.run({
     command: 'devops', args: 'on', origin: { kind: 'composer' },
     presentation: { isFullscreen: false, columns: 100 },
@@ -529,6 +565,9 @@ test('/devops on restores the publish check', async ($, on) => {
   expect(state.get('active')).toBe(true)
   const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
   expect(refused.deny).toBeTruthy()
+  state.set('pushAuthorized', TREE)
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.deny).toBeUndefined()
 })
 
 test('an agent cannot turn the skill off', async ($, on) => {
@@ -599,4 +638,172 @@ test('a push is refused when the shell\'s directory cannot be read', async ($, o
   const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
   expect(refused.deny).toBeTruthy()
   expect(state.get('pushAuthorized')).toBe(TREE)
+})
+
+/** The devops-chain.mjs runs among the fake session's process calls, without --dest. */
+const chainRuns = (runs: string[][]) => runs
+  .filter(argv => argv.some(a => a.endsWith('devops-chain.mjs')))
+  .map(argv => argv.slice(2, -2))
+
+const PERSON = { command: 'devops', origin: { kind: 'composer' } }
+const REPORT = 'report-abcabc'
+
+test('the person\'s push-ok, merge-ok or done naming reports approves them', async ($, on) => {
+  const runs: string[][] = []
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  for (const word of ['push-ok', 'merge-ok', 'done']) {
+    state.set('pushAuthorized', false)
+    const ran = await $.command.run({ ...PERSON, args: `${word} ${REPORT}` })
+    expect(ran.text).toContain('One push is allowed')
+    expect(state.get('pushAuthorized')).toBe(TREE)
+    expect(state.get('pushReports')).toEqual([REPORT])
+  }
+  const bare = await $.command.run({ ...PERSON, args: 'push-ok' })
+  expect(bare.text).toContain('No merge report waits for you')
+  expect(state.get('pushReports')).toEqual([])
+  expect(chainRuns(runs)).toEqual([
+    ['approve', REPORT], ['approve', REPORT], ['approve', REPORT], ['waiting'],
+  ])
+})
+
+test('a bare push-ok is refused while merge reports wait for the person', async ($, on) => {
+  const waiting = `waiting: ${REPORT} report-defdef`
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, chainWaiting: waiting })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  for (const args of ['push-ok', 'push']) {
+    const ran = await $.command.run({ ...PERSON, args })
+    expect(ran.text).toContain(`No push granted: merge reports wait for you (${REPORT}`)
+    expect(ran.text).toContain(`/devops push-ok ${REPORT}`)
+  }
+  expect(state.get('pushAuthorized')).toBe(undefined)
+})
+
+test('push-ok --risk is sent to the chain; a goal-only risk grants no push', async ($, on) => {
+  const runs: string[][] = []
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const reason = 'ship the demo'
+  const named = await $.command.run({
+    ...PERSON, args: `push-ok ${REPORT} --risk "${reason}" --goal goal-111111`,
+  })
+  expect(named.text).toContain('One push is allowed')
+  expect(state.get('pushAuthorized')).toBe(TREE)
+  const goalOnly = await $.command.run({
+    ...PERSON, args: 'push-ok --risk "missing security" --goal goal-111111',
+  })
+  expect(goalOnly.text).toContain('No push is granted')
+  expect(chainRuns(runs)).toEqual([
+    ['approve', REPORT, '--goal', 'goal-111111', '--risk', reason],
+    ['approve', '--goal', 'goal-111111', '--risk', 'missing security'],
+  ])
+  state.set('pushAuthorized', false)
+  const bare = await $.command.run({ ...PERSON, args: 'push-ok --risk' })
+  expect(bare.text).toContain('a risk override needs a reason')
+  expect(state.get('pushAuthorized')).toBe(false)
+})
+
+test('a seat cannot type the risk override; it is the same gate as push-ok', async ($, on) => {
+  const runs: string[][] = []
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const seat = { command: 'devops', origin: { kind: 'agent' } }
+  const push = await $.command.run({ ...seat, args: 'push-ok --risk "ship it"' })
+  expect(push.text).toContain('only the person can run it')
+  const done = await $.command.run({ ...seat, args: 'done goal-111111 --risk "ship it"' })
+  expect(done.text).toContain('no push is granted')
+  expect(state.get('pushAuthorized')).toBe(undefined)
+  expect(chainRuns(runs)).toEqual([
+    ['done', 'goal-111111', '--risk', 'ship it'],
+  ])
+})
+
+test('a refused approval (a dependency not signed off) grants no push', async ($, on) => {
+  const refusal = `report ${REPORT} waits on goal-222222, which is not signed off yet`
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, chainRefuses: refusal })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const ran = await $.command.run({ ...PERSON, args: `push-ok ${REPORT}` })
+  expect(ran.text).toContain('No push granted')
+  expect(ran.text).toContain('waits on goal-222222')
+  expect(state.get('pushAuthorized')).toBe(undefined)
+})
+
+test('the pushed reports are recorded with the tree when the grant is consumed', async ($, on) => {
+  const runs: string[][] = []
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  state.set('pushReports', [REPORT])
+  const pushed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(pushed.isError).not.toBe(true)
+  expect(state.get('pushAuthorized')).toBe(false)
+  expect(chainRuns(runs)).toEqual([['pushed', '--tree', TREE, REPORT]])
+})
+
+test('the person\'s merge-deny needs a reason, withdraws the push', async ($, on) => {
+  const runs: string[][] = []
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const bare = await $.command.run({ ...PERSON, args: `merge-deny ${REPORT}` })
+  expect(bare.text).toContain('Usage: /devops merge-deny')
+  expect(state.get('pushAuthorized')).toBe(TREE)
+  const denied = await $.command.run({ ...PERSON, args: `merge-deny ${REPORT} warn instead` })
+  expect(denied.text).toContain('goes back to the Business Analyst')
+  expect(state.get('pushAuthorized')).toBe(false)
+  expect(chainRuns(runs)).toEqual([['deny', REPORT, '--reason', 'warn instead']])
+})
+
+test('a seat typing a chain word runs its own step and grants nothing', async ($, on) => {
+  const runs: string[][] = []
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const seat = { command: 'devops', origin: { kind: 'agent' } }
+  const typed = [
+    'merge-ok goal-111111', 'merge-deny goal-111111 no test', 'done goal-111111',
+    'raise goal-111111 found in development',
+  ]
+  for (const args of typed) {
+    const ran = await $.command.run({ ...seat, args })
+    expect(ran.text).toContain('no push is granted')
+  }
+  expect(state.get('pushAuthorized')).toBe(undefined)
+  expect(chainRuns(runs)).toEqual([
+    ['merge-ok', 'goal-111111'], ['merge-deny', 'goal-111111', '--reason', 'no test'],
+    ['done', 'goal-111111'], ['raise', 'goal-111111', '--reason', 'found in development'],
+  ])
+})
+
+test('the person answers a bug report; a seat may not', async ($, on) => {
+  const runs: string[][] = []
+  engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const seatAsks = { command: 'devops', origin: { kind: 'agent' }, args: `bug ${REPORT} fine` }
+  const seat = await $.command.run(seatAsks)
+  expect(seat.text).toContain('only the person can run it')
+  const bare = await $.command.run({ ...PERSON, args: `bug ${REPORT} fix` })
+  expect(bare.text).toContain('Usage: /devops bug')
+  const answers = [`bug ${REPORT} fine`, `bug ${REPORT} fix 2`, `bug ${REPORT} fix warn instead`]
+  for (const args of answers) {
+    await $.command.run({ ...PERSON, args })
+  }
+  expect(chainRuns(runs)).toEqual([
+    ['bug', REPORT, 'fine'], ['bug', REPORT, 'fix', '--proposal', '2'],
+    ['bug', REPORT, 'fix', '--alternative', 'warn instead'],
+  ])
+})
+
+test('the person decides held work on a load report; a seat may not', async ($, on) => {
+  const runs: string[][] = []
+  engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const seatAsks = { command: 'devops', origin: { kind: 'agent' }, args: `load ${REPORT} approve` }
+  expect((await $.command.run(seatAsks)).text).toContain('only the person can run it')
+  const bare = await $.command.run({ ...PERSON, args: `load ${REPORT} maybe` })
+  expect(bare.text).toContain('Usage: /devops load')
+  await $.command.run({ ...PERSON, args: `load ${REPORT} approve` })
+  await $.command.run({ ...PERSON, args: `load ${REPORT} decline parser first` })
+  expect(chainRuns(runs)).toEqual([
+    ['load', REPORT, 'approve'], ['load', REPORT, 'decline', '--reason', 'parser first'],
+  ])
 })

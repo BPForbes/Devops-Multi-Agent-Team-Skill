@@ -25,6 +25,13 @@ A goal moves one step at a time along:
 `backlog` → `ready` → `in_progress` → `review` → `qa` → `security` → `done`
 
 A goal may go to `blocked` from any state and return to the state it left.
+A goal the BA denies for an unfixed reported bug goes back to `backlog`
+(out of its sprint) until the bug is fixed. Work assignment is capped: work
+that would take a seat past three open pieces (`OPEN_WORK_LIMIT`, assigned
+or accepted) is `held` until the team's BA approves or declines it against
+the client's objectives, or asks the client (`work_decide`,
+`/devops load`). Held work is not in the seat's inbox. Real bug issues are
+titled `#<number> <description>` and name their work item (`bug_filed`).
 `board_move_goal` refuses a jump that skips a step. The step names match the
 hand-off kinds, so the board tells a reader which hand-off is next.
 
@@ -108,6 +115,8 @@ or a QA finding that does not replicate. Any seat may open one, and any seat
 may reply, so the seats can go back and forth. Only the seat that opened a
 thread resolves it. Threads stay on the board and are not posted to GitHub.
 `thread_open`, `thread_reply`, `thread_resolve` and `devops://threads/<goal>` manage them.
+A reproduction between seats uses topic `repro` and the hand-off template in
+[`commands/repro.md`](../../../commands/repro.md).
 
 ## Who reads and changes what
 
@@ -117,7 +126,21 @@ thread resolves it. Threads stay on the board and are not posted to GitHub.
 | Researcher, Coder, Reviewer, QA, Security | `devops://board`, `handoff_inbox` | its own handoffs (`handoff_send`, `handoff_ack`, `handoff_close`) |
 
 A seat never moves a goal on its own. It sends a handoff, and Orchestration
-moves the goal when the hand-off says the step is done.
+moves the goal when the hand-off says the step is done. The Done chain is
+the one exception, as before for `goal_signoff`: each signer acts for
+itself with merge-ok, merge-deny and done, typed (`/devops merge-ok GOAL`)
+or through the tools (`goal_merge`, `goal_done`, `goal_signoff`,
+`report_new_approach`), and the board checks who may sign which step
+([scrum-meetings.md](scrum-meetings.md), Done). Typed words, the seat's
+and the client's (`/devops push-ok REPORT...`, `merge-deny`), are written
+through `scripts/devops-chain.mjs`, with the same board functions and
+lock. Every signature item is a `chain.signature` envelope in the board's
+`signatures`. A goal may list its open bug issues in the project's repo
+(`bug_issues`); with QA's open triage hand-offs they are its reported
+bugs, which the BA does not sign. A merge report's plan may list the
+temporary virtual-git branches (`side`); `devops-chain.mjs merged` records
+the merge of the real PR and deletes them. A server started with `DEVOPS_SEAT` and `DEVOPS_TEAM` acts only for
+that seat under that team hash.
 
 ## Storage
 

@@ -28,6 +28,14 @@ test('an envelope must name the seat the server bound, and a role may send its k
   assert.equal(notAllowed.ok, false)
 })
 
+test('a seat bound to a team hash sends only under that team', () => {
+  const from = team => ({ kind: 'work.checkin', from: { agent: 'agent-b', role: 'coder', team } })
+  const bound = { boundSeat: 'agent-b', boundRole: 'coder', boundTeam: 'team-a1a1a1' }
+  assert.equal(checkSender({ ...bound, envelope: from('team-a1a1a1') }).ok, true)
+  assert.match(checkSender({ ...bound, envelope: from('team-b2b2b2') }).reason, /team-b2b2b2/)
+  assert.equal(checkSender({ ...bound, envelope: from(undefined) }).ok, false)
+})
+
 test('a seat may send its own work, the human channel only sends human answers', () => {
   assert.equal(checkSender({
     boundSeat: 'agent-b', boundRole: 'coder', envelope: envelope('help.request', 'agent-b'),

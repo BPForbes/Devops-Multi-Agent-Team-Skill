@@ -65,6 +65,15 @@
     },
     {
       "$ref": "#/$defs/RunAuthorization"
+    },
+    {
+      "$ref": "#/$defs/Signature"
+    },
+    {
+      "$ref": "#/$defs/SeatSetup"
+    },
+    {
+      "$ref": "#/$defs/BugReport"
     }
   ],
   "$defs": {
@@ -126,11 +135,12 @@
         "communicator",
         "cleaner",
         "ticket-lead",
+        "business-analyst",
         "idle"
       ]
     },
     "from": {
-      "description": "Set by the server from the connection identity. An envelope whose from differs from the connection is refused.",
+      "description": "Set by the server from the connection identity. An envelope whose from differs from the connection is refused. team is the team hash the seat was bound to (DEVOPS_TEAM), when it has one.",
       "type": "object",
       "required": [
         "agent",
@@ -143,6 +153,9 @@
         },
         "role": {
           "$ref": "#/$defs/role"
+        },
+        "team": {
+          "$ref": "#/$defs/teamHash"
         }
       }
     },
@@ -1753,6 +1766,500 @@
             },
             "origin": {
               "const": "composer"
+            }
+          }
+        }
+      }
+    },
+    "Signature": {
+      "description": "One signature item of the Done chain, recorded by the board (scripts/devops-scrum.mjs, recordSignature): a merge-ok or merge-deny (verdict ok or deny) on a chain step, a done (signed), the BA's scan (step scan: ok, hold or deny), Orchestration's merge report (step report) and the client's decision (step client). Verdict skipped is the client's risk record for a check or dependency it waived; that is not a pass. The signer is a seat's agent hash, the client or Orchestration. A BA signature may carry an override (a big matter signed despite open reported bugs, with its reason) or the lead's raise of a bug found during development. A client signature may carry a risk (who, when, what was skipped, why).",
+      "type": "object",
+      "required": [
+        "v",
+        "kind",
+        "id",
+        "signer",
+        "body"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/version"
+        },
+        "kind": {
+          "const": "chain.signature"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "signer": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/agentHash"
+            },
+            {
+              "enum": [
+                "client",
+                "orchestration"
+              ]
+            }
+          ]
+        },
+        "body": {
+          "type": "object",
+          "required": [
+            "goal",
+            "step",
+            "verdict",
+            "at"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "goal": {
+              "$ref": "#/$defs/goalHash"
+            },
+            "step": {
+              "enum": [
+                "peer",
+                "lead",
+                "ba",
+                "ba_final",
+                "client",
+                "scan",
+                "report"
+              ]
+            },
+            "verdict": {
+              "enum": [
+                "ok",
+                "deny",
+                "hold",
+                "signed",
+                "skipped"
+              ]
+            },
+            "at": {
+              "$ref": "#/$defs/utc"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "scanned": {
+              "enum": [
+                "peer",
+                "lead",
+                "ba",
+                "ba_final",
+                "client"
+              ]
+            },
+            "report": {
+              "$ref": "#/$defs/id"
+            },
+            "seq": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "from": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "to": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "demo": {
+              "type": "object",
+              "required": [
+                "kind",
+                "agent"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "feature",
+                    "improvement",
+                    "bug"
+                  ]
+                },
+                "agent": {
+                  "$ref": "#/$defs/agentHash"
+                },
+                "surface": {
+                  "enum": [
+                    "gui",
+                    "browser",
+                    "terminal",
+                    "other"
+                  ]
+                }
+              }
+            },
+            "expectations": {
+              "type": "object",
+              "required": [
+                "objective",
+                "acceptance"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "objective": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "acceptance": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            },
+            "override": {
+              "type": "object",
+              "description": "The BA signed for a big matter despite open reported bugs; the reason is required.",
+              "required": [
+                "reason",
+                "bugs"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4000
+                },
+                "bugs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  }
+                }
+              }
+            },
+            "risk": {
+              "type": "object",
+              "description": "The client waived a missing check or an unapproved dependency. The skipped items are not passes.",
+              "required": [
+                "who",
+                "at",
+                "reason",
+                "skipped"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "who": {
+                  "const": "client"
+                },
+                "at": {
+                  "$ref": "#/$defs/utc"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4000
+                },
+                "skipped": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "check",
+                      "detail"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "check": {
+                        "enum": [
+                          "review",
+                          "qa",
+                          "security",
+                          "allocation",
+                          "dependency"
+                        ]
+                      },
+                      "detail": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4000
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "raised": {
+              "type": "object",
+              "description": "A bug found during development: the team lead raised it to the BA before the BA signs.",
+              "required": [
+                "by",
+                "reason",
+                "at"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "by": {
+                  "$ref": "#/$defs/agentHash"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4000
+                },
+                "at": {
+                  "$ref": "#/$defs/utc"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "SeatSetup": {
+      "description": "The setup payload spin-up hands each team lead (scripts/devops-allocation.mjs, setupPayload): recommended settings for the lead and its members, the versions of the systems involved, and the setup steps. Spin-up applies nothing; the receiving seat sets itself up.",
+      "type": "object",
+      "required": [
+        "v",
+        "kind",
+        "id",
+        "to",
+        "body"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/version"
+        },
+        "kind": {
+          "const": "seat.setup"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "to": {
+          "$ref": "#/$defs/agentHash"
+        },
+        "body": {
+          "type": "object",
+          "required": [
+            "team",
+            "lead",
+            "settings",
+            "member_settings",
+            "versions",
+            "instructions"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "team": {
+              "$ref": "#/$defs/teamHash"
+            },
+            "lead": {
+              "$ref": "#/$defs/agentHash"
+            },
+            "settings": {
+              "type": "object",
+              "required": [
+                "DEVOPS_SEAT",
+                "DEVOPS_TEAM"
+              ],
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "properties": {
+                "DEVOPS_SEAT": {
+                  "$ref": "#/$defs/agentHash"
+                },
+                "DEVOPS_TEAM": {
+                  "$ref": "#/$defs/teamHash"
+                }
+              }
+            },
+            "member_settings": {
+              "type": "object",
+              "required": [
+                "DEVOPS_SEAT",
+                "DEVOPS_TEAM"
+              ],
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "properties": {
+                "DEVOPS_SEAT": {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                "DEVOPS_TEAM": {
+                  "$ref": "#/$defs/teamHash"
+                }
+              }
+            },
+            "versions": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              }
+            },
+            "instructions": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 50,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000
+              }
+            }
+          }
+        }
+      }
+    },
+    "BugReport": {
+      "description": "The BA's bug report to the client through Orchestration (scripts/devops-scrum.mjs, fileBugReport), after the team discussed the bug at the Daily Scrum: the issue, why it was reported, the proposed solutions, the files, lines and code snippets, an easy-to-read explanation and the plan of attack. The client picks a proposal, gives an alternative, or finds the behavior fine.",
+      "type": "object",
+      "required": [
+        "v",
+        "kind",
+        "id",
+        "from",
+        "body"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/version"
+        },
+        "kind": {
+          "const": "bug.report"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "from": {
+          "$ref": "#/$defs/agentHash"
+        },
+        "body": {
+          "type": "object",
+          "required": [
+            "team",
+            "meeting",
+            "found_by",
+            "title",
+            "behavior",
+            "expected",
+            "issue",
+            "reason",
+            "proposals",
+            "files",
+            "lines",
+            "snippets",
+            "explanation",
+            "plan",
+            "at"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "team": {
+              "$ref": "#/$defs/teamHash"
+            },
+            "meeting": {
+              "$ref": "#/$defs/id"
+            },
+            "found_by": {
+              "$ref": "#/$defs/agentHash"
+            },
+            "goal": {
+              "$ref": "#/$defs/goalHash"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "behavior": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "expected": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "issue": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "proposals": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 50,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000
+              }
+            },
+            "files": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 50,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000
+              }
+            },
+            "lines": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 50,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000
+              }
+            },
+            "snippets": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 50,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000
+              }
+            },
+            "explanation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "plan": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "at": {
+              "$ref": "#/$defs/utc"
             }
           }
         }

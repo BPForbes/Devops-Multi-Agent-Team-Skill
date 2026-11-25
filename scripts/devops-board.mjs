@@ -1,9 +1,15 @@
 // Goal board and handoff server state (see references/board.md).
-// Pure functions over a plain object. The orchestration server (mcp/server.mjs)
-// is the only writer; subagents read and act through its tools.
+// Pure functions over a plain object, written by the server (mcp/server.mjs).
+// Subagents read and act through its tools.
+// Typed Done-chain words, a seat's or the client's, also write it.
+// They go through scripts/devops-chain.mjs.
 import crypto from 'node:crypto'
+import path from 'node:path'
 import { isAgentId, isGoalId, isItemId, isJob, isTeamId } from './devops-ids.mjs'
 import { validateHandoff } from './devops-handoff.mjs'
+
+/** The board file, relative to the project folder. */
+export const BOARD_FILE = path.join('devops-skill', 'thoughts', 'non-final', 'board.json')
 
 // Forward hand-offs are judged by the receiver. Send-backs and sign-off
 // are judged by the sender.
@@ -37,6 +43,7 @@ export function emptyBoard() {
     meetings: {},
     allocations: {},
     reports: {},
+    signatures: {},
   }
 }
 
@@ -44,7 +51,7 @@ export function emptyBoard() {
 export function normalizeBoard(board) {
   return {
     blame: [], threads: {}, exceptions: [], assignments: {}, reads: {},
-    meetings: {}, allocations: {}, reports: {},
+    meetings: {}, allocations: {}, reports: {}, signatures: {},
     ...board,
   }
 }
@@ -442,7 +449,15 @@ export function allowSameTeam(board, { goal, team, reason, at }) {
 // Judging jobs may not be given to a team that authored the goal.
 const JUDGING_JOBS = new Set(['reviewer', 'qa', 'security'])
 
-/** Gives a seat a piece of work on a goal, with what it has to do. */
+/** Open pieces of work (assigned or accepted) a seat may hold at once. */
+export const OPEN_WORK_LIMIT = 3
+
+/**
+ * Gives a seat a piece of work on a goal, with what it has to do. Work that
+ * would take a seat past OPEN_WORK_LIMIT open pieces is `held` instead: the
+ * BA checks it against the client's objectives (decideHeldWork in
+ * devops-scrum.mjs) before the seat sees it. Returns { id, board, held }.
+ */
 export function assignWork(board, { goal, job, agent, team, description, by, at, mint }) {
   need(board.goals[goal] !== undefined, `goal is not on the board: ${goal}`)
   need(isJob(job), `not a job: ${job}`)
@@ -453,6 +468,8 @@ export function assignWork(board, { goal, job, agent, team, description, by, at,
     by === 'orchestration' || isAgentId(by),
     `assigned_by must be orchestration or an agent hash: ${by}`,
   )
+  const open = workInbox(board, agent).length
+  const held = open >= OPEN_WORK_LIMIT
   if (JUDGING_JOBS.has(job) && !isExempt(board, goal, { team, agent, job })) {
     const authors = normalizeBoard(board).goals[goal].authors ?? []
     need(!authors.includes(team), `team ${team} authored this goal and cannot judge it`)
@@ -461,10 +478,11 @@ export function assignWork(board, { goal, job, agent, team, description, by, at,
   const id = mintId('work', next.assignments, mint)
   if (JUDGING_JOBS.has(job)) useException(next, goal, { team, agent, job }, { at, by: id })
   next.assignments[id] = {
-    goal, job, agent, team, description: description.trim(), state: 'assigned',
+    goal, job, agent, team, description: description.trim(), state: held ? 'held' : 'assigned',
     assigned_by: by, assigned_at: at, accepted_at: null, done_at: null,
+    ...(held ? { held: { open, limit: OPEN_WORK_LIMIT, at } } : {}),
   }
-  return { id, board: next }
+  return { id, board: next, held }
 }
 
 /** The work a seat has been given and has not finished. */
@@ -488,6 +506,20 @@ export function acceptWork(board, { id, agent, at }) {
   const next = normalizeBoard(structuredClone(board))
   next.assignments[id].state = 'accepted'
   next.assignments[id].accepted_at = at
+  return next
+}
+
+/**
+ * A team lead releases a seat's open work when it moves the seat elsewhere
+ * (a Daily Scrum reallocation). The work leaves the seat's inbox.
+ */
+export function releaseWork(board, { id, agent, team, by, at }) {
+  const row = ownWork(board, id, agent)
+  need(row.state === 'assigned' || row.state === 'accepted',
+    `work ${id} is ${row.state}; only open work is released`)
+  need(team === undefined || row.team === team, `work ${id} belongs to team ${row.team}`)
+  const next = normalizeBoard(structuredClone(board))
+  Object.assign(next.assignments[id], { state: 'released', released_at: at, released_by: by })
   return next
 }
 

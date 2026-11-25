@@ -15,20 +15,39 @@ hash**, **initial job** and **current job**
 uses MCP tools and skills instead of dumping the request as plain
 text. Do not stop development when `/devops` is given. Gate words
 (`on`, `off`, `enable`, `disable`, `skill`, `skills`, `push-ok`,
-`push-reset`, `gates`, `allow-branch`, `comments`, `monitor`,
+`push-reset`, `gates`, `allow-branch`, `comments`, `monitor`, `bug`, `load`,
 `config` writes, `setup claude`) run only when the person types them;
-free-form wording never changes a gate. `/devops on|off` and
+free-form wording never changes a gate. `merge-ok`, `done` and `merge-deny REASON`
+typed by the person answer Orchestration's merge report (approve the named
+reports and grant the push, or send them back to the BA). A seat types the
+same words with a goal (`/devops merge-ok GOAL`) to run its own Done-chain
+step as its bound seat; that never grants a push (the BA may add
+`--override REASON` for a big matter; a lead types `/devops raise GOAL
+REASON` to raise a bug found in development to the BA). A `push-ok`
+naming no report is refused while merge reports wait. The person answers
+a bug report with `/devops bug REPORT fine|fix N|fix TEXT`, and a load
+report (work held past a seat's limit) with
+`/devops load REPORT approve|decline [REASON]`. `/devops on|off` and
 `/devops enable|disable` turn the whole skill on or off (session +
 `.claude/settings.json` `enabledPlugins`). `/devops skill on|off NAME`
 and `/devops skills` manage `skillOverrides` (bare skill names).
 One-shot gates such as `/devops push-ok` take no `on|off` parameter.
-A push needs QA PASS and Security CLEAR on the tree, then the
-person's typed `/devops push-ok`. After PASS: one compressed push
-that keeps approved Coder commits.
+Aliases (`push`, `go`, `publish`) and chat `push` / `push it` count
+the same. Default path still wants QA PASS and Security CLEAR; the
+person's push-ok alone is final and records an override when those are
+missing. After PASS: one compressed push that keeps approved Coder
+commits. The same person-only push-ok may add `--risk REASON` and
+`--goal GOAL`. That records a board risk when Review, QA or Security
+has not handed a goal on, or when a merge report depends on a goal the
+client has not approved. The record names who, when, what was skipped
+and why. It is not a pass. A seat's `merge-ok`, `done` or `raise`
+cannot pass `--risk`; a seat's words never grant a push.
 
-**Human over skill.** If the human's order conflicts with this skill's
-role contingencies, obey the human and keep developing
-([SKILL.md](../SKILL.md), Development bypass).
+**Client over skill.** The human is the Agile client and supreme
+authority. If their order conflicts with role contingencies or seat
+gates (including QA/Security), obey them even without sign-off and keep
+developing ([SKILL.md](../SKILL.md), Client authority;
+[client-and-agile.md](client-and-agile.md)).
 
 ## `/devops` skill modes
 

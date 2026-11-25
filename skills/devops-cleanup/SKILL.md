@@ -68,7 +68,9 @@ parameter limits, flag arguments, magic numbers, vague names, and noisy or comme
    free of unrelated churn. **Security** reviews only if the plan touched the
    profile's sensitive paths; a refactor of authentication or crypto code is a
    security change.
-6. Nobody pushes before QA's PASS and the person's go.
+6. Nobody pushes without the person's go. Default path waits for QA's PASS; a
+   client order to push sooner wins and the skipped gate is recorded, never
+   reported as passed.
 
 ## Lean (optional)
 

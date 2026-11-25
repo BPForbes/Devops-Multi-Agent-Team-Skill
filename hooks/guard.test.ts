@@ -1,9 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
-  branchNameOf, classify, commitInfo, interpretDevopsIntent, isSingleCommand, namesPush,
-  shellWords,
-  splitArgs, treeOf, verdictOf,
+  branchNameOf, chatAuthorizesPush, classify, commitInfo, interpretDevopsIntent, isSingleCommand,
+  namesPush, shellWords, splitArgs, treeOf, verdictOf,
 } from './guard'
 
 test('git push and gh pr publishing are found, however they are spelled', () => {
@@ -54,13 +53,27 @@ test('command arguments and branch names are parsed strictly', () => {
   expect(branchNameOf('-bad')).toBeUndefined()
 })
 
-test('free-form words never map to a gate command (rule 3)', () => {
-  const freeForm = ['push', 'go', 'publish', 'ship', 'withdraw']
-  freeForm.push('cut a branch topic/x', 'gates off')
-  for (const words of freeForm) {
-    expect(interpretDevopsIntent(words)).toBeUndefined()
-  }
+test('free-form gate aliases map so the person\'s word is final', () => {
   expect(interpretDevopsIntent('')).toEqual({ word: 'status', rest: '' })
+  expect(interpretDevopsIntent('push')).toEqual({ word: 'push-ok', rest: '' })
+  expect(interpretDevopsIntent('go')).toEqual({ word: 'push-ok', rest: '' })
+  expect(interpretDevopsIntent('publish')).toEqual({ word: 'push-ok', rest: '' })
+  expect(interpretDevopsIntent('ship')).toEqual({ word: 'push-ok', rest: '' })
+  expect(interpretDevopsIntent('withdraw')).toEqual({ word: 'push-reset', rest: '' })
+  expect(interpretDevopsIntent('gates off')).toEqual({ word: 'gates', rest: 'off' })
+  expect(interpretDevopsIntent('cut a branch topic/x')).toEqual({
+    word: 'allow-branch', rest: 'topic/x',
+  })
+  expect(interpretDevopsIntent('how does total work')).toBeUndefined()
+})
+
+test('chat "push" authorizes only from the person, and only as the whole message', () => {
+  expect(chatAuthorizesPush('push', 'composer')).toBe(true)
+  expect(chatAuthorizesPush('  Push it ', 'composer')).toBe(true)
+  expect(chatAuthorizesPush('push', 'peer')).toBe(false)
+  expect(chatAuthorizesPush('push', undefined)).toBe(false)
+  expect(chatAuthorizesPush('please push the fix', 'composer')).toBe(false)
+  expect(chatAuthorizesPush('go ahead and push', 'composer')).toBe(false)
 })
 
 test('a QA note names the tree it approved', () => {

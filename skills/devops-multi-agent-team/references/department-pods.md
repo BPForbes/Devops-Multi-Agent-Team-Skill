@@ -120,11 +120,12 @@ helping on another item.
   product, test or doc change itself. It becomes an Author in the
   union only if it resolves a mechanical conflict (see Integration).
 - Record primaries, finish-the-line handoffs, and QA swaps.
-- Gates: no push while review is open; Security before publish;
-  **only QA may give the OK to push** (review-bot feedback fixes:
-  qa-publish-policy.md). Coders cut a skill side-branch: a name the
-  skill tracks, backed by the Coder's own **detached** git worktree
-  (no branch or ref is created); no shared commits until QA PASS.
+- Gates: default path is review, then Security, then QA PASS; the
+  **client (human)** authorizes every push and may override missing
+  seats (qa-publish-policy.md, client-and-agile.md). Coders cut a
+  skill side-branch: a name the skill tracks, backed by the Coder's
+  own **detached** git worktree (no branch or ref is created); no
+  shared commits until QA PASS (or a client override).
   Record overlapping **files owned** so Coders talk before they
   collide ([side-work.md](side-work.md)). Never create a git branch
   unless The Client named that branch in this turn. Cloud-agent

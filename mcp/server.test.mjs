@@ -68,10 +68,11 @@ test('initialize negotiates, lists 34 tools, prompts and resources', async () =>
     for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_overview', 'mindmap_tree', 'mindmap_note', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
     const added = ['lint_check', 'lint_commands', 'config_get', 'config_set']
     for (const name of added) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 64)
+    assert.equal(tools.length, 74)
     const scrum = [
       'allocation_plan', 'board_spin_up', 'meeting_schedule', 'meeting_hold', 'goal_signoff',
-      'report_forward',
+      'report_forward', 'goal_merge', 'goal_done', 'report_prepare', 'report_new_approach',
+      'goal_scan', 'goal_raise', 'bug_report', 'bug_issue', 'bug_filed', 'work_decide',
     ]
     for (const name of scrum) {
       assert.ok(tools.includes(name), name)
@@ -554,12 +555,14 @@ test('research plans the teams, Orchestration spins up the board, the lead plans
   assert.deepEqual(plan.teams.map(t => t.name), ['A1', 'R1', 'Q1', 'S1'])
   const up = await c.call('board_spin_up', { dest: root, ...SPIN })
   assert.notEqual(up.isError, true, up.text)
-  const { sprint, meetings } = up.json()
+  const { sprint, meetings, setup } = up.json()
   assert.equal(meetings.length, 4, 'every team lead gets a Sprint Planning')
+  assert.equal(setup[0].body.versions.node, process.versions.node, 'and a setup payload')
   const held = await c.call('meeting_hold', {
     dest: root, caller: 'agent-a1a1a1', id: meetings[0].id, minutes: 60,
-    attendees: ['agent-a1a1a1'],
+    attendees: ['agent-a1a1a1', 'agent-b1b1b1'],
     record: {
+      businessAnalyst: 'agent-b1b1b1',
       sprintGoal: 'Empty config parses', goals: ['goal-111111'],
       tasks: [{ goal: 'goal-111111', job: 'coder', title: 'Fix it' }],
     },
@@ -603,15 +606,44 @@ test('research plans the teams, Orchestration spins up the board, the lead plans
   }
   const stranger = await signoff('agent-b2b2b2')
   assert.equal(stranger.isError, true)
-  const signed = await signoff('agent-a1a1a1')
-  assert.notEqual(signed.isError, true, signed.text)
+  const unverified = await signoff('agent-a1a1a1')
+  assert.match(unverified.text, /peer verification/)
+  const as = (caller, more = {}) => ({ dest: root, caller, team: 'team-a1a1a1', goal, ...more })
+  const peerDone = await c.call('goal_done', as('agent-0e0e0e'))
+  assert.match(peerDone.text, /runs merge-ok on the peer step before done/)
+  for (const caller of ['agent-0e0e0e', 'agent-a1a1a1']) {
+    const ok = await c.call('goal_merge', as(caller, { decision: 'ok' }))
+    assert.notEqual(ok.isError, true, ok.text)
+    const done = await c.call('goal_done', as(caller))
+    assert.notEqual(done.isError, true, done.text)
+  }
   const reportsRead = await c.rpc('resources/read', { uri: 'devops://reports' })
   const reports = JSON.parse(reportsRead.result.contents[0].text)
-  assert.equal(reports.toOrchestration.length, 1)
+  assert.equal(reports.awaitingBa.length, 1)
+  assert.deepEqual(reports.baPings.map(p => p.step), ['peer', 'lead'])
+  const scan = { dest: root, caller: 'agent-b1b1b1', goal, verdict: 'hold', reason: 'ask client' }
+  const scanned = await c.call('goal_scan', scan)
+  assert.notEqual(scanned.isError, true, scanned.text)
+  const baArgs = { dest: root, caller: 'agent-b1b1b1', goal, decision: 'ok' }
+  const blocked = await c.call('goal_merge', baArgs)
+  assert.match(blocked.text, /scan holds the ba step: ask client/)
+  await c.call('goal_scan', { ...scan, verdict: 'ok', reason: undefined })
+  const baOk = await c.call('goal_merge', baArgs)
+  assert.notEqual(baOk.isError, true, baOk.text)
+  const ba = await c.call('goal_done', { dest: root, caller: 'agent-b1b1b1', goal })
+  assert.match(ba.text, /schedule sprint-[0-9a-f]{6}'s Sprint Review first/)
+  const merge = { branch: 'main', design: 'parser module', implementation: 'one guard' }
   const forwarded = await c.call('report_forward', {
-    dest: root, sprint, ids: [signed.json().id], summary: 'Parser fix done',
+    dest: root, sprint, ids: [reports.awaitingBa[0].id], summary: 'Parser fix done', merge,
   })
-  assert.notEqual(forwarded.isError, true, forwarded.text)
+  assert.match(forwarded.text, /is awaiting_ba, not to_orchestration/)
+  const denied = await c.call('goal_merge', {
+    dest: root, caller: 'agent-b1b1b1', goal, decision: 'deny', reason: 'Review: name the key',
+  })
+  assert.notEqual(denied.isError, true, denied.text)
+  const after = JSON.parse((await c.rpc('resources/read', { uri: 'devops://reports' }))
+    .result.contents[0].text)
+  assert.equal(after.reopened[0].needs_client_review, true)
   c.close()
 })
 
@@ -621,13 +653,30 @@ test('a bound seat cannot spin up the board or hold a meeting as another seat', 
   const refused = await c.call('board_spin_up', { dest: root, ...SPIN })
   assert.equal(refused.isError, true)
   assert.match(refused.text, /only Orchestration/)
-  const forward = { dest: root, sprint: 'sprint-aaaaaa', ids: ['report-aaaaaa'], summary: 'x' }
+  const forward = {
+    dest: root, sprint: 'sprint-aaaaaa', ids: ['report-aaaaaa'], summary: 'x',
+    merge: { branch: 'main', design: 'x', implementation: 'x' },
+  }
   const report = await c.call('report_forward', forward)
   assert.match(report.text, /only Orchestration reports to the person/)
+  const prepare = await c.call('report_prepare', { dest: root, ids: ['report-aaaaaa'] })
+  assert.match(prepare.text, /only Orchestration prepares the merge presentation/)
   const foreign = await c.call('meeting_hold', {
     dest: root, caller: 'agent-a1a1a1', id: 'meeting-aaaaaa', minutes: 5,
     attendees: ['agent-a1a1a1'],
   })
   assert.equal(foreign.isError, true)
+  c.close()
+})
+
+test('a seat bound to a team hash cannot act under another team', async () => {
+  const root = tmp()
+  const env = { DEVOPS_MCP_ROOTS: root, DEVOPS_SEAT: 'agent-0a0a0a', DEVOPS_TEAM: 'team-a1a1a1' }
+  const c = await client({ env })
+  const merge = { dest: root, caller: 'agent-0a0a0a', goal: 'goal-111111', decision: 'ok' }
+  const foreign = await c.call('goal_merge', { ...merge, team: 'team-b2b2b2' })
+  assert.match(foreign.text, /bound to team-a1a1a1; it cannot act for team-b2b2b2/)
+  const own = await c.call('goal_merge', { ...merge, team: 'team-a1a1a1' })
+  assert.match(own.text, /goal is not on the board/)
   c.close()
 })

@@ -19,4 +19,6 @@ The method and the roles: `../skills/devops-multi-agent-team/references/stories.
 5. **QA** runs `story_check` and `story_graph`, then **Security** reviews, then QA records the final `Publish gate: PASS`.
 6. `story_guidance` (apply) regenerates `guidance.md`; commit the stories with the catalog.
 
-Nobody pushes before QA's PASS and the human's go.
+Nobody pushes without the human's go. Default path waits for QA's PASS; a
+client order to push sooner wins and the skipped gate is recorded, never
+reported as passed.

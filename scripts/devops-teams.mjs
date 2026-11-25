@@ -2,7 +2,18 @@
 // an item lives on one team's board, and only that team's members can act on
 // it. Items cannot be done until security signs them off. Pure rules: the
 // caller persists the board.
+import fs from 'node:fs'
+import path from 'node:path'
 import { admit, securitySignOff, transition } from './devops-items.mjs'
+
+/** The folder of the team boards, relative to the project folder. */
+export const TEAM_DIR = path.join('.devops', 'teams')
+
+/** The seat hashes listed on a team board file, or undefined when the team has none. */
+export function readMembers(file) {
+  if (!fs.existsSync(file)) return undefined
+  return JSON.parse(fs.readFileSync(file, 'utf8')).members?.map(m => m.agent)
+}
 
 export const LEAD_ROLE = 'manager'
 export const MEMBER_ROLES = Object.freeze([
