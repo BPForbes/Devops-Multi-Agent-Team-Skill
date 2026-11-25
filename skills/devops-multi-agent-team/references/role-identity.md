@@ -22,6 +22,18 @@ Communicator, Integrator, and every other job
 - Orchestration obeys the same rule: it never blocks the client to
   protect process.
 
+## Live demos between seats
+
+When another seat (or the client) needs to understand what was done,
+**show it live** instead of only writing about it
+([client-and-agile.md](client-and-agile.md), Live demos):
+
+- Prefer **GUI**, **browser**, or **terminal** for the surface that
+  matches the work (`/browser-automation`, shell, host desktop tools).
+- Use demos **as needed**: Sprint Review, Sprint Retrospective, help
+  when stuck, or any short unblock that cuts questions.
+- Record the commands, URL or path shown so later seats reuse it.
+
 ## Identity hashes (team, agent, jobs, items)
 
 Every subagent is told apart by **hashes and job labels**, never by

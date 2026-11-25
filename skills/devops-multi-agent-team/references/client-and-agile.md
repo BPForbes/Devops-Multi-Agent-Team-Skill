@@ -50,6 +50,36 @@ recorded on the meeting record (`reallocations`). The Business Analyst
 checks that the move still serves the client's stated objectives and
 notes cost impact (seat-time, deferred scope).
 
+## Live demos (GUI, browser, terminal)
+
+AI seats **show** work live to other seats and to the client when that
+cuts questions. Prefer a short live run over a long written summary.
+
+| Surface | Use when |
+|---------|----------|
+| **GUI / desktop** | The change is a desktop or host UI; drive the app where the host can see it |
+| **Browser** | Web UI, docs pages, local preview, deployed preview; use the host's browser MCP (`/browser-automation` or the profile's browser tools) |
+| **Terminal** | CLI, scripts, tests, builds, logs, CI job output; run the commands live and point at the result |
+| **Other** | Canvas, video, or screen capture when the host offers them and a live surface is a poor fit |
+
+**When (as needed):**
+
+- **Sprint Review** — features and improvements: live demo on the
+  roster (bugs optional).
+- **Sprint Retrospective** — when a bottleneck or improvement needs
+  proof, show the failing or fixed path live instead of only describing it.
+- **Help between seats** — when a Coder, Reviewer, QA, Security or
+  other seat is stuck or explaining a finding, demo the repro, the
+  green path, or the failing command so the other seat sees it.
+- **Daily / ad hoc** — only when a short live show unblocks the team
+  faster than text.
+
+Every AI that can demo **should** demo when asked or when the roster
+names them. Record what was shown (commands, URL, or path) in the
+meeting record or under thoughts so later seats do not re-ask.
+
+See [scrum-meetings.md](scrum-meetings.md).
+
 ## Meetings (who must be there)
 
 | Meeting | Client | Team lead | Business Analyst | Developers / judges |
@@ -57,7 +87,7 @@ notes cost impact (seat-time, deferred scope).
 | Sprint Planning | optional | hosts | present | team seats |
 | Daily Scrum | optional | hosts; reallocates under strain | present | developers on the team |
 | Backlog Refinement | optional | hosts | present; clarifies objectives and cost | sizing seats |
-| Sprint Review (joint) | invited | one host lead for the sprint | prepares attendance and demo roster ahead; present | every team demos features / improvements |
-| Sprint Retrospective | optional | hosts (per team, after the joint review) | optional | that team's seats |
+| Sprint Review (joint) | invited | one host lead for the sprint | prepares attendance and demo roster ahead; present | every team **live**-demos features / improvements |
+| Sprint Retrospective | optional | hosts (per team, after the joint review) | optional | that team's seats; live demo bottlenecks when needed |
 
 See [scrum-meetings.md](scrum-meetings.md) for timeboxes and records.

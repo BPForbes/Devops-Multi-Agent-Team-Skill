@@ -242,6 +242,8 @@ function refinement(next, meeting, record) {
   }
 }
 
+const DEMO_SURFACES = Object.freeze(['gui', 'browser', 'terminal', 'other'])
+
 /** Demo roster: Done sprint goals; bugs may appear but are not required demos. */
 function parseRoster(next, meeting, roster) {
   need(Array.isArray(roster), 'the Business Analyst prepares a demo roster')
@@ -250,6 +252,10 @@ function parseRoster(next, meeting, roster) {
     const kind = row.kind ?? 'feature'
     need(['feature', 'improvement', 'bug'].includes(kind),
       'roster kind is feature, improvement or bug')
+    if (filled(row.surface)) {
+      need(DEMO_SURFACES.includes(row.surface),
+        'roster surface is gui, browser, terminal or other')
+    }
     const goal = next.goals[row.goal]
     need(goal?.sprint === meeting.sprint && goal.state === 'done',
       `${row.goal} is not Done in this sprint`)
@@ -262,6 +268,7 @@ function parseRoster(next, meeting, roster) {
   return {
     roster: roster.map(r => ({
       agent: r.agent, goal: r.goal, kind: r.kind ?? 'feature',
+      ...(filled(r.surface) ? { surface: r.surface } : {}),
     })),
     demo: [...new Set(demo)],
   }

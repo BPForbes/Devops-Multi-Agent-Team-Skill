@@ -217,8 +217,11 @@ mode; it is not compliance.
   turn.
 - **Agile loop.** Team leads reallocate under **stress/strain** at
   Daily Scrum; the Business Analyst tracks objectives and cost and
-  prepares the joint Sprint Review roster
-  ([scrum-meetings.md](references/scrum-meetings.md)).
+  prepares the joint Sprint Review roster. Seats **live-demo** work
+  (GUI, browser, terminal) to each other as needed — Review, Retro,
+  help — so fewer questions pile up
+  ([client-and-agile.md](references/client-and-agile.md),
+  [scrum-meetings.md](references/scrum-meetings.md)).
 
 ### Reviewer entrypoint (before QA)
 
@@ -352,7 +355,7 @@ background subagents.
 | `devops-quality-engineer.md` | QA / publish gate | profile's validation + bug hunt |
 | `devops-security-engineer.md` | Security | profile's analysis + SCA |
 | `devops-ticket-lead.md` | Tickets | Linear / GitHub issues |
-| `devops-business-analyst.md` | Business Analyst (client objectives, cost, review roster) | board / meetings |
+| `devops-business-analyst.md` | Business Analyst (objectives, cost, live-demo roster) | board / meetings |
 | `devops-verifier.md` | UI smoke | browser |
 | `devops-integrator.md` | Externals | Composio |
 | `devops-communicator.md` | Recap | video MCP |
@@ -380,8 +383,9 @@ e.g. `[Planner]`; a spawned seat adds both, e.g.
   `devops-skill/thoughts/non-final/`; durable docs in `docs/`.
 - **Business Analyst** — tracks client objectives vs delivery and cost;
   present at Planning, Daily Scrum, Refinement and the joint Sprint
-  Review; prepares review attendance and demo roster ahead
-  (`devops-business-analyst.md`).
+  Review; prepares review attendance and live-demo roster (GUI /
+  browser / terminal) ahead. Seats also live-demo in Retro and when
+  helping each other (`devops-business-analyst.md`).
 - **Team lead** — runs that team's meetings; at Daily Scrum measures
   **stress/strain** and **reallocates** seats onto higher-priority
   delayed work ([scrum-meetings.md](references/scrum-meetings.md)).

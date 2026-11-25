@@ -1023,7 +1023,8 @@ const TOOLS = [
       'The team lead (`caller`) holds a scheduled meeting: attendees, minutes (within its',
       'timebox) and the record its kind needs (scrum-meetings.md, client-and-agile.md).',
       'Daily: stress/strain + reallocations. Review: one joint review per sprint; BA roster,',
-      'feature demos, AI Q&A. BA attends planning, daily, refinement and review.',
+      'live GUI/browser/terminal demos, AI Q&A. Retro and help: live demos as needed.',
+      'BA attends planning, daily, refinement and review.',
     ].join(' '),
     inputSchema: {
       type: 'object',

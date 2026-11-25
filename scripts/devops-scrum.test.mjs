@@ -170,7 +170,7 @@ test('the joint Sprint Review demos Done features, records Q&A, and adds backlog
   const record = {
     businessAnalyst: BA,
     attendance: [LEAD, DEV, BA],
-    roster: [{ agent: DEV, goal: GOAL, kind: 'feature' }],
+    roster: [{ agent: DEV, goal: GOAL, kind: 'feature', surface: 'terminal' }],
     questions: [{
       from: BA, to: DEV, question: 'Does empty config warn?', answer: 'Yes, once.',
     }],
@@ -180,6 +180,7 @@ test('the joint Sprint Review demos Done features, records Q&A, and adds backlog
   const reviewed = meet(state, 'review', { attendees: [LEAD, DEV, BA], record })
   assert.equal(reviewed.board.goals['goal-333333'].sprint, '')
   assert.equal(reviewed.board.meetings[reviewed.id].record.questions[0].answer, 'Yes, once.')
+  assert.equal(reviewed.board.meetings[reviewed.id].record.roster[0].surface, 'terminal')
   const daily = { minutes: 5, attendees: [LEAD, DEV], record: { updates: [UPDATE] } }
   assert.throws(() => meet(reviewed, 'daily', daily), /in review/)
   assert.throws(() => meet(reviewed, 'review', {
