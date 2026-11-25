@@ -2,13 +2,13 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  addGoal, assignWork, createSprint, emptyBoard, moveGoal, openThread, resolveThread, workInbox,
+  addGoal, assignWork, createSprint, emptyBoard, moveGoal, openThread, unreadThreads, workInbox,
 } from './devops-board.mjs'
 import { validateEnvelope } from './devops-envelopes.mjs'
 import {
   baScan, clientSignOff, forwardReports, goalDone, goalVerdict, holdMeeting, leadSignOff,
-  meetingsFor, newApproach, pingsFor, prepareMerge, recordPush, reportsFor, scheduleMeeting,
-  timebox,
+  meetingsFor, newApproach, pingsFor, prepareMerge, recordMerged, recordPush, reportsFor,
+  scheduleMeeting, teamSchedule, timebox,
 } from './devops-scrum.mjs'
 
 const AT = '2026-11-24T10:00:00Z'
@@ -235,6 +235,12 @@ test('backlog goals carry the client objective, acceptance criteria, priority an
   assert.deepEqual(dependent.board.goals[NEXT].depends_on, [GOAL])
   const badDeps = { businessAnalyst: BA, items: [{ ...item, dependsOn: ['A1'] }] }
   assert.throws(() => meet(planned, 'refinement', { record: badDeps }), /dependsOn lists/)
+  const bugs = meet(planned, 'refinement', {
+    record: { businessAnalyst: BA, items: [{ ...item, bugIssues: [42, 42] }] },
+  })
+  assert.deepEqual(bugs.board.goals[NEXT].bug_issues, [42])
+  const badBugs = { businessAnalyst: BA, items: [{ ...item, bugIssues: ['#42'] }] }
+  assert.throws(() => meet(planned, 'refinement', { record: badBugs }), /bugIssues lists/)
 })
 
 test('the joint Sprint Review demos Done features, records Q&A, and adds backlog goals', () => {
@@ -519,7 +525,7 @@ test('when the lead wrote the goal, another member signs for the lead', () => {
 /** GOAL signed by its peer and lead, the sprint's Sprint Review scheduled. */
 /** The client's expectations on GOAL, and the BA's first-signature details that meet them. */
 const EXPECTED = { objective: 'Empty config parses', acceptance: ['empty config loads'] }
-const FIRST = { demoer: DEV, meets: EXPECTED.acceptance }
+const FIRST = { demoer: DEV, meets: true }
 
 function leadSigned() {
   const state = unverified()
@@ -545,7 +551,7 @@ test('Done chain: BA signs on the demo list, again while Orchestration prepares'
   assert.throws(() => step(state.board, BA, { ...FIRST, kind: 'chore' }), /demo kind/)
   assert.throws(() => step(state.board, BA, { meets: FIRST.meets }), /agent hash of the seat/)
   assert.throws(() => step(state.board, BA, { demoer: DEV }),
-    /does not meet the client's expectations yet: empty config loads/)
+    /confirms the goal meets its acceptance criteria/)
   const first = step(state.board, BA, { ...FIRST, surface: 'terminal' }).board
   const signed = first.goals[GOAL].signoffs.at(-1)
   assert.deepEqual(signed.demo, { kind: 'feature', agent: DEV, surface: 'terminal' })
@@ -818,15 +824,41 @@ test('every signature item is a valid chain.signature envelope', () => {
   assert.equal(validateEnvelope(last).ok, true)
 })
 
-test('the BA cannot sign while a bug is open on the goal', () => {
+/** A QA triage hand-off on GOAL (a bug found in discovery), still open. */
+function withTriage(board) {
+  const next = structuredClone(board)
+  next.goals[GOAL].author_agents = [DEV]
+  next.handoffs['handoff-b0b0b0'] = {
+    payload: {
+      goal: GOAL, kind: 'triage', item: 'item-a1a1a1',
+      from: { agent: JUDGE_LEAD, team: JUDGE_TEAM }, to: { agent: DEV, team: TEAM },
+    },
+    state: 'sent',
+  }
+  return next
+}
+
+test('a reported bug is not signed: the BA denies it as a bug fix and the coders hear', () => {
   const state = leadSigned()
-  const bug = openThread(state.board, {
+  const talk = openThread(state.board, {
     goal: GOAL, item: 'item-a1a1a1', topic: 'bug', agent: JUDGE_LEAD, team: JUDGE_TEAM,
-    body: 'Crashes on a BOM', at: AT, mint: () => 'b0b0b0',
+    body: 'Is this a bug?', at: AT,
   })
-  assert.throws(() => step(bug.board, BA, FIRST), /while a bug is open \(thread-b0b0b0\)/)
-  const fixed = resolveThread(bug.board, { thread: bug.id, agent: JUDGE_LEAD, at: AT })
-  assert.equal(step(fixed, BA, FIRST).board.reports[state.report].state, 'ba_signed')
+  assert.equal(step(talk.board, BA, FIRST).board.reports[state.report].state, 'ba_signed')
+  const found = ok(withTriage(state.board), BA)
+  const fix = found.goals[GOAL].bug_fix
+  assert.equal(fix.reason, 'bug fix needed: triage handoff-b0b0b0')
+  assert.equal(found.goals[GOAL].state, 'in_progress')
+  assert.equal(found.reports[state.report].state, 'reopened')
+  assert.equal(fix.issue_draft.title, `Bug fix needed: ${found.goals[GOAL].title}`)
+  assert.deepEqual(unreadThreads(found, DEV).map(t => t.topic), ['bug fix needed'])
+  const issue = structuredClone(state.board)
+  issue.goals[GOAL].bug_issues = [42]
+  assert.equal(ok(issue, BA).goals[GOAL].bug_fix.reason, 'bug fix needed: issue #42')
+  const asBug = done(ok(state.board, BA), BA, { ...FIRST, kind: 'bug' })
+  assert.equal(asBug.bugFixNeeded.reason, 'bug fix needed')
+  const last = Object.values(asBug.board.signatures).at(-1)
+  assert.deepEqual([last.body.step, last.body.verdict], ['ba', 'deny'])
 })
 
 test('push-ok approves an item on its own; only a dependency can hold it back', () => {
@@ -850,6 +882,11 @@ test('push-ok approves an item on its own; only a dependency can hold it back', 
     [LEAD, 'pushed'])
   assert.throws(() => recordPush(board, { ids: [report], by: LEAD, tree: 'a', at: AT }),
     /is not approved/)
+  assert.throws(() => recordMerged(approved, { ids: [report], by: LEAD, at: AT }), /not pushed/)
+  pushed.reports[report].merge.side = ['local/item-a1a1a1-agent-c0c0c0-1']
+  const merged = recordMerged(pushed, { ids: [report], by: LEAD, at: AT })
+  assert.deepEqual(merged.side, ['local/item-a1a1a1-agent-c0c0c0-1'])
+  assert.equal(merged.board.reports[report].merged_by, LEAD)
 })
 
 test('the Sprint Review roster shows the demoer the BA scheduled', () => {
@@ -863,4 +900,9 @@ test('the Sprint Review roster shows the demoer the BA scheduled', () => {
   const held = hold(DEV).board
   const record = Object.values(held.meetings).find(m => m.kind === 'review' && m.record).record
   assert.equal(record.roster[0].agent, DEV)
+  const row = record.schedule.find(r => r.team === TEAM)
+  assert.deepEqual(row.demos, [{ goal: GOAL, kind: 'feature', agent: DEV }])
+  assert.ok(row.goals.includes(GOAL) && row.tasks.length > 0)
+  assert.deepEqual(teamSchedule(held, { sprint: state.sprint }), record.schedule)
+  assert.deepEqual(teamSchedule(held, { sprint: 'sprint-ffffff' }), [])
 })

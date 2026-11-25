@@ -85,20 +85,34 @@ function reportIds(rest: string): { ids: string[]; words: string[] } {
 async function grantPush($: EngineInterface, ids: string[] = []): Promise<string> {
   const tree = await headTree($)
   if (tree === undefined) return 'The tree cannot be read; no push is allowed.'
-  let board = ''
-  if (ids.length > 0) {
-    const ran = await runPluginScript($, CHAIN_SCRIPT, ['approve', ...ids])
-    if (!ran.ok) return `No push granted: ${ran.out ?? 'the board could not be updated'}`
-    board = `\n${ran.out ?? ''}`
-  }
+  const ran = ids.length > 0
+    ? await runPluginScript($, CHAIN_SCRIPT, ['approve', ...ids])
+    : await waitingRefusal($)
+  if (!ran.ok) return `No push granted: ${ran.out ?? 'the board could not be updated'}`
   await $.state.set(PUSH_KEY, tree)
   await $.state.set(PUSH_REPORTS, ids)
-  const unnamed = ids.length > 0 ? ''
-    : '\nNo merge report named: name them (/devops push-ok report-…) to approve them.'
+  const board = ids.length > 0 ? `\n${ran.out ?? ''}`
+    : '\nNo merge report waits for you, so this push approves none.'
   return `One push is allowed on tree ${tree.slice(0, 12)} (human word is final; `
     + 'same as saying "push" in chat). A missing QA PASS or Security CLEAR is '
     + 'recorded as an override, not a refusal. A new commit voids the grant. '
-    + 'It is consumed by that push. Keep development running.' + board + unnamed
+    + 'It is consumed by that push. Keep development running.' + board
+}
+
+/**
+ * A push-ok naming no report is refused while merge reports wait for the
+ * person: it must name the ones it approves. With none waiting, the
+ * person's word still grants the push (the client override).
+ */
+async function waitingRefusal($: EngineInterface): Promise<{ out?: string; ok: boolean }> {
+  const ran = await runPluginScript($, CHAIN_SCRIPT, ['waiting'])
+  const waiting = reportIds(ran.out ?? '').ids
+  if (waiting.length === 0) return { ok: true }
+  return {
+    ok: false,
+    out: `merge reports wait for you (${waiting.join(', ')}); name the ones you `
+      + `approve: /devops push-ok ${waiting[0]}`,
+  }
 }
 
 /** Consumes the push grant; the merge reports it named are recorded as pushed. */

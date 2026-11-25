@@ -35,7 +35,7 @@ import { isTeamId } from '../scripts/devops-ids.mjs'
 import { RISKS, planAllocation, spinUp } from '../scripts/devops-allocation.mjs'
 import {
   MEETING_KINDS, baScan, forwardReports, goalDone, goalVerdict, holdMeeting, leadSignOff,
-  meetingsFor, newApproach, pingsFor, prepareMerge, reportsFor, scheduleMeeting,
+  meetingsFor, newApproach, pingsFor, prepareMerge, reportsFor, scheduleMeeting, teamSchedule,
 } from '../scripts/devops-scrum.mjs'
 import {
   TEAM_DIR, needsAttention, openBoard, readMembers, recordRefusal, teamIntake, teamMove,
@@ -1103,11 +1103,11 @@ const TOOLS = [
     description: [
       '"done" on the Done-chain step a goal waits for, after the same caller\'s merge-ok',
       '(goal_merge): the peer verifies, the lead signs (filing the done report), the',
-      'Business Analyst signs when the goal meets the client\'s expectations (`meets`: every',
-      'acceptance criterion) and goes on the scheduled Sprint Review\'s demo list (`kind`,',
-      '`surface`, `demoer`), and again once Orchestration prepares the merge presentation;',
-      'never while a `bug` thread is open on the goal. Each step is a chain.signature envelope.',
-      'The client\'s push-ok signs last.',
+      'Business Analyst signs when the goal meets its acceptance criteria (`meets`) and goes',
+      'on the scheduled Sprint Review\'s demo list (`kind`, `surface`, `demoer`), and again',
+      'once Orchestration prepares the merge presentation. A bug (kind bug, an open bug issue',
+      'or triage) is not signed: it is denied as "bug fix needed" and the coders are told.',
+      'Each step is a chain.signature envelope. The client\'s push-ok signs last.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -1117,8 +1117,8 @@ const TOOLS = [
         surface: { enum: ['gui', 'browser', 'terminal', 'other'] },
         demoer: { type: 'string', description: 'BA first signature: the demoing seat hash.' },
         meets: {
-          type: 'array', items: { type: 'string' },
-          description: "BA first signature: the goal's acceptance criteria it meets (all).",
+          type: 'boolean',
+          description: 'BA first signature: the goal meets its acceptance criteria.',
         },
       },
       required: ['caller', 'goal'],
@@ -1205,7 +1205,8 @@ const TOOLS = [
       'Orchestration only: deliver the done reports the BA signed twice to the client as one',
       'merge report: a summary and the big-picture merge plan (the real branch, how it fits',
       'the design, the implementation, the risks). The client\'s /devops push-ok (or',
-      'merge-ok) approves it and grants the push; merge-deny sends it back to the BA.',
+      'merge-ok) approves it and grants the push; merge-deny sends it back to the BA. The',
+      'approval lets the virtual history move into real history, compressed on the PR branch.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -1221,6 +1222,11 @@ const TOOLS = [
             design: { type: 'string', maxLength: MAX_TASK_TEXT },
             implementation: { type: 'string', maxLength: MAX_TASK_TEXT },
             risks: { type: 'array', items: { type: 'string' } },
+            side: {
+              type: 'array', items: { type: 'string' },
+              description: 'Temporary virtual-git branches (local/ refs, side worktree paths) '
+                + 'deleted once the real PR is merged.',
+            },
           },
           required: ['branch', 'design', 'implementation'],
           additionalProperties: false,
@@ -1528,7 +1534,8 @@ const INBOX_TEMPLATES = [
   {
     uriTemplate: 'devops://meetings/{sprint}',
     name: 'Sprint meetings',
-    description: "A sprint's allocation and its teams' meetings (scheduled and held).",
+    description: "A sprint's allocation, its teams' meetings (scheduled and held) and the "
+      + 'joint schedule by team hash (goals, tasks, demos).',
     mimeType: 'application/json',
   },
   {
@@ -1577,7 +1584,11 @@ const RESOURCE_PATTERNS = [
   [/^devops:\/\/meetings\/(sprint-[0-9a-f]{6})$/, sprint => {
     const board = readBoard({})
     const allocation = board.allocations?.[sprint] ?? null
-    return { allocation, meetings: meetingsFor(board, { sprint }) }
+    return {
+      allocation,
+      meetings: meetingsFor(board, { sprint }),
+      schedule: teamSchedule(board, { sprint }),
+    }
   }],
 ]
 

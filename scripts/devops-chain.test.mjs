@@ -76,3 +76,41 @@ test('a seat word needs a bound seat, and runs only that seat\'s own step', () =
   fs.writeFileSync(file, JSON.stringify(waiting()))
   assert.throws(() => run(['done', GOAL, '--dest', root]), /only a seat bound with DEVOPS_SEAT/)
 })
+
+/** A board file under `root` holding `board`. */
+function boardAt(root, board) {
+  const file = path.join(root, BOARD_FILE)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, JSON.stringify(board))
+}
+
+test('waiting lists the merge reports a bare push-ok must name', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chain-'))
+  boardAt(root, waiting([GOAL, OTHER]))
+  assert.equal(run(['waiting', '--dest', root]), 'waiting: report-aaaaa0 report-aaaaa1')
+  boardAt(root, emptyBoard())
+  assert.equal(run(['waiting', '--dest', root]), 'No merge report waits for you.')
+})
+
+test('merged needs the pushed tree on the base, then deletes the side branches', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chain-'))
+  const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
+  git(['init', '-q', '-b', 'main'])
+  git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'x'])
+  const side = 'local/item-a1a1a1-agent-c0c0c0-1'
+  git(['branch', side])
+  const board = waiting()
+  Object.assign(board.reports['report-aaaaa0'], {
+    state: 'approved', pushed_at: AT, pushed_tree: 'b'.repeat(40), merge: { side: [side, '/x'] },
+  })
+  boardAt(root, board)
+  const merged = () => run(['merged', '--base', 'main', 'report-aaaaa0', '--dest', root])
+  assert.throws(merged, e => /the real PR is not merged/.test(e.stderr))
+  board.reports['report-aaaaa0'].pushed_tree = git(['rev-parse', 'HEAD^{tree}'])
+  boardAt(root, board)
+  assert.equal(merged(), [
+    'Merge recorded on report-aaaaa0', `deleted ${side}`,
+    'left /x: not a local/ ref or a side worktree',
+  ].join('\n'))
+  assert.equal(git(['branch', '--list', side]), '')
+})

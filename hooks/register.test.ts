@@ -54,10 +54,11 @@ interface Setup {
   security?: string; git?: Record<string, string | undefined>; cwd?: string | null
   runs?: string[][]
   chainRefuses?: string
+  chainWaiting?: string
 }
 
 function engine(on: any, note: string | undefined, setup: Setup = {}) {
-  const { security, git = {}, cwd = '/work', runs, chainRefuses } = setup
+  const { security, git = {}, cwd = '/work', runs, chainRefuses, chainWaiting } = setup
   const state = new Map<string, unknown>()
   on('state.get', (_: unknown, e: { key: string }) => ({ value: { value: state.get(e.key), version: 1 } }))
   on('state.set', (_: unknown, e: { key: string; value: unknown }) => {
@@ -79,6 +80,9 @@ function engine(on: any, note: string | undefined, setup: Setup = {}) {
     if (argv[0] === 'git') return { value: fakeGit(argv, git) }
     if (argv.some(a => a.endsWith('devops-chain.mjs'))) {
       const refused = chainRefuses !== undefined
+      if (argv[2] === 'waiting' && chainWaiting !== undefined) {
+        return { value: { exitCode: 0, stdout: `${chainWaiting}\n`, stderr: '' } }
+      }
       return {
         value: {
           exitCode: refused ? 2 : 0, stdout: refused ? '' : `board: ${argv[2]}\n`,
@@ -656,9 +660,23 @@ test('the person\'s push-ok, merge-ok or done naming reports approves them', asy
     expect(state.get('pushReports')).toEqual([REPORT])
   }
   const bare = await $.command.run({ ...PERSON, args: 'push-ok' })
-  expect(bare.text).toContain('No merge report named')
+  expect(bare.text).toContain('No merge report waits for you')
   expect(state.get('pushReports')).toEqual([])
-  expect(chainRuns(runs)).toEqual([['approve', REPORT], ['approve', REPORT], ['approve', REPORT]])
+  expect(chainRuns(runs)).toEqual([
+    ['approve', REPORT], ['approve', REPORT], ['approve', REPORT], ['waiting'],
+  ])
+})
+
+test('a bare push-ok is refused while merge reports wait for the person', async ($, on) => {
+  const waiting = `waiting: ${REPORT} report-defdef`
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, chainWaiting: waiting })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  for (const args of ['push-ok', 'push']) {
+    const ran = await $.command.run({ ...PERSON, args })
+    expect(ran.text).toContain(`No push granted: merge reports wait for you (${REPORT}`)
+    expect(ran.text).toContain(`/devops push-ok ${REPORT}`)
+  }
+  expect(state.get('pushAuthorized')).toBe(undefined)
 })
 
 test('a refused approval (a dependency not signed off) grants no push', async ($, on) => {
