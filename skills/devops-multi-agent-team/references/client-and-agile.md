@@ -95,9 +95,11 @@ and Daily Scrums watch load against that order.
 When strain appears on a higher-priority item, the **team lead**
 reallocates in the **Daily Scrum**: move idle or lower-priority seats
 onto the strained item (or drop / defer lower work). Reallocations are
-recorded on the meeting record (`reallocations`). The Business Analyst
-checks that the move still serves the client's stated objectives and
-notes cost impact (seat-time, deferred scope).
+recorded on the meeting record (`reallocations`). Free-text
+reallocations are record-only and do not move board work. Only a
+reallocation that names both a goal and a job moves board work.
+The Business Analyst checks that the move still serves the client's
+stated objectives and notes cost impact (seat-time, deferred scope).
 
 ## Show live: demo vs reproduction
 

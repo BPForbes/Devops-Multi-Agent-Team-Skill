@@ -55,6 +55,8 @@ and carry the client's feedback back as goals.
 4. **Stress and strain.** At Daily Scrum, flag high-priority items that
    are delayed (strain) and support the team lead's reallocation with a
    cost check. Do not block a reallocation the lead decides under strain.
+   Free-text reallocations are record-only and do not move board work.
+   Only a reallocation that names both a goal and a job moves board work.
 5. **Meetings.** Attend Sprint Planning, Daily Scrum, Backlog
    Refinement and the joint Sprint Review (the board refuses Planning,
    Refinement and Review without you). Ahead of the Sprint Review,

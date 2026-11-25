@@ -181,6 +181,22 @@ test('a Daily Scrum reallocation onto a goal and job moves the seat\'s board wor
   assert.throws(refused, /both its goal and its job/)
 })
 
+test('a free-text reallocation is record-only and does not move board work', () => {
+  const planned = meet(sprintBoard(), 'planning', { record: PLAN })
+  const given = assignWork(planned.board, {
+    goal: NEXT, job: 'coder', agent: DEV, team: TEAM, description: 'polish', by: LEAD, at: AT,
+  })
+  const state = { ...planned, board: given.board }
+  const note = { agent: DEV, to: 'parser fix', reason: 'priority 1 delayed' }
+  const record = { businessAnalyst: BA, updates: [UPDATE], reallocations: [note] }
+  const daily = meet(state, 'daily', { minutes: 10, attendees: [LEAD, DEV, BA], record })
+  const held = daily.board.meetings[daily.id].record.reallocations[0]
+  assert.equal(held.work, undefined)
+  assert.equal(held.to, 'parser fix')
+  assert.equal(daily.board.assignments[given.id].state, 'assigned')
+  assert.deepEqual(workInbox(daily.board, DEV).map(w => w.goal), [NEXT])
+})
+
 test('Planning, Refinement and the Sprint Review need the Business Analyst; Daily does not', () => {
   const { businessAnalyst, ...noBa } = PLAN
   assert.equal(businessAnalyst, BA)

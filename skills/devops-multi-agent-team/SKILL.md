@@ -240,7 +240,9 @@ mode; it is not compliance.
   pushes). Do not ask the client to re-approve the same override every
   turn.
 - **Agile loop.** Team leads reallocate under **stress/strain** at
-  Daily Scrum; the Business Analyst tracks objectives and cost and
+  Daily Scrum. Free-text reallocations are record-only and do not move
+  board work; only a goal-and-job reallocation does. The Business Analyst
+  tracks objectives and cost and
   prepares the joint Sprint Review **demo** roster. When AI seats
   discuss a concrete feature or bug with each other, **reproduce** it
   live (GUI / browser / terminal); standup / Planning / Refinement do
@@ -413,7 +415,9 @@ e.g. `[Planner]`; a spawned seat adds both, e.g.
   **reproduction**, not standup demos (`devops-business-analyst.md`).
 - **Team lead** — runs that team's meetings; at Daily Scrum measures
   **stress/strain** and **reallocates** seats onto higher-priority
-  delayed work ([scrum-meetings.md](references/scrum-meetings.md)).
+  delayed work. Free-text reallocations are record-only and do not
+  move board work; only a goal-and-job reallocation does
+  ([scrum-meetings.md](references/scrum-meetings.md)).
 - **Researcher** — owns the repository mind map (refresh, query, carry it
   into the brief), reads documentation first (Markdown, LaTeX, code
   comments), maps the modules (Mermaid mind map), double-checks reuse and
