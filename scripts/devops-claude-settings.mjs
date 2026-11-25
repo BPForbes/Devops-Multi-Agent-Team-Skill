@@ -41,7 +41,7 @@ export function normalizeSkillName(raw) {
     throw new Error(`invalid skill name: ${raw}`)
   }
   if (KNOWN_SKILLS.includes(stripped)) return stripped
-  if (SKILL_ALIASES[stripped]) return SKILL_ALIASES[stripped]
+  if (Object.hasOwn(SKILL_ALIASES, stripped)) return SKILL_ALIASES[stripped]
   return stripped
 }
 

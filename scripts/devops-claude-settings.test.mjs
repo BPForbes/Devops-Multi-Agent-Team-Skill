@@ -26,6 +26,8 @@ test('skill names normalize to bare folder names', () => {
   assert.equal(normalizeSkillName('devops-multi-agent-team:cleanup'), 'devops-cleanup')
   assert.equal(normalizeSkillName('devops-multi-agent-team/cleanup'), 'devops-cleanup')
   assert.equal(normalizeSkillName('cleanup'), 'devops-cleanup')
+  assert.equal(normalizeSkillName('constructor'), 'constructor')
+  assert.equal(normalizeSkillName('toString'), 'toString')
   assert.throws(() => normalizeSkillName(''), /required/)
   assert.throws(() => normalizeSkillName('../x'), /invalid/)
 })
