@@ -45,5 +45,6 @@ Prefer the issue's existing branch or PR over new branches.
 4. Bug issues come from the team lead: after the client answers a bug
    report, the team lead puts the issue on the board (`bug_issue`, a
    backlog goal with `issue_draft`) and files that draft in the project's
-   repo. Map it to acceptance criteria when asked; do not file it
-   yourself.
+   repo, titled `#<number> <description>` with the work item hash in the
+   body, then records the number (`bug_filed`). Map it to acceptance
+   criteria when asked; do not file it yourself.

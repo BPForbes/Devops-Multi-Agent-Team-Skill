@@ -50,8 +50,11 @@ Reviewer, QA, Security, Business Analyst, and every other role).
   bug report through Orchestration (issue, reason, proposed solutions,
   files, lines, snippets, an easy-to-read explanation, a plan of attack).
   Type `/devops bug REPORT fine`, `fix N` (proposal N) or `fix` with your
-  own alternative. The team lead then puts the issue on the board and
-  assigns it without overworking anyone; it may wait in the backlog
+  own alternative. The team lead then puts the issue on the board, files
+  it as `#<number> <description>`, and assigns it without overworking
+  anyone; it may wait in the backlog. Work past a seat's limit of three
+  goes to the BA, who asks you (`/devops load REPORT approve|decline`)
+  when it cannot decide
   ([scrum-meetings.md](scrum-meetings.md), Bug flow).
 - The client's step on the board comes after the BA's two signatures and
   never replaces them. A client order to ship sooner is still obeyed at

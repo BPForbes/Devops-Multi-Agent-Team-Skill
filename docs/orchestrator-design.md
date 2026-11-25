@@ -578,7 +578,8 @@ Alternative: one primary plus one secondary at once. Why it matters: the team
 lead also codes and reviews, so a lead holding two active items is the most
 likely way for a pod to stall unnoticed. Built on the goal board: a seat
 holding three open pieces of assigned work (`OPEN_WORK_LIMIT`, assigned or
-accepted) is given no more.
+accepted) has any more held for the team's BA, who approves or declines it
+against the client's objectives, or asks the client.
 
 **Q7. What "done" means for a goal.** Default: a goal is done when all its
 items are done, and every item's done needs the human push-ok. Question: may a

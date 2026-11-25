@@ -112,7 +112,9 @@ needed (`goal_scan`) and whose hold or deny blocks it; merge-deny with a
 reason reopens the goal. A bug found by any seat is raised at the Daily
 Scrum; the BA reports it to the person (`bug_report`), who answers with
 `/devops bug REPORT fine|fix N|fix TEXT`, and the team lead puts the issue
-on the board (`bug_issue`) and assigns it within the open-work limit
+on the board (`bug_issue`), records the filed issue as `#<number>
+<description>` (`bug_filed`), and assigns it; work past a seat's limit of
+three is held for the BA (`work_decide`), who may ask the person
 ([scrum-meetings.md](references/scrum-meetings.md), Bug flow). A one-file fix gets
 one Coder and one Reviewer, QA and Security, each on its own team that
 wrote nothing. The

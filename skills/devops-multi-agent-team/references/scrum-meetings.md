@@ -71,16 +71,31 @@ Only the team lead decides a reallocation; the BA does not veto it.
 4. **The team lead makes the issue.** From the BA's report and the
    client's choice, the team lead adds the issue to the board
    (`bug_issue`): a backlog goal of kind `bug` with the issue draft
-   (`issue_draft`: title and body with the explanation, now/expected, the
+   (`issue_draft`: title and body opening with the work item,
+   `Work item: goal-<hex> (bug)`, then the explanation, now/expected, the
    client's fix, the plan, files, lines and snippets) and the client's
    choice (`client_feedback`). Filing that draft as an issue in the
    project's repo is the team lead's job, outside the board and outside
    this branch; the board never files it. Report: `issue_drafted`.
-5. **The team lead assigns it, without overworking the team.** The lead
+5. **The team lead records the real issue.** Once filed, the lead records
+   its number (`bug_filed`). A real issue is titled `#<number>
+   <description>`: the bug goal and its draft take that title, the goal
+   keeps the number (`issue`), and the goal the bug touches lists it
+   (`bug_issues`). A title without the number and a description, or a
+   body that does not name the work item hash, is refused. The work item
+   stays of kind `bug`. A listed issue stops counting as a reported bug
+   once its bug goal is done.
+6. **The team lead assigns it, without overworking the team.** The lead
    may give the bug goal to a seat at once (`assign`), or leave it in the
-   backlog for planning. A seat already holding three open pieces of work
-   (assigned or accepted; `OPEN_WORK_LIMIT`) is refused: pick a seat with
-   room, or let the item wait in the backlog.
+   backlog for planning. Work that would take a seat past three open
+   pieces (assigned or accepted; `OPEN_WORK_LIMIT`) is **held** and goes
+   to the team's BA (a `load` ping in `devops://reports`), who checks it
+   against the client's objectives (`work_decide`): approve gives it to
+   the seat, decline drops it with a reason. When the BA cannot decide,
+   it asks the client through Orchestration (`ask`, a load report); the
+   person answers `/devops load REPORT approve|decline [REASON]`. Until
+   then the seat does not see the work. This holds for any assignment,
+   not only bugs.
 
 While the client's fix is open, the bug counts as a reported bug on the
 goal it touches, so the BA does not sign that goal (see the chain below).

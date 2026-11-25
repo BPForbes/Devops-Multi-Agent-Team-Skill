@@ -111,6 +111,10 @@ and carry the client's feedback back as goals.
    code snippets, an easy-to-read explanation and the plan of attack.
    The person answers (`/devops bug REPORT fine|fix N|fix TEXT`); give
    the team lead that answer so it can make the issue (`bug_issue`).
+   Work held past a seat's open-work limit (3) pings you (step `load`):
+   check it against the client's objectives and approve or decline it
+   (`work_decide`); when you cannot decide, `ask` the client through
+   Orchestration (the person answers `/devops load REPORT approve|decline`).
 12. **Reproduction vs meetings.** Daily Scrum / Planning / Refinement
    do **not** need reproductions by default. When seats help each
    other on a feature or bug, they **reproduce** it live

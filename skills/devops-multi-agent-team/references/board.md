@@ -26,10 +26,12 @@ A goal moves one step at a time along:
 
 A goal may go to `blocked` from any state and return to the state it left.
 A goal the BA denies for an unfixed reported bug goes back to `backlog`
-(out of its sprint) until the bug is fixed. Work assignment is capped: a
-seat holding three open pieces (`OPEN_WORK_LIMIT`, assigned or accepted)
-gets no more; the lead picks a seat with room or leaves the goal in the
-backlog.
+(out of its sprint) until the bug is fixed. Work assignment is capped: work
+that would take a seat past three open pieces (`OPEN_WORK_LIMIT`, assigned
+or accepted) is `held` until the team's BA approves or declines it against
+the client's objectives, or asks the client (`work_decide`,
+`/devops load`). Held work is not in the seat's inbox. Real bug issues are
+titled `#<number> <description>` and name their work item (`bug_filed`).
 `board_move_goal` refuses a jump that skips a step. The step names match the
 hand-off kinds, so the board tells a reader which hand-off is next.
 
