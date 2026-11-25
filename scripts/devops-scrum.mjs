@@ -1327,7 +1327,7 @@ function dependsOnWaiting(next, id, waiting) {
 }
 
 /** Records a skipped dependency on the report and returns it for the signatures. */
-function dependencyRisk(next, goal, at, client, blocker, report) {
+function dependencyRisk(next, goal, { at, client, blocker, report }) {
   need(client !== undefined, 'a risk override needs a reason')
   return {
     risk: writeRisk(next, goal, {
@@ -1341,8 +1341,8 @@ function dependencyRisk(next, goal, at, client, blocker, report) {
 function approveOne(next, id, at, client) {
   const row = next.reports[id]
   const blocker = blockingDependency(next, row.goal)
-  const carried = blocker === undefined
-    ? {} : dependencyRisk(next, row.goal, at, client, blocker, id)
+  const carried = blocker === undefined ? {}
+    : dependencyRisk(next, row.goal, { at, client, blocker, report: id })
   recordVerdict(next, row.goal, { step: 'client', by: 'client', verdict: 'ok', at, ...carried })
   sign(next, row.goal, { step: 'client', by: 'client', at, report: id, ...carried })
   Object.assign(row, { state: 'approved', decided_at: at })

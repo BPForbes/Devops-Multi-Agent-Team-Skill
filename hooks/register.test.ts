@@ -679,7 +679,7 @@ test('a bare push-ok is refused while merge reports wait for the person', async 
   expect(state.get('pushAuthorized')).toBe(undefined)
 })
 
-test('the person\'s push-ok --risk is sent to the chain; a goal-only risk grants no push', async ($, on) => {
+test('push-ok --risk is sent to the chain; a goal-only risk grants no push', async ($, on) => {
   const runs: string[][] = []
   const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })

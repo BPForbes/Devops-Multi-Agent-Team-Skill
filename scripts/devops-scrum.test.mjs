@@ -977,7 +977,9 @@ function assertSkipsAreNotPasses(board, goal) {
 
 test('the client can record missing Review, QA and Security checks; the lead can then sign', () => {
   const state = unverdicted()
-  const sign = () => leadSignOff(state.board, { sprint: state.sprint, goal: GOAL, lead: LEAD, at: AT })
+  const sign = () => leadSignOff(state.board, {
+    sprint: state.sprint, goal: GOAL, lead: LEAD, at: AT,
+  })
   assert.throws(sign, /no review hand-off to QA/)
   const reason = 'Ship the demo; Review, QA and Security have not handed it on'
   assert.throws(() => clientSignOff(state.board, { goals: [GOAL], at: AT }),

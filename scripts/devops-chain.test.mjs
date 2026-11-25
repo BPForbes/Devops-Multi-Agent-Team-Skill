@@ -64,7 +64,8 @@ test('a seat cannot record a risk override; the client can, on a goal or a depen
     ['approve', '--risk', 'ship', '--goal', GOAL, '--dest', root],
     { DEVOPS_SEAT: 'agent-0a0a0a' },
   ), e => /only the client records a risk override/.test(e.stderr))
-  assert.throws(() => run(['approve', '--risk', '--dest', root]), e => /needs a reason/.test(e.stderr))
+  const bare = () => run(['approve', '--risk', '--dest', root])
+  assert.throws(bare, e => /needs a reason/.test(e.stderr))
 })
 
 test('the client approves named reports, dependencies first, and records who pushed', () => {

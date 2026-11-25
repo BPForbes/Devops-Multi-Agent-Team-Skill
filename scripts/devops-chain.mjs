@@ -77,10 +77,7 @@ function denyReports(board, { ids, reason, at }) {
   return { board: next, text }
 }
 
-/**
- * A bound seat: an agent hash on `who`, or `who` itself when the chain
- * was started with DEVOPS_SEAT.
- */
+/** `who.seat` for a seat word; `who` itself when DEVOPS_SEAT is that hash. */
 function seatActor(who) {
   const seat = typeof who === 'object' && who !== null ? who.seat : who
   return isAgentId(seat) ? seat : undefined
@@ -215,6 +212,14 @@ function actor(root, command) {
   return { seat, team, members }
 }
 
+/** Empty or flag-shaped text is not a risk reason. */
+function riskText(present, value) {
+  if (present && (value === undefined || String(value).startsWith('--'))) {
+    throw new Error('a risk override needs a reason')
+  }
+  return value
+}
+
 function main(argv) {
   const { command, positional, one, all, flag } = parse(argv)
   const known = [...Object.keys(PERSON_WORDS), 'pushed', 'waiting', 'merged', ...SEAT_WORDS]
@@ -225,10 +230,7 @@ function main(argv) {
   if (command === 'waiting') return console.log(waitingText(file)) ?? 0
   const base = one('--base')
   const proposal = one('--proposal')
-  const riskValue = one('--risk')
-  if (flag('--risk') && (riskValue === undefined || String(riskValue).startsWith('--'))) {
-    throw new Error('a risk override needs a reason')
-  }
+  const riskValue = riskText(flag('--risk'), one('--risk'))
   const extra = {
     kind: one('--kind'), surface: one('--surface'), demoer: one('--demoer'), meets: flag('--meets'),
     override: one('--override'), alternative: one('--alternative'),
