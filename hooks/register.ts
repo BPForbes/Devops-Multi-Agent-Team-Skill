@@ -60,29 +60,66 @@ function personOnlyText(word: string): string {
     + 'an agent cannot.'
 }
 
-// The Done chain's words. Seats run them on the board (goal_merge, goal_done);
-// typed by the person, they answer Orchestration's merge report.
+// The Done chain's words. A seat types them for its own step: the hook runs
+// them on the board as the seat bound in DEVOPS_SEAT and grants nothing.
+// Typed by the person (composer origin), they answer the merge report.
 const CHAIN_WORDS = new Set(['merge-ok', 'merge-deny', 'done'])
+const CHAIN_SCRIPT = 'devops-chain.mjs'
+const PUSH_REPORTS = { plugin: 'devops-multi-agent-team', key: 'pushReports' } as const
 
-const SEAT_CHAIN_TEXT = 'On the board, a seat runs merge-ok, merge-deny and done with the '
-  + 'goal_merge and goal_done tools, for the Done-chain step it signs. Typed here, these '
-  + "words are the client's answer to the merge report; they grant no push."
+const REPORT_ID = /^report-[0-9a-f]{6}$/
+
+/** The merge report ids named in typed words, and the words left over. */
+function reportIds(rest: string): { ids: string[]; words: string[] } {
+  const all = shellWords(rest)
+  const isReport = (w: string) => REPORT_ID.test(w)
+  return { ids: all.filter(isReport), words: all.filter(w => !isReport(w)) }
+}
 
 /**
- * The person's approval of the current tree: grants one push (PUSH_KEY) and
- * approves every merge report waiting for the client on the board. Returns
- * what happened, or undefined when the tree cannot be read.
+ * The person's approval of the current tree: grants one push (PUSH_KEY). A
+ * push-ok naming merge reports first approves them on the board; if the
+ * board refuses one (a dependency not approved), nothing is granted. Returns
+ * what happened.
  */
-async function grantPush($: EngineInterface): Promise<string | undefined> {
+async function grantPush($: EngineInterface, ids: string[] = []): Promise<string> {
   const tree = await headTree($)
-  if (tree === undefined) return undefined
+  if (tree === undefined) return 'The tree cannot be read; no push is allowed.'
+  let board = ''
+  if (ids.length > 0) {
+    const ran = await runPluginScript($, CHAIN_SCRIPT, ['approve', ...ids])
+    if (!ran.ok) return `No push granted: ${ran.out ?? 'the board could not be updated'}`
+    board = `\n${ran.out ?? ''}`
+  }
   await $.state.set(PUSH_KEY, tree)
-  const board = await runPluginScript($, 'devops-client.mjs', ['approve'])
+  await $.state.set(PUSH_REPORTS, ids)
+  const unnamed = ids.length > 0 ? ''
+    : '\nNo merge report named: name them (/devops push-ok report-…) to approve them.'
   return `One push is allowed on tree ${tree.slice(0, 12)} (human word is final; `
     + 'same as saying "push" in chat). A missing QA PASS or Security CLEAR is '
     + 'recorded as an override, not a refusal. A new commit voids the grant. '
-    + 'It is consumed by that push. Keep development running.'
-    + (board === undefined ? '' : `\n${board}`)
+    + 'It is consumed by that push. Keep development running.' + board + unnamed
+}
+
+/** Consumes the push grant; the merge reports it named are recorded as pushed. */
+async function consumeGrant($: EngineInterface): Promise<void> {
+  const tree = (await $.state.get(PUSH_KEY)).value
+  const ids = (await $.state.get(PUSH_REPORTS)).value ?? []
+  await $.state.set(PUSH_KEY, false)
+  await $.state.set(PUSH_REPORTS, [])
+  if (typeof tree === 'string' && ids.length > 0) {
+    await runPluginScript($, CHAIN_SCRIPT, ['pushed', '--tree', tree, ...ids])
+  }
+}
+
+/** A seat's typed chain word: its own step on the board, never a push grant. */
+async function seatChainWord($: EngineInterface, word: string, rest: string): Promise<string> {
+  const [goal = '', ...words] = shellWords(rest)
+  const reason = word === 'merge-deny' && !words.includes('--reason')
+    ? ['--reason', words.join(' ')] : words
+  const ran = await runPluginScript($, CHAIN_SCRIPT, [word, goal, ...reason])
+  return `Seat ${word} (routed to the board as DEVOPS_SEAT; no push is granted): `
+    + (ran.out ?? 'the board could not be updated')
 }
 
 function isHuman(e: unknown): boolean {
@@ -439,19 +476,20 @@ function resolveSkill(word: string, rest: string, raw: string): SkillMode | unde
   return interpretSkillIntent(raw)
 }
 
+/** Runs a plugin script on the session root: its printout and whether it exited 0. */
 async function runPluginScript(
   $: EngineInterface,
   script: string,
   args: string[],
-): Promise<string | undefined> {
+): Promise<{ out: string | undefined; ok: boolean }> {
   const root = await $.session.root()
   const command = ['node', `${$.plugin.root}/scripts/${script}`, ...args, '--dest', root]
   const ran = await $.process
     .run(command, { timeoutMs: SCRIPT_TIMEOUT_MS })
     .catch(() => undefined)
-  if (ran === undefined) return undefined
+  if (ran === undefined) return { out: undefined, ok: false }
   const out = `${ran.stdout}${ran.stderr}`.trim()
-  return out === '' ? undefined : out
+  return { out: out === '' ? undefined : out, ok: ran.exitCode === 0 }
 }
 
 async function runSkillMode($: EngineInterface, skill: SkillMode): Promise<string> {
@@ -459,7 +497,7 @@ async function runSkillMode($: EngineInterface, skill: SkillMode): Promise<strin
   const script = scriptNameFor(skill)
   const args = scriptArgsFor(skill)
   if (script === undefined || args === undefined) return cardText
-  const out = await runPluginScript($, script, args)
+  const { out } = await runPluginScript($, script, args)
   if (out === undefined) return cardText
   return `${cardText}\n\n--- tool output ---\n${out}`
 }
@@ -496,7 +534,9 @@ export const register: Register = on => {
     if (isPersonOnly(split.word, split.rest) && !isHuman(e)) {
       return { text: personOnlyText(split.word) }
     }
-    if (CHAIN_WORDS.has(split.word) && !isHuman(e)) return { text: SEAT_CHAIN_TEXT }
+    if (CHAIN_WORDS.has(split.word) && !isHuman(e)) {
+      return { text: await seatChainWord($, split.word, split.rest) }
+    }
 
     const mappedEarly = isGateWord(split.word)
       ? split
@@ -614,21 +654,25 @@ export const register: Register = on => {
     }
     if (word === 'push-ok' || word === 'merge-ok' || word === 'done') {
       // The grant names the tree it was given for: a later commit voids it.
-      const granted = await grantPush($)
-      return { text: granted ?? 'The tree cannot be read; no push is allowed.' }
+      return { text: await grantPush($, reportIds(rest).ids) }
     }
     if (word === 'merge-deny') {
-      const reason = rest.trim()
-      if (reason === '') return { text: 'Usage: /devops merge-deny REASON (the BA follows up).' }
+      const { ids, words } = reportIds(rest)
+      const reason = words.join(' ')
+      if (reason === '') {
+        return { text: 'Usage: /devops merge-deny [REPORT...] REASON (the BA follows up).' }
+      }
       await $.state.set(PUSH_KEY, false)
-      const board = await runPluginScript($, 'devops-client.mjs', ['deny', '--reason', reason])
+      await $.state.set(PUSH_REPORTS, [])
+      const ran = await runPluginScript($, CHAIN_SCRIPT, ['deny', ...ids, '--reason', reason])
       return {
         text: 'Merge denied; push permission withdrawn. The merge report goes back to the '
-          + 'Business Analyst with your reason.' + (board === undefined ? '' : `\n${board}`),
+          + 'Business Analyst with your reason.' + (ran.out === undefined ? '' : `\n${ran.out}`),
       }
     }
     if (word === 'push-reset') {
       await $.state.set(PUSH_KEY, false)
+      await $.state.set(PUSH_REPORTS, [])
       return { text: 'Push permission withdrawn.' }
     }
     if (word === 'allow-branch') {
@@ -688,7 +732,7 @@ export const register: Register = on => {
       ?? await publishDenial($, `GitHub ${tool}`)
     if (denied !== undefined) return { deny: denied }
     const ran = await next(e)
-    if (ran.deny === undefined) await $.state.set(PUSH_KEY, false)
+    if (ran.deny === undefined) await consumeGrant($)
     return ran
   })
 
@@ -698,7 +742,7 @@ export const register: Register = on => {
       const denied = await publishDenial($, `GitHub ${tool}`)
       if (denied !== undefined) return { deny: denied }
       const ran = await next(e)
-      if (ran.deny === undefined) await $.state.set(PUSH_KEY, false)
+      if (ran.deny === undefined) await consumeGrant($)
       return ran
     })
   }
@@ -754,7 +798,7 @@ export const register: Register = on => {
     if (audit !== undefined && ran.deny === undefined && audit.blocking + audit.nonBlocking > 0) {
       return { ...ran, context: [...(ran.context ?? []), auditContext(audit)] }
     }
-    if (consumeAuthorization && ran.deny === undefined) await $.state.set(PUSH_KEY, false)
+    if (consumeAuthorization && ran.deny === undefined) await consumeGrant($)
     if (ran.deny !== undefined || ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) === false) return ran
 
     const check = await checkRunBy($, e.command)

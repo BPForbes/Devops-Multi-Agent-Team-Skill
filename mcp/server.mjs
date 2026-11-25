@@ -38,7 +38,8 @@ import {
   meetingsFor, newApproach, pingsFor, prepareMerge, reportsFor, scheduleMeeting,
 } from '../scripts/devops-scrum.mjs'
 import {
-  needsAttention, openBoard, recordRefusal, teamIntake, teamMove, teamSignOff,
+  TEAM_DIR, needsAttention, openBoard, readMembers, recordRefusal, teamIntake, teamMove,
+  teamSignOff,
 } from '../scripts/devops-teams.mjs'
 
 const PKG = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'))
@@ -186,8 +187,6 @@ function readBoard(args) {
   }
 }
 
-const TEAM_DIR = path.join('.devops', 'teams')
-
 /** A team's own board file, under the project's teams folder. */
 function teamFile(args) {
   if (!isTeamId(args.team)) throw new Error('team must look like team-<hex>')
@@ -196,10 +195,7 @@ function teamFile(args) {
 
 /** The seat hashes listed on the team's own board, when it has one. */
 function teamMembers(args) {
-  if (!isTeamId(args.team)) return undefined
-  const file = teamFile(args)
-  if (!fs.existsSync(file)) return undefined
-  return JSON.parse(fs.readFileSync(file, 'utf8')).members?.map(m => m.agent)
+  return isTeamId(args.team) ? readMembers(teamFile(args)) : undefined
 }
 
 function boardOrThrow(current, team) {
@@ -1107,8 +1103,10 @@ const TOOLS = [
     description: [
       '"done" on the Done-chain step a goal waits for, after the same caller\'s merge-ok',
       '(goal_merge): the peer verifies, the lead signs (filing the done report), the',
-      'Business Analyst signs when the goal goes on the scheduled Sprint Review\'s demo list',
-      '(`kind`, `surface`) and again once Orchestration prepares the merge presentation.',
+      'Business Analyst signs when the goal meets the client\'s expectations (`meets`: every',
+      'acceptance criterion) and goes on the scheduled Sprint Review\'s demo list (`kind`,',
+      '`surface`, `demoer`), and again once Orchestration prepares the merge presentation;',
+      'never while a `bug` thread is open on the goal. Each step is a chain.signature envelope.',
       'The client\'s push-ok signs last.',
     ].join(' '),
     inputSchema: {
@@ -1117,6 +1115,11 @@ const TOOLS = [
         dest, caller: { type: 'string' }, team: { type: 'string' }, goal: { type: 'string' },
         kind: { enum: ['feature', 'improvement', 'bug'] },
         surface: { enum: ['gui', 'browser', 'terminal', 'other'] },
+        demoer: { type: 'string', description: 'BA first signature: the demoing seat hash.' },
+        meets: {
+          type: 'array', items: { type: 'string' },
+          description: "BA first signature: the goal's acceptance criteria it meets (all).",
+        },
       },
       required: ['caller', 'goal'],
       additionalProperties: false,
@@ -1124,7 +1127,7 @@ const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => boardChange(args, board => goalDone(board, {
       goal: args.goal, by: args.caller, team: args.team, members: teamMembers(args),
-      kind: args.kind, surface: args.surface, at: now(),
+      kind: args.kind, surface: args.surface, demoer: args.demoer, meets: args.meets, at: now(),
     })),
   },
   {

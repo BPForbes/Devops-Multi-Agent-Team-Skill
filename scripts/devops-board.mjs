@@ -1,8 +1,8 @@
 // Goal board and handoff server state (see references/board.md).
 // Pure functions over a plain object, written by the server (mcp/server.mjs).
 // Subagents read and act through its tools.
-// The client's merge-ok, merge-deny or push-ok also write it.
-// That goes through scripts/devops-client.mjs.
+// Typed Done-chain words, a seat's or the client's, also write it.
+// They go through scripts/devops-chain.mjs.
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { isAgentId, isGoalId, isItemId, isJob, isTeamId } from './devops-ids.mjs'
@@ -43,6 +43,7 @@ export function emptyBoard() {
     meetings: {},
     allocations: {},
     reports: {},
+    signatures: {},
   }
 }
 
@@ -50,7 +51,7 @@ export function emptyBoard() {
 export function normalizeBoard(board) {
   return {
     blame: [], threads: {}, exceptions: [], assignments: {}, reads: {},
-    meetings: {}, allocations: {}, reports: {},
+    meetings: {}, allocations: {}, reports: {}, signatures: {},
     ...board,
   }
 }

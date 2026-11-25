@@ -20,6 +20,8 @@ declare module 'claude-code' {
        * Security CLEAR (those misses are recorded under overrides).
        */
       pushAuthorized: string | false
+      /** The merge reports the person's push-ok named; recorded as pushed when it is consumed. */
+      pushReports?: string[]
       /** The last human push that overrode a seat gate: tree, rule, verdict seen, what, time. */
       lastOverride?: { tree: string; rule: string; verdict: string; what: string; at: string }
       /** Every human override, kept for audit. */

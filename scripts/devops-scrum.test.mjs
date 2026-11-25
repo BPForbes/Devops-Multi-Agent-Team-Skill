@@ -2,11 +2,13 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  addGoal, assignWork, createSprint, emptyBoard, moveGoal, workInbox,
+  addGoal, assignWork, createSprint, emptyBoard, moveGoal, openThread, resolveThread, workInbox,
 } from './devops-board.mjs'
+import { validateEnvelope } from './devops-envelopes.mjs'
 import {
   baScan, clientSignOff, forwardReports, goalDone, goalVerdict, holdMeeting, leadSignOff,
-  meetingsFor, newApproach, pingsFor, prepareMerge, reportsFor, scheduleMeeting, timebox,
+  meetingsFor, newApproach, pingsFor, prepareMerge, recordPush, reportsFor, scheduleMeeting,
+  timebox,
 } from './devops-scrum.mjs'
 
 const AT = '2026-11-24T10:00:00Z'
@@ -227,6 +229,12 @@ test('backlog goals carry the client objective, acceptance criteria, priority an
   )
   assert.throws(() => meet(planned, 'review', review([{ ...added, owner: 'A1' }])),
     /owner is a team hash/)
+  const dependent = meet(planned, 'refinement', {
+    record: { businessAnalyst: BA, items: [{ ...item, dependsOn: [GOAL] }] },
+  })
+  assert.deepEqual(dependent.board.goals[NEXT].depends_on, [GOAL])
+  const badDeps = { businessAnalyst: BA, items: [{ ...item, dependsOn: ['A1'] }] }
+  assert.throws(() => meet(planned, 'refinement', { record: badDeps }), /dependsOn lists/)
 })
 
 test('the joint Sprint Review demos Done features, records Q&A, and adds backlog goals', () => {
@@ -509,8 +517,13 @@ test('when the lead wrote the goal, another member signs for the lead', () => {
 })
 
 /** GOAL signed by its peer and lead, the sprint's Sprint Review scheduled. */
+/** The client's expectations on GOAL, and the BA's first-signature details that meet them. */
+const EXPECTED = { objective: 'Empty config parses', acceptance: ['empty config loads'] }
+const FIRST = { demoer: DEV, meets: EXPECTED.acceptance }
+
 function leadSigned() {
   const state = unverified()
+  Object.assign(state.board.goals[GOAL], structuredClone(EXPECTED))
   const signed = step(step(state.board, DEV).board, LEAD)
   const review = scheduleMeeting(signed.board, {
     sprint: state.sprint, team: TEAM, kind: 'review', lead: LEAD, at: AT, mint: nextHex,
@@ -528,10 +541,15 @@ test('Done chain: BA signs on the demo list, again while Orchestration prepares'
   assert.throws(() => ok(state.board, DEV), /only team-a1a1a1's Business Analyst/)
   const unscheduled = structuredClone(state.board)
   delete unscheduled.meetings[state.review]
-  assert.throws(() => step(unscheduled, BA), /schedule .*'s Sprint Review first/)
-  assert.throws(() => step(state.board, BA, { kind: 'chore' }), /demo kind/)
-  const first = step(state.board, BA, { surface: 'terminal' }).board
-  assert.deepEqual(first.goals[GOAL].signoffs.at(-1).demo, { kind: 'feature', surface: 'terminal' })
+  assert.throws(() => step(unscheduled, BA, FIRST), /schedule .*'s Sprint Review first/)
+  assert.throws(() => step(state.board, BA, { ...FIRST, kind: 'chore' }), /demo kind/)
+  assert.throws(() => step(state.board, BA, { meets: FIRST.meets }), /agent hash of the seat/)
+  assert.throws(() => step(state.board, BA, { demoer: DEV }),
+    /does not meet the client's expectations yet: empty config loads/)
+  const first = step(state.board, BA, { ...FIRST, surface: 'terminal' }).board
+  const signed = first.goals[GOAL].signoffs.at(-1)
+  assert.deepEqual(signed.demo, { kind: 'feature', agent: DEV, surface: 'terminal' })
+  assert.deepEqual(signed.expectations, EXPECTED)
   assert.throws(() => step(first, BA), /Orchestration prepares the merge presentation/)
   const prepare = b => prepareMerge(b, { ids: [report], at: AT })
   const preparing = prepare(first)
@@ -545,7 +563,8 @@ test('Done chain: BA signs on the demo list, again while Orchestration prepares'
     ['configs that relied on the crash'])
   assert.throws(() => done(told, BA), /client's push-ok signs the merge report/)
   assert.throws(() => ok(told, BA), /only the client signs the merge report/)
-  const approved = clientSignOff(told, { at: AT })
+  assert.throws(() => clientSignOff(told, { at: AT }), /names the merge reports/)
+  const approved = clientSignOff(told, { ids: [report], at: AT })
   assert.deepEqual(approved.approved, [report])
   assert.equal(approved.board.reports[report].state, 'approved')
   assert.equal(approved.board.goals[GOAL].signoffs.at(-1).step, 'client')
@@ -556,7 +575,7 @@ test('Done chain: BA signs on the demo list, again while Orchestration prepares'
 /** GOAL's merge report delivered to the client. */
 function delivered() {
   const state = leadSigned()
-  const first = step(state.board, BA).board
+  const first = step(state.board, BA, FIRST).board
   const second = step(prepareMerge(first, { ids: [state.report], at: AT }), BA).board
   const told = forwardReports(second, {
     sprint: state.sprint, ids: [state.report], summary: 'Parser fix', merge: MERGE, at: AT,
@@ -581,7 +600,7 @@ test('a client denial goes back to the BA, whose new approach keeps the client f
   assert.equal(reworked.reports[report].state, 'reworked')
   assert.equal(reworked.goals['goal-555555'].from_report, report)
   assert.equal(reworked.goals['goal-555555'].client_feedback, 'Warn, do not silently accept')
-  assert.throws(() => rework(clientSignOff(board, { at: AT }).board, [goal]),
+  assert.throws(() => rework(clientSignOff(board, { ids: [report], at: AT }).board, [goal]),
     /was not denied by the client/)
 })
 
@@ -774,4 +793,74 @@ test('a goal returned from a closed sprint is judged again: old verdicts do not 
   const byAuthor = passedSecurity(again, { signer: DEV })
   assert.throws(() => sign(byAuthor), /must be clear/, 'an author stays an author after a return')
   assert.equal(sign(passedSecurity(again)).board.goals[GOAL].state, 'done')
+})
+
+test('every signature item is a valid chain.signature envelope', () => {
+  const { board, report } = delivered()
+  const scanned = baScan(board, { goal: GOAL, ba: BA, verdict: 'ok', at: AT })
+  const approved = clientSignOff(scanned, { ids: [report], at: AT }).board
+  const envelopes = Object.values(approved.signatures)
+  for (const envelope of envelopes) {
+    const checked = validateEnvelope(envelope)
+    assert.equal(checked.ok, true, `${envelope.id}: ${checked.errors.join('; ')}`)
+  }
+  const items = envelopes.map(e => `${e.body.step}:${e.body.verdict}:${e.signer}`)
+  for (const item of [
+    `peer:ok:${DEV}`, `peer:signed:${DEV}`, `lead:signed:${LEAD}`, `ba:signed:${BA}`,
+    `ba_final:signed:${BA}`, 'report:signed:orchestration', `scan:ok:${BA}`,
+    'client:ok:client', 'client:signed:client',
+  ]) assert.ok(items.includes(item), item)
+  const sigs = approved.goals[GOAL].signoffs.map(s => approved.signatures[s.sig].body.step)
+  assert.deepEqual(sigs, ['peer', 'lead', 'ba', 'ba_final', 'client'])
+  const denied = deny(leadSigned().board, BA, 'Sprint Review: name the key')
+  const last = Object.values(denied.signatures).at(-1)
+  assert.deepEqual([last.body.verdict, last.body.reason], ['deny', 'Sprint Review: name the key'])
+  assert.equal(validateEnvelope(last).ok, true)
+})
+
+test('the BA cannot sign while a bug is open on the goal', () => {
+  const state = leadSigned()
+  const bug = openThread(state.board, {
+    goal: GOAL, item: 'item-a1a1a1', topic: 'bug', agent: JUDGE_LEAD, team: JUDGE_TEAM,
+    body: 'Crashes on a BOM', at: AT, mint: () => 'b0b0b0',
+  })
+  assert.throws(() => step(bug.board, BA, FIRST), /while a bug is open \(thread-b0b0b0\)/)
+  const fixed = resolveThread(bug.board, { thread: bug.id, agent: JUDGE_LEAD, at: AT })
+  assert.equal(step(fixed, BA, FIRST).board.reports[state.report].state, 'ba_signed')
+})
+
+test('push-ok approves an item on its own; only a dependency can hold it back', () => {
+  const { board, report } = delivered()
+  const approve = b => clientSignOff(b, { ids: [report], at: AT })
+  const unrelated = structuredClone(board)
+  unrelated.reports['report-999999'] = { goal: NEXT, state: 'denied' }
+  assert.equal(approve(unrelated).board.reports[report].state, 'approved')
+  const dependent = structuredClone(board)
+  dependent.goals[GOAL].depends_on = [NEXT]
+  assert.throws(() => approve(dependent), /waits on goal-222222, which is not signed off yet/)
+  const deniedDep = structuredClone(unrelated)
+  deniedDep.goals[GOAL].depends_on = [NEXT]
+  assert.throws(() => approve(deniedDep), /goal-222222, which the client denied/)
+  const signedDep = structuredClone(dependent)
+  signedDep.goals[NEXT].signoffs = [{ step: 'client', by: 'client', at: AT }]
+  const approved = approve(signedDep).board
+  assert.equal(approved.reports[report].state, 'approved')
+  const pushed = recordPush(approved, { ids: [report], by: LEAD, tree: 'a'.repeat(40), at: AT })
+  assert.deepEqual([pushed.reports[report].pushed_by, pushed.goals[GOAL].history.at(-1).event],
+    [LEAD, 'pushed'])
+  assert.throws(() => recordPush(board, { ids: [report], by: LEAD, tree: 'a', at: AT }),
+    /is not approved/)
+})
+
+test('the Sprint Review roster shows the demoer the BA scheduled', () => {
+  const state = leadSigned()
+  const first = step(state.board, BA, FIRST).board
+  const roster = agent => [{ agent, goal: GOAL, kind: 'feature' }]
+  const hold = agent => meet({ ...state, board: first }, 'review', {
+    record: { ...EMPTY_REVIEW, roster: roster(agent) },
+  })
+  assert.throws(() => hold(LEAD), /the BA scheduled agent-c0c0c0 to demo goal-111111/)
+  const held = hold(DEV).board
+  const record = Object.values(held.meetings).find(m => m.kind === 'review' && m.record).record
+  assert.equal(record.roster[0].agent, DEV)
 })

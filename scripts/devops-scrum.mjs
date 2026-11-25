@@ -278,6 +278,11 @@ function clientFields(item) {
     need(isTeamId(item.owner), `owner is a team hash: ${item.owner}`)
     out.owner = item.owner
   }
+  if (item.dependsOn !== undefined) {
+    need(Array.isArray(item.dependsOn) && item.dependsOn.every(isGoalId),
+      'dependsOn lists the goal hashes this goal depends on')
+    out.depends_on = [...new Set(item.dependsOn)]
+  }
   return out
 }
 
@@ -304,6 +309,15 @@ function refinement(next, meeting, record) {
 
 const DEMO_SURFACES = Object.freeze(['gui', 'browser', 'terminal', 'other'])
 
+/** A roster row's goal is Done in the sprint; its demoer is the one the BA scheduled. */
+function checkDemoer(goal, meeting, row) {
+  need(goal?.sprint === meeting.sprint && goal.state === 'done',
+    `${row.goal} is not Done in this sprint`)
+  const scheduled = goal.signoffs?.find(sig => sig.step === 'ba')?.demo?.agent
+  need(scheduled === undefined || scheduled === row.agent,
+    `the BA scheduled ${scheduled} to demo ${row.goal}`)
+}
+
 /** Demo roster: Done sprint goals; bugs may appear but are not required demos. */
 function parseRoster(next, meeting, roster) {
   need(Array.isArray(roster), 'the Business Analyst prepares a demo roster')
@@ -316,9 +330,7 @@ function parseRoster(next, meeting, roster) {
       need(DEMO_SURFACES.includes(row.surface),
         'roster surface is gui, browser, terminal or other')
     }
-    const goal = next.goals[row.goal]
-    need(goal?.sprint === meeting.sprint && goal.state === 'done',
-      `${row.goal} is not Done in this sprint`)
+    checkDemoer(next.goals[row.goal], meeting, row)
   }
   const listed = new Set(roster.map(r => r.goal))
   const missing = Object.entries(next.goals)
@@ -549,18 +561,42 @@ function nextStep(target) {
 }
 
 /**
- * Records one signature ("done") of the Done chain on the goal and in its
- * history: only the step the goal waits for, and only after the same signer
- * ran merge-ok on that step (goalVerdict).
+ * Records one signature item as a `chain.signature` envelope
+ * (docs/schemas/envelopes.schema.json) in the board's `signatures`: a
+ * merge-ok or merge-deny (`ok`, `deny`), a done (`signed`), the BA's scan
+ * (step `scan`), Orchestration's merge report (step `report`) and the
+ * client's decision. Returns the envelope id.
  */
-function sign(target, { step, by, at, ...extra }) {
+function recordSignature(next, goal, { step, by, verdict, at, ...detail }) {
+  const id = mintId('sig', next.signatures)
+  const body = Object.fromEntries(Object.entries({ goal, step, verdict, at, ...detail })
+    .filter(([, value]) => value !== undefined))
+  next.signatures[id] = { v: 1, kind: 'chain.signature', id, signer: by, body }
+  return id
+}
+
+/**
+ * Records one signature ("done") of the Done chain on the goal, in its
+ * history and as a signature envelope: only the step the goal waits for, and
+ * only after the same signer ran merge-ok on that step (goalVerdict).
+ */
+function sign(next, goal, { step, by, at, ...extra }) {
+  const target = next.goals[goal]
   const waiting = nextStep(target)
   need(waiting === step, `the next signature on this goal is ${waiting ?? 'none'}, not ${step}`)
   const approved = (target.reviews ?? [])
     .some(r => r.step === step && r.by === by && r.verdict === 'ok')
   need(approved, `${by} runs merge-ok on the ${step} step before done`)
-  target.signoffs = [...(target.signoffs ?? []), { step, by, at, ...extra }]
-  target.history.push({ at, event: `${step}_signoff`, by, ...extra })
+  const sig = recordSignature(next, goal, { step, by, verdict: 'signed', at, ...extra })
+  target.signoffs = [...(target.signoffs ?? []), { step, by, at, sig, ...extra }]
+  target.history.push({ at, event: `${step}_signoff`, by, sig, ...extra })
+}
+
+/** Records a merge-ok or merge-deny on the goal (`reviews`) and as a signature envelope. */
+function recordVerdict(next, goal, { step, by, verdict, reason, at }) {
+  const sig = recordSignature(next, goal, { step, by, verdict, reason, at })
+  const target = next.goals[goal]
+  target.reviews = [...(target.reviews ?? []), { step, by, verdict, at, reason, sig }]
 }
 
 /** The goal's done report still moving up the chain, if any. */
@@ -651,7 +687,7 @@ export function goalVerdict(board, { goal, by, team, members, decision, reason, 
   const trimmed = filled(reason) ? String(reason).trim() : undefined
   const verdict = decision === 'ok' ? 'ok' : 'deny'
   if (verdict === 'ok') checkScan(target, step)
-  target.reviews = [...(target.reviews ?? []), { step, by, verdict, at, reason: trimmed }]
+  recordVerdict(next, goal, { step, by, verdict, reason: trimmed, at })
   if (verdict === 'ok') return pingAnalyst(next, goal, { step, by, at })
   const [id, report] = liveReport(next, goal) ?? []
   if (step === 'client' && by === 'client') {
@@ -717,8 +753,11 @@ export function baScan(board, { goal, ba, verdict, reason, at }) {
   need(['ok', 'hold', 'deny'].includes(verdict), 'a scan is ok, hold or deny')
   need(verdict === 'ok' || filled(reason), 'a scan that holds or denies says why')
   const said = filled(reason) ? String(reason).trim() : undefined
-  target.scans = [...(target.scans ?? []), { step, by: ba, verdict, reason: said, at }]
-  target.history.push({ at, event: 'ba_scan', by: ba, step, verdict, reason: said })
+  const sig = recordSignature(next, goal, {
+    step: 'scan', by: ba, verdict, reason: said, at, scanned: step,
+  })
+  target.scans = [...(target.scans ?? []), { step, by: ba, verdict, reason: said, at, sig }]
+  target.history.push({ at, event: 'ba_scan', by: ba, step, verdict, reason: said, sig })
   return next
 }
 
@@ -760,7 +799,7 @@ function reopenGoal(next, goal, { by, step, reason, at }) {
 export function peerVerify(board, { goal, peer, team, members, at }) {
   const next = normalizeBoard(structuredClone(board))
   checkSigner(next, goal, 'peer', { by: peer, team, members })
-  sign(next.goals[goal], { step: 'peer', by: peer, at, seq: Object.keys(next.handoffs).length })
+  sign(next, goal, { step: 'peer', by: peer, at, seq: Object.keys(next.handoffs).length })
   return next
 }
 
@@ -803,7 +842,7 @@ function buildingTeam(next, sprint, goal) {
 function fileDone(next, { sprint, goal, team, lead, by, at, mint }) {
   const target = next.goals[goal]
   const from = target.state
-  sign(target, { step: 'lead', by, at, from, to: 'done' })
+  sign(next, goal, { step: 'lead', by, at, from, to: 'done' })
   Object.assign(target, { state: 'done', done_by: by, done_at: at })
   delete target.blocked_from
   const id = mintId('report', next.reports, mint)
@@ -827,13 +866,15 @@ const BA_STEPS = Object.freeze({
 })
 
 /**
- * The BA steps' "done". First (`ba`): the goal goes on the demo list of the
- * sprint's scheduled Sprint Review, as a feature or improvement to demo (a
- * bug is listed and skips the demo). Second (`ba_final`): once
- * Orchestration prepares the merge presentation (prepareMerge); it
- * promotes the report to Orchestration. Returns the new board.
+ * The BA steps' "done", refused while a bug is open on the goal. First
+ * (`ba`): the goal meets the client's expectations (expectationsMet) and
+ * goes on the demo list of the sprint's scheduled Sprint Review, with the
+ * hash of the seat that demos it (a bug fix is listed and skips the
+ * demo). Second (`ba_final`): once Orchestration prepares the merge
+ * presentation (prepareMerge); it promotes the report to Orchestration.
+ * Returns the new board.
  */
-export function baSignOff(board, { goal, ba, kind = 'feature', surface, at }) {
+export function baSignOff(board, { goal, ba, kind = 'feature', surface, demoer, meets, at }) {
   const next = normalizeBoard(structuredClone(board))
   const step = nextStep(next.goals[goal] ?? {})
   need(step === 'ba' || step === 'ba_final', `${goal} is not waiting for the Business Analyst`)
@@ -841,19 +882,46 @@ export function baSignOff(board, { goal, ba, kind = 'feature', surface, at }) {
   need(BA_STEPS[report.state]?.step === step,
     step === 'ba' ? `${goal}'s report is ${report.state}`
       : `Orchestration prepares the merge presentation before the BA's second signature`)
-  const demo = step === 'ba' ? demoEntry(next, report.sprint, { kind, surface }) : {}
-  sign(next.goals[goal], { step, by: ba, at, ...demo })
+  checkNoBugs(next, goal)
+  const first = step === 'ba' ? {
+    ...demoEntry(next, report.sprint, { kind, surface, demoer }),
+    expectations: expectationsMet(next.goals[goal], meets),
+  } : {}
+  sign(next, goal, { step, by: ba, at, ...first })
   report.state = BA_STEPS[report.state].then
   return next
 }
 
+/** A bug on a goal is an open board thread on it with the topic `bug`. */
+function checkNoBugs(next, goal) {
+  const open = Object.entries(next.threads)
+    .filter(([, t]) => t.goal === goal && t.topic === 'bug' && t.state === 'open')
+    .map(([id]) => id)
+  need(open.length === 0, `the BA cannot sign ${goal} while a bug is open (${open.join(', ')})`)
+}
+
+/**
+ * The client's expectations the BA checked at its first signature: the
+ * goal's objective and every acceptance criterion, each confirmed in
+ * `meets`. Refused when the goal states none or one is not met.
+ */
+function expectationsMet(target, meets) {
+  need(filled(target.objective) && nonEmpty(target.acceptance),
+    'the BA signs a goal against its objective and acceptance criteria; set them first')
+  const confirmed = new Set(Array.isArray(meets) ? meets : [])
+  const unmet = target.acceptance.filter(a => !confirmed.has(a))
+  need(unmet.length === 0, `the goal does not meet the client's expectations yet: ${unmet}`)
+  return { objective: target.objective, acceptance: [...target.acceptance] }
+}
+
 /** The demo-list entry of the BA's first signature, refused without a scheduled review. */
-function demoEntry(next, sprint, { kind, surface }) {
+function demoEntry(next, sprint, { kind, surface, demoer }) {
   need(reviewScheduled(next, sprint), `schedule ${sprint}'s Sprint Review first`)
   need(['feature', 'improvement', 'bug'].includes(kind), 'demo kind is feature, improvement or bug')
   need(surface === undefined || DEMO_SURFACES.includes(surface),
     'demo surface is gui, browser, terminal or other')
-  return { demo: { kind, ...(surface === undefined ? {} : { surface }) } }
+  need(isAgentId(demoer), 'the demo names the agent hash of the seat that demos it')
+  return { demo: { kind, agent: demoer, ...(surface === undefined ? {} : { surface }) } }
 }
 
 /**
@@ -862,7 +930,9 @@ function demoEntry(next, sprint, { kind, surface }) {
  * push-ok (clientSignOff). Returns { board } (and the report id on the
  * lead step).
  */
-export function goalDone(board, { goal, by, team, members, kind, surface, at, mint }) {
+export function goalDone(board, {
+  goal, by, team, members, kind, surface, demoer, meets, at, mint,
+}) {
   const target = normalizeBoard(board).goals[goal]
   need(target !== undefined, `goal is not on the board: ${goal}`)
   const step = nextStep(target)
@@ -872,7 +942,7 @@ export function goalDone(board, { goal, by, team, members, kind, surface, at, mi
   }
   need(step === 'ba' || step === 'ba_final',
     step === 'client' ? "the client's push-ok signs the merge report" : `${goal} is fully signed`)
-  return { board: baSignOff(board, { goal, ba: by, kind, surface, at }) }
+  return { board: baSignOff(board, { goal, ba: by, kind, surface, demoer, meets, at }) }
 }
 
 /**
@@ -910,6 +980,11 @@ export function prepareMerge(board, { ids, at }) {
   return next
 }
 
+/** The id of a report row on the board. */
+function reportId(next, row) {
+  return Object.keys(next.reports).find(id => next.reports[id] === row)
+}
+
 /** The big-picture merge plan Orchestration attaches to the reports it forwards. */
 function mergePlan(merge) {
   const plan = merge ?? {}
@@ -938,30 +1013,74 @@ export function forwardReports(board, { sprint, ids, summary, merge, at }) {
     Object.assign(row, {
       state: 'to_person', forwarded_at: at, summary: summary.trim(), merge: plan,
     })
+    row.sig = recordSignature(next, row.goal, {
+      step: 'report', by: 'orchestration', verdict: 'signed', at, report: reportId(next, row),
+    })
   }
   return next
 }
 
 /**
- * The client's signature, the last step: its push-ok (or chat "push") on a
- * delivered merge report is its merge-ok and its done. Every report waiting
- * for the client (or the `ids` given) becomes `approved`. It comes after
- * the BA's two signatures and never replaces them. The push itself stays
- * under the push gate. Returns { board, approved }.
+ * The client's signature, the last step: its push-ok naming merge reports
+ * is its merge-ok and its done on each. Each named report becomes
+ * `approved`. An item is judged on its own: other reports do not matter,
+ * except a goal it depends on (`depends_on`), which must be approved (in
+ * this call or before) and not denied. It comes after the BA's two
+ * signatures and never replaces them. Returns { board, approved }.
  */
 export function clientSignOff(board, { ids, at }) {
   const next = normalizeBoard(structuredClone(board))
-  const chosen = ids ?? reportsFor(next, { state: 'to_person' }).map(r => r.id)
-  for (const id of chosen) {
-    const row = next.reports[id]
-    need(row?.state === 'to_person', `report ${id} is not waiting for the client`)
-    const target = next.goals[row.goal]
-    const merged = { step: 'client', by: 'client', verdict: 'ok', at }
-    target.reviews = [...(target.reviews ?? []), merged]
-    sign(target, { step: 'client', by: 'client', at, report: id })
-    Object.assign(row, { state: 'approved', decided_at: at })
+  need(nonEmpty(ids), 'push-ok names the merge reports it approves')
+  for (const id of ids) {
+    need(next.reports[id]?.state === 'to_person', `report ${id} is not waiting for the client`)
   }
-  return { board: next, approved: chosen }
+  let waiting = [...ids]
+  while (waiting.length > 0) {
+    const blocker = id => blockingDependency(next, next.reports[id].goal)
+    const ready = waiting.filter(id => blocker(id) === undefined)
+    if (ready.length === 0) {
+      const id = waiting[0]
+      need(false, `report ${id} waits on ${blocker(id)}`)
+    }
+    for (const id of ready) {
+      const row = next.reports[id]
+      recordVerdict(next, row.goal, { step: 'client', by: 'client', verdict: 'ok', at })
+      sign(next, row.goal, { step: 'client', by: 'client', at, report: id })
+      Object.assign(row, { state: 'approved', decided_at: at })
+    }
+    waiting = waiting.filter(id => !ready.includes(id))
+  }
+  return { board: next, approved: ids }
+}
+
+/**
+ * The first goal `goal` depends on that is denied or not signed off by the
+ * client yet, described; undefined when every dependency is approved.
+ */
+function blockingDependency(next, goal) {
+  for (const dep of next.goals[goal].depends_on ?? []) {
+    const row = next.goals[dep]
+    if (row === undefined) return `${dep}, which is not on the board`
+    const denied = Object.values(next.reports).some(r => r.goal === dep && r.state === 'denied')
+    if (denied) return `${dep}, which the client denied`
+    if (row.signoffs?.at(-1)?.step !== 'client') return `${dep}, which is not signed off yet`
+  }
+  return undefined
+}
+
+/**
+ * Records the push of approved merge reports: who ran it (`by`), the tree
+ * and when, on each report and in its goal's history. Returns the board.
+ */
+export function recordPush(board, { ids, by, tree, at }) {
+  const next = normalizeBoard(structuredClone(board))
+  for (const id of ids) {
+    const row = next.reports[id]
+    need(row?.state === 'approved', `report ${id} is not approved`)
+    Object.assign(row, { pushed_by: by, pushed_at: at, pushed_tree: tree })
+    next.goals[row.goal].history.push({ at, event: 'pushed', by, report: id, tree })
+  }
+  return next
 }
 
 /**

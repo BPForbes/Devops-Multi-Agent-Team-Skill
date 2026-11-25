@@ -65,6 +65,9 @@
     },
     {
       "$ref": "#/$defs/RunAuthorization"
+    },
+    {
+      "$ref": "#/$defs/Signature"
     }
   ],
   "$defs": {
@@ -1757,6 +1760,158 @@
             },
             "origin": {
               "const": "composer"
+            }
+          }
+        }
+      }
+    },
+    "Signature": {
+      "description": "One signature item of the Done chain, recorded by the board (scripts/devops-scrum.mjs, recordSignature): a merge-ok or merge-deny (verdict ok or deny) on a chain step, a done (signed), the BA's scan (step scan: ok, hold or deny), Orchestration's merge report (step report) and the client's decision (step client). The signer is a seat's agent hash, the client or Orchestration.",
+      "type": "object",
+      "required": [
+        "v",
+        "kind",
+        "id",
+        "signer",
+        "body"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/version"
+        },
+        "kind": {
+          "const": "chain.signature"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "signer": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/agentHash"
+            },
+            {
+              "enum": [
+                "client",
+                "orchestration"
+              ]
+            }
+          ]
+        },
+        "body": {
+          "type": "object",
+          "required": [
+            "goal",
+            "step",
+            "verdict",
+            "at"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "goal": {
+              "$ref": "#/$defs/goalHash"
+            },
+            "step": {
+              "enum": [
+                "peer",
+                "lead",
+                "ba",
+                "ba_final",
+                "client",
+                "scan",
+                "report"
+              ]
+            },
+            "verdict": {
+              "enum": [
+                "ok",
+                "deny",
+                "hold",
+                "signed"
+              ]
+            },
+            "at": {
+              "$ref": "#/$defs/utc"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "scanned": {
+              "enum": [
+                "peer",
+                "lead",
+                "ba",
+                "ba_final",
+                "client"
+              ]
+            },
+            "report": {
+              "$ref": "#/$defs/id"
+            },
+            "seq": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "from": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "to": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "demo": {
+              "type": "object",
+              "required": [
+                "kind",
+                "agent"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "feature",
+                    "improvement",
+                    "bug"
+                  ]
+                },
+                "agent": {
+                  "$ref": "#/$defs/agentHash"
+                },
+                "surface": {
+                  "enum": [
+                    "gui",
+                    "browser",
+                    "terminal",
+                    "other"
+                  ]
+                }
+              }
+            },
+            "expectations": {
+              "type": "object",
+              "required": [
+                "objective",
+                "acceptance"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "objective": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "acceptance": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
             }
           }
         }
