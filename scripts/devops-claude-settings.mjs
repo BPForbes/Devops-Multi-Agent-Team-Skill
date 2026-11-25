@@ -1,13 +1,5 @@
 #!/usr/bin/env node
-/**
- * Read, merge and write the project's `.claude/settings.json` for this plugin:
- * `enabledPlugins` (whole plugin) and `skillOverrides` (per skill).
- *
- * Plugin id: devops-multi-agent-team@devops-multi-agent-team
- * Skill keys: bare skill names (Claude Code's documented skillOverrides format).
- * Plugin-loaded skills are not affected by skillOverrides today; project copies
- * under `.claude/skills/` are. Whole-plugin disable via enabledPlugins always works.
- */
+/** Read/merge/write `.claude/settings.json` for enabledPlugins and skillOverrides. */
 import fs from 'node:fs'
 import path from 'node:path'
 import { assertInside, resolveDest } from './devops-setup.mjs'
@@ -20,7 +12,7 @@ export const KNOWN_SKILLS = [
   'devops-cleanup',
   'project-mindmap',
 ]
-/** Short names people type after the plugin id, mapped to the skill folder name. */
+/** Alias → skill folder name (cleanup → devops-cleanup). */
 export const SKILL_ALIASES = {
   cleanup: 'devops-cleanup',
   mindmap: 'project-mindmap',
@@ -36,10 +28,9 @@ const USAGE = [
   '  skills                       list known skills and their override (default on)',
 ].join('\n')
 
-/**
- * Bare skill name for skillOverrides. Accepts `cleanup`, `devops-cleanup`, or
- * `devops-multi-agent-team:cleanup` / `devops-multi-agent-team/cleanup`.
- */
+const isPlainObject = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+
+/** Map `cleanup`, `devops-cleanup`, or `plugin:cleanup` to the skill folder name. */
 export function normalizeSkillName(raw) {
   if (typeof raw !== 'string' || raw.trim() === '') {
     throw new Error('a skill name is required (for example devops-cleanup)')
@@ -68,45 +59,38 @@ export function readSettings(dest) {
   } catch (error) {
     throw new Error(`${SETTINGS_REL} is not valid JSON: ${error.message}`)
   }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`${SETTINGS_REL} must be a JSON object`)
-  }
+  if (!isPlainObject(parsed)) throw new Error(`${SETTINGS_REL} must be a JSON object`)
   return parsed
 }
 
-/** Problems that would make Claude Code reject or misread the file. */
-export function validateSettings(settings) {
-  const problems = []
-  if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) {
-    return ['settings must be a JSON object']
+function enabledPluginProblems(map) {
+  if (!isPlainObject(map)) {
+    return ['enabledPlugins must be an object of plugin-id → boolean']
   }
+  return Object.entries(map)
+    .filter(([, value]) => typeof value !== 'boolean')
+    .map(([id]) => `enabledPlugins.${id} must be true or false`)
+}
+
+function skillOverrideProblems(map) {
+  if (!isPlainObject(map)) {
+    return ['skillOverrides must be an object of skill-name → state']
+  }
+  const allowed = [...SKILL_STATES].join(', ')
+  return Object.entries(map)
+    .filter(([, value]) => !SKILL_STATES.has(value))
+    .map(([name]) => `skillOverrides.${name} must be one of: ${allowed}`)
+}
+
+/** Structural checks for enabledPlugins and skillOverrides. */
+export function validateSettings(settings) {
+  if (!isPlainObject(settings)) return ['settings must be a JSON object']
+  const problems = []
   if (settings.enabledPlugins !== undefined) {
-    if (settings.enabledPlugins === null
-      || typeof settings.enabledPlugins !== 'object'
-      || Array.isArray(settings.enabledPlugins)) {
-      problems.push('enabledPlugins must be an object of plugin-id → boolean')
-    } else {
-      for (const [id, value] of Object.entries(settings.enabledPlugins)) {
-        if (typeof value !== 'boolean') {
-          problems.push(`enabledPlugins.${id} must be true or false`)
-        }
-      }
-    }
+    problems.push(...enabledPluginProblems(settings.enabledPlugins))
   }
   if (settings.skillOverrides !== undefined) {
-    if (settings.skillOverrides === null
-      || typeof settings.skillOverrides !== 'object'
-      || Array.isArray(settings.skillOverrides)) {
-      problems.push('skillOverrides must be an object of skill-name → state')
-    } else {
-      for (const [name, value] of Object.entries(settings.skillOverrides)) {
-        if (!SKILL_STATES.has(value)) {
-          problems.push(
-            `skillOverrides.${name} must be one of: ${[...SKILL_STATES].join(', ')}`,
-          )
-        }
-      }
-    }
+    problems.push(...skillOverrideProblems(settings.skillOverrides))
   }
   return problems
 }
