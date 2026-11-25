@@ -101,6 +101,7 @@ function checkTasks(tasks, chosen) {
 
 /** Sprint Planning: the sprint goal, the backlog goals chosen, and each goal's tasks. */
 function planning(next, meeting, record) {
+  requireBa(meeting, record, 'Sprint Planning')
   need(filled(record.sprintGoal), 'Sprint Planning sets a sprint goal')
   const chosen = record.goals
   need(nonEmpty(chosen), 'Sprint Planning chooses one backlog goal or more')
@@ -127,12 +128,16 @@ function planning(next, meeting, record) {
   const row = board.sprints[meeting.sprint]
   row.team_goals = { ...(row.team_goals ?? {}), [meeting.team]: sprintGoal }
   const tasks = record.tasks.map(t => ({ goal: t.goal, job: t.job, title: t.title.trim() }))
-  return { board, record: { sprintGoal, goals: [...chosen], tasks } }
+  return { board, record: { sprintGoal, goals: [...chosen], tasks, ...baField(record) } }
 }
 
-/** Asserts businessAnalyst is among attendees when the field is set. */
-function requireBa(meeting, record, what) {
+/**
+ * Asserts the Business Analyst attends: always when `required` (Planning,
+ * Refinement, Review), otherwise only when the record names one (Daily).
+ */
+function requireBa(meeting, record, what, { required = true } = {}) {
   const ba = record.businessAnalyst
+  need(filled(ba) || !required, `${what} needs the Business Analyst (businessAnalyst)`)
   if (!filled(ba)) return
   need(isAgentId(ba), `${what} names a Business Analyst agent hash`)
   need(meeting.attendees.includes(ba), `Business Analyst ${ba} must attend ${what}`)
@@ -224,7 +229,7 @@ function applyReallocations(board, meeting, moves) {
 
 /** Daily Scrum: updates, blockers, stress/strain, and lead reallocations. */
 function daily(next, meeting, record) {
-  requireBa(meeting, record, 'Daily Scrum')
+  requireBa(meeting, record, 'Daily Scrum', { required: false })
   const { notes, blockers } = dailyUpdates(record.updates, meeting.attendees)
   const moves = parseReallocations(record.reallocations, meeting.attendees)
   const { board, reallocations } = applyReallocations(next, meeting, moves)
@@ -292,11 +297,13 @@ function parseRoster(next, meeting, roster) {
     need(goal?.sprint === meeting.sprint && goal.state === 'done',
       `${row.goal} is not Done in this sprint`)
   }
+  const listed = new Set(roster.map(r => r.goal))
+  const missing = Object.entries(next.goals)
+    .filter(([g, row]) => row.sprint === meeting.sprint && row.state === 'done' && !listed.has(g))
+    .map(([g]) => g)
+  need(missing.length === 0,
+    `the demo roster lists every Done goal of the sprint (kind bug skips the demo): ${missing}`)
   const demo = roster.filter(r => (r.kind ?? 'feature') !== 'bug').map(r => r.goal)
-  for (const g of demo) {
-    const row = next.goals[g]
-    need(row?.sprint === meeting.sprint && row.state === 'done', `${g} is not Done in this sprint`)
-  }
   return {
     roster: roster.map(r => ({
       agent: r.agent, goal: r.goal, kind: r.kind ?? 'feature',

@@ -103,9 +103,13 @@ See [scrum-meetings.md](scrum-meetings.md).
 | Meeting | Client | Team lead | Business Analyst | Developers / judges |
 |---------|--------|-----------|------------------|---------------------|
 | Sprint Planning | optional | hosts | present | team seats (no repro by default) |
-| Daily Scrum | optional | hosts; reallocates under strain | present | developers on the team (no repro by default) |
+| Daily Scrum | optional | hosts; reallocates under strain | expected (not enforced) | developers on the team (no repro by default) |
 | Backlog Refinement | optional | hosts | present; clarifies objectives and cost | sizing seats (no repro by default) |
 | Sprint Review (joint) | invited | one host lead for the sprint | prepares attendance and demo roster ahead; present | every team **demos** features / improvements |
 | Sprint Retrospective | optional | hosts (per team, after the joint review) | optional | that team's seats; **reproduce** a bottleneck only when proof is needed |
 
-See [scrum-meetings.md](scrum-meetings.md) for timeboxes and records.
+The board refuses Sprint Planning, Backlog Refinement and the Sprint
+Review without `businessAnalyst` among the attendees, and refuses a
+Sprint Review roster that leaves out any Done goal of the sprint (list a
+bug fix with kind `bug` to skip its demo). See
+[scrum-meetings.md](scrum-meetings.md) for timeboxes and records.

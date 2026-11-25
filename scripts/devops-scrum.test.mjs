@@ -15,6 +15,8 @@ const LEAD = 'agent-a1a1a1'
 const DEV = 'agent-c0c0c0'
 const GOAL = 'goal-111111'
 const NEXT = 'goal-222222'
+/** The Business Analyst: required at Planning, Refinement and the Sprint Review. */
+const BA = 'agent-b1b1b1'
 
 const OTHER_TEAM = 'team-d4d4d4'
 const OTHER_LEAD = 'agent-d4d4d4'
@@ -63,7 +65,9 @@ const nextHex = () => {
 }
 
 function meet(state, kind, options = {}) {
-  const { minutes, attendees = [LEAD, DEV], record, by = LEAD, team = TEAM, lead = LEAD } = options
+  const {
+    minutes, attendees = [LEAD, DEV, BA], record, by = LEAD, team = TEAM, lead = LEAD,
+  } = options
   const made = scheduleMeeting(state.board, {
     sprint: state.sprint, team, kind, lead, at: AT, mint: nextHex,
   })
@@ -74,6 +78,7 @@ function meet(state, kind, options = {}) {
 }
 
 const PLAN = {
+  businessAnalyst: BA,
   sprintGoal: 'Parser takes an empty config',
   goals: [GOAL],
   tasks: [{ goal: GOAL, job: 'coder', title: 'Fix it' }],
@@ -117,7 +122,6 @@ test('a Daily Scrum records each developer and collects the blockers', () => {
   assert.throws(() => meet(planned, 'daily', stranger), /not in this Daily Scrum/)
 })
 
-const BA = 'agent-b1b1b1'
 /** Minimal joint Sprint Review record (BA present; no demos required). */
 const EMPTY_REVIEW = { businessAnalyst: BA, roster: [], feedback: [] }
 const withBa = (attendees = [LEAD, BA]) => ({ attendees, record: EMPTY_REVIEW })
@@ -167,9 +171,25 @@ test('a Daily Scrum reallocation onto a goal and job moves the seat\'s board wor
   assert.throws(refused, /both its goal and its job/)
 })
 
+test('Planning, Refinement and the Sprint Review need the Business Analyst; Daily does not', () => {
+  const { businessAnalyst, ...noBa } = PLAN
+  assert.equal(businessAnalyst, BA)
+  assert.throws(() => meet(sprintBoard(), 'planning', { record: noBa }),
+    /Sprint Planning needs the Business Analyst/)
+  const planned = meet(sprintBoard(), 'planning', { record: PLAN })
+  assert.equal(planned.board.meetings[planned.id].record.businessAnalyst, BA)
+  const refine = { record: { items: [{ goal: NEXT, points: 3, priority: 1 }] } }
+  assert.throws(() => meet(planned, 'refinement', refine), /Refinement needs the Business/)
+  assert.throws(() => meet(planned, 'review', { record: { roster: [] } }), /Review needs the/)
+  const daily = meet(planned, 'daily', { minutes: 5, record: { updates: [UPDATE] } })
+  assert.equal(daily.board.meetings[daily.id].state, 'held')
+})
+
 test('Backlog Refinement sizes and orders upcoming goals, not ones already in the sprint', () => {
   const planned = meet(sprintBoard(), 'planning', { record: PLAN })
-  const refine = item => meet(planned, 'refinement', { record: { items: [item] } })
+  const refine = item => meet(planned, 'refinement', {
+    record: { businessAnalyst: BA, items: [item] },
+  })
   const refined = refine({ goal: NEXT, points: 5, priority: 1 })
   assert.equal(refined.board.goals[NEXT].points, 5)
   assert.equal(refined.board.goals[NEXT].priority, 1)
@@ -201,6 +221,9 @@ test('the joint Sprint Review demos Done features, records Q&A, and adds backlog
     feedback: ['Show the key name'],
     newGoals,
   }
+  const empty = { ...record, roster: [] }
+  assert.throws(() => meet(state, 'review', { attendees: [LEAD, DEV, BA], record: empty }),
+    /lists every Done goal of the sprint.*goal-111111/)
   const reviewed = meet(state, 'review', { attendees: [LEAD, DEV, BA], record })
   assert.equal(reviewed.board.goals['goal-333333'].sprint, '')
   assert.equal(reviewed.board.meetings[reviewed.id].record.questions[0].answer, 'Yes, once.')
@@ -255,7 +278,9 @@ test('the sprint closes only when every allocated team held its retrospective', 
   })
   state = meet(state, 'retro', { record: { actions: ['Cache it'] } })
   assert.equal(state.board.sprints[state.sprint].status, 'active', 'A2 has not held its retro')
-  const other = { lead: OTHER_LEAD, by: OTHER_LEAD, attendees: [OTHER_LEAD], team: OTHER_TEAM }
+  const other = {
+    lead: OTHER_LEAD, by: OTHER_LEAD, attendees: [OTHER_LEAD, BA], team: OTHER_TEAM,
+  }
   const plan2 = { ...PLAN, goals: [NEXT], tasks: [{ goal: NEXT, job: 'coder', title: 'Do it' }] }
   state = meet(state, 'planning', { ...other, record: plan2 })
   state = meet(state, 'retro', { ...other, record: { actions: ['Pair on CI'] } })
@@ -318,9 +343,11 @@ function judgedBoard() {
 }
 
 test('every team lead runs its own meetings, the judging team\'s lead too', () => {
-  const judge = { team: JUDGE_TEAM, lead: JUDGE_LEAD, by: JUDGE_LEAD, attendees: [JUDGE_LEAD] }
+  const judge = {
+    team: JUDGE_TEAM, lead: JUDGE_LEAD, by: JUDGE_LEAD, attendees: [JUDGE_LEAD, BA],
+  }
   const tasks = [{ goal: GOAL, job: 'qa', title: 'QA it' }]
-  const record = { sprintGoal: 'Judge the parser fix', goals: [GOAL], tasks }
+  const record = { businessAnalyst: BA, sprintGoal: 'Judge the parser fix', goals: [GOAL], tasks }
   const planned = meet(judgedBoard(), 'planning', { ...judge, record })
   assert.equal(planned.board.meetings[planned.id].state, 'held')
   const updates = [{ agent: JUDGE_LEAD, done: 'plan', today: 'test' }]
@@ -389,9 +416,11 @@ test('an allocated goal cannot be walked to done another way, nor start as done'
 })
 
 test('the judging team plans only judging work on the goals it judges', () => {
-  const judge = { team: JUDGE_TEAM, lead: JUDGE_LEAD, by: JUDGE_LEAD, attendees: [JUDGE_LEAD] }
+  const judge = {
+    team: JUDGE_TEAM, lead: JUDGE_LEAD, by: JUDGE_LEAD, attendees: [JUDGE_LEAD, BA],
+  }
   const tasks = [{ goal: GOAL, job: 'coder', title: 'Rewrite it' }]
-  const record = { sprintGoal: 'Judge it', goals: [GOAL], tasks }
+  const record = { businessAnalyst: BA, sprintGoal: 'Judge it', goals: [GOAL], tasks }
   assert.throws(() => meet(judgedBoard(), 'planning', { ...judge, record }), /does not belong here/)
 })
 
@@ -522,9 +551,9 @@ test('a goal returned from a closed sprint is judged again: old verdicts do not 
   }
   state = { ...state, board: passedSecurity(board) }
   const close = (s, team, lead, { holdReview = false } = {}) => {
-    const who = { team, lead, by: lead, attendees: holdReview ? [lead, BA] : [lead] }
+    const who = { team, lead, by: lead, attendees: [lead, BA] }
     const tasks = [{ goal: GOAL, job: 'qa', title: 'x' }]
-    const record = { sprintGoal: 'x', goals: [GOAL], tasks }
+    const record = { businessAnalyst: BA, sprintGoal: 'x', goals: [GOAL], tasks }
     let next = team === TEAM ? s : meet(s, 'planning', { ...who, record })
     if (holdReview) next = meet(next, 'review', { ...who, record: EMPTY_REVIEW })
     return meet(next, 'retro', { ...who, record: { actions: ['x'] } })

@@ -1023,8 +1023,9 @@ const TOOLS = [
       'The team lead (`caller`) holds a scheduled meeting: attendees, minutes (within its',
       'timebox) and the record its kind needs (scrum-meetings.md, client-and-agile.md).',
       'Daily: stress/strain + reallocations (no repro by default). Review: joint demos',
-      'of features/improvements. AI↔AI on a feature/bug: reproduce live. BA attends',
-      'planning, daily, refinement and review.',
+      'of features/improvements; the roster lists every Done goal. AI↔AI on a',
+      'feature/bug: reproduce live. record.businessAnalyst (an attendee) is required at',
+      'planning, refinement and review, and optional at daily.',
     ].join(' '),
     inputSchema: {
       type: 'object',

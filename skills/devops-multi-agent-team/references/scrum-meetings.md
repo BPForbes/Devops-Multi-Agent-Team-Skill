@@ -72,7 +72,9 @@ One Sprint Review per sprint. All teams attend. The Business Analyst
 2. **Demo roster** — who demos which Done goal, and which **surface**
    (GUI, browser, terminal, other). **Bug fixes are not required** in
    the demo; **features and improvements should** be demoed live.
-   Every AI seat that can demo does so.
+   Every AI seat that can demo does so. The roster lists **every** Done
+   goal of the sprint; a bug fix is listed with kind `bug` so it skips
+   the demo. The board refuses a roster that leaves a Done goal out.
 
 During the review:
 
@@ -106,8 +108,11 @@ typed `/devops push-ok` (or chat `push`) on the exact tree is the real
 final sign-off before a push, and it is final even without QA PASS or
 Security CLEAR ([qa-publish-policy.md](qa-publish-policy.md)). If the
 client ordered the work without seat sign-offs, do the work and record
-the override; do not stall the meeting process against that order.
+the override; do not stall the meeting process against that order. On
+the board the client's own Done is `clientSignOff`, which records every
+skipped check ([client-and-agile.md](client-and-agile.md)).
 
 Only the lead holds a meeting, attendees are agent hashes (the BA's
-hash among them for Planning, Daily, Refinement and Review), and a
-meeting that runs past its timebox is refused.
+hash among them, named as `businessAnalyst`, is required for Planning,
+Refinement and Review, and checked at Daily when named), and a meeting
+that runs past its timebox is refused.

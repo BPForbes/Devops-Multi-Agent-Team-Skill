@@ -558,8 +558,9 @@ test('research plans the teams, Orchestration spins up the board, the lead plans
   assert.equal(meetings.length, 4, 'every team lead gets a Sprint Planning')
   const held = await c.call('meeting_hold', {
     dest: root, caller: 'agent-a1a1a1', id: meetings[0].id, minutes: 60,
-    attendees: ['agent-a1a1a1'],
+    attendees: ['agent-a1a1a1', 'agent-b1b1b1'],
     record: {
+      businessAnalyst: 'agent-b1b1b1',
       sprintGoal: 'Empty config parses', goals: ['goal-111111'],
       tasks: [{ goal: 'goal-111111', job: 'coder', title: 'Fix it' }],
     },
