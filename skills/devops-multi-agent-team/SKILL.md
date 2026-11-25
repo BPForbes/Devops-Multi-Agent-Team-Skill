@@ -158,10 +158,14 @@ person ordered the bypass; Clear does not authorize a push either.
   [agent-commands.md](references/agent-commands.md).
 - **Do not stop development.** A `/devops` command never pauses or
   cancels the current goal loop; apply it and keep working.
-- **Gate words are the person's alone.** `push-ok`, `push-reset`,
-  `develop`, `gates`, `allow-branch`, `comments`, `monitor`, `config`
-  writes and `setup claude` run only as commands the person types.
-  Free-form words never change a gate.
+- **Gate words are the person's alone.** `on`, `off`, `push-ok`,
+  `push-reset`, `develop`, `gates`, `allow-branch`, `comments`,
+  `monitor`, `config` writes and `setup claude` run only as commands
+  the person types. Free-form words never change a gate.
+- **`/devops on|off`.** Turns the whole skill on or off. While off,
+  publish and branch checks, lint-on-commit, the failed-check monitor
+  and the DevOps session card are inactive; `/devops status` and
+  `/devops on` still work. Default is on.
 
 ### Development bypass (human over skill contingencies)
 

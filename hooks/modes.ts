@@ -252,7 +252,7 @@ const MODE_FLAG = /(?:^|\s)--mode\s+(\S+)/i
 /** Known gate subcommands (not skill modes). */
 export const GATE_WORDS = [
   '', 'status', 'languages', 'setup', 'brief', 'push-ok', 'push-reset',
-  'develop', 'allow-branch', 'comments', 'config', 'monitor', 'gates',
+  'on', 'off', 'develop', 'allow-branch', 'comments', 'config', 'monitor', 'gates',
 ] as const
 
 export function skillWords(): string[] {
@@ -330,6 +330,7 @@ export function interpretSkillIntent(args: string): SkillMode | undefined {
 /** Command lines for /devops help --mode gates and the chat fallback (non-skill commands). */
 const COMMAND_HELP: string[] = [
   '/devops              status: languages, gates, QA verdict',
+  '/devops on|off       (you) turn the whole skill on or off; off lifts every check and the card',
   '/devops languages    what was detected and in which layer',
   '/devops setup        how to install the skill and profile in this project',
   '/devops setup claude [--dry-run] [--share-config] (you) set this project up for Claude Code:',

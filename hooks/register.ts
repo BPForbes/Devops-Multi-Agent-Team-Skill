@@ -20,9 +20,15 @@ const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
 // Words that change what may be pushed, or switch a check off. Only the
 // person may run them.
 const HUMAN_ONLY_WORDS = new Set([
-  'push-ok', 'push-reset', 'develop', 'gates', 'allow-branch', 'comments', 'monitor',
+  'on', 'off', 'push-ok', 'push-reset', 'develop', 'gates', 'allow-branch', 'comments', 'monitor',
 ])
+const ACTIVE_REF = { plugin: 'devops-multi-agent-team', key: 'active' } as const
 const DEVELOP_REF = { plugin: 'devops-multi-agent-team', key: 'develop' } as const
+
+/** The skill is on unless the person typed `/devops off`. */
+async function skillActive($: EngineInterface): Promise<boolean> {
+  return (await $.state.get(ACTIVE_REF)).value !== false
+}
 // `config` reads are open to every seat; these subcommands write.
 const CONFIG_WRITES = new Set(['set', 'unset', 'add', 'remove', 'rule'])
 
@@ -448,16 +454,35 @@ export const register: Register = on => {
     if (isPersonOnly(split.word, split.rest) && !isHuman(e)) {
       return { text: personOnlyText(split.word) }
     }
-    const skill = resolveSkill(split.word, split.rest, e.args)
-    if (skill !== undefined) return { text: await runSkillMode($, skill) }
 
+    const mappedEarly = isGateWord(split.word)
+      ? split
+      : (interpretDevopsIntent(e.args) ?? split)
+    if (mappedEarly.word === 'on' || mappedEarly.word === 'off') {
+      if (!isHuman(e)) return { text: personOnlyText(mappedEarly.word) }
+      await $.state.set(ACTIVE_REF, mappedEarly.word === 'on')
+      return {
+        text: mappedEarly.word === 'on'
+          ? 'DevOps skill on. Gates, publish checks, lint-on-commit, the monitor and the '
+            + 'session card are active again.'
+          : 'DevOps skill off. Gates, publish checks, lint-on-commit, the monitor and the '
+            + 'session card are inactive. Type /devops on to restore.',
+      }
+    }
+
+    const active = await skillActive($)
     const mapped = isGateWord(split.word)
       ? split
       : (interpretDevopsIntent(e.args) ?? split)
     const { word, rest } = mapped
-    if (isPersonOnly(word, rest) && !isHuman(e)) return { text: personOnlyText(word) }
 
     if (word === '' || word === 'status') {
+      if (!active) {
+        return {
+          text: 'skill: OFF\nGates, publish checks, lint-on-commit, the monitor and the '
+            + 'session card are inactive. Type /devops on to restore.',
+        }
+      }
       const gates = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true
       const develop = (await $.state.get(DEVELOP_REF)).value === true
       const authorized = (await $.state.get(PUSH_KEY)).value ?? false
@@ -468,6 +493,7 @@ export const register: Register = on => {
       const qa = await latestQaVerdict($)
       return {
         text: [
+          `skill: on`,
           `languages: ${languages.length === 0 ? '(none detected)' : languages.join(', ')}`,
           `branch gate: ${gates ? 'on' : 'OFF'}; `
             + `develop bypass: ${develop ? 'ON (push-ok alone)' : 'off'}; `
@@ -480,6 +506,18 @@ export const register: Register = on => {
         ].join('\n'),
       }
     }
+
+    if (!active) {
+      return {
+        text: 'DevOps skill is off. Type /devops on to restore it '
+          + '(status still works while off).',
+      }
+    }
+
+    if (isPersonOnly(word, rest) && !isHuman(e)) return { text: personOnlyText(word) }
+
+    const skill = resolveSkill(split.word, split.rest, e.args)
+    if (skill !== undefined) return { text: await runSkillMode($, skill) }
     if (word === 'languages') {
       const found = await detect($)
       return {
@@ -586,6 +624,7 @@ export const register: Register = on => {
   })
 
   on('tool.call', { tool: GITHUB_TOOL }, async ($, e, next) => {
+    if (!(await skillActive($))) return next(e)
     const tool = e.tool.split('__').pop() ?? e.tool
     if (GITHUB_READ.test(tool)) return next(e)
     const input = e as { owner?: unknown; repo?: unknown }
@@ -599,6 +638,7 @@ export const register: Register = on => {
 
   for (const tool of GITHUB_WRITES) {
     on('tool.call', { tool: `mcp__github__${tool}` }, async ($, e, next) => {
+      if (!(await skillActive($))) return next(e)
       const denied = await publishDenial($, `GitHub ${tool}`)
       if (denied !== undefined) return { deny: denied }
       const ran = await next(e)
@@ -608,6 +648,7 @@ export const register: Register = on => {
   }
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    if (!(await skillActive($))) return next(e)
     const gatesOn = ((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true) !== false
     const actions = classify(e.command)
     let consumeAuthorization = false
@@ -691,6 +732,7 @@ export const register: Register = on => {
 
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
+    if (!(await skillActive($))) return composed
     const root = await $.session.root()
     const languages = (await $.state.get(LANGUAGES_REF)).value ?? []
     const hasProfile = await $.fs.exists(`${root}/.devops/project.md`).catch(() => false)
