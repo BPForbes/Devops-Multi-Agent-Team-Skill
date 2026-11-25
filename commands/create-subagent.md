@@ -5,6 +5,8 @@ description: Spawn a DevOps role asynchronously from ../agents/. Do not poll bac
 
 # /create-subagent
 
+Execute now. Do not reprint, summarize, or paste these instructions into chat — run the steps (tools and scripts) and report only the result.
+
 Also: `create a subagent`, `spawn`, the host's subagent tool (Cursor `Task`, Claude Code `Agent`).
 
 Spawn specialized roles. They run **asynchronously in pods**, not a linear queue.
@@ -50,4 +52,3 @@ Spawn specialized roles. They run **asynchronously in pods**, not a linear queue
 | Integrator | `devops-integrator.md` |
 | Communicator | `devops-communicator.md` |
 
-Catalog: `../skills/devops-multi-agent-team/references/agent-commands.md`.

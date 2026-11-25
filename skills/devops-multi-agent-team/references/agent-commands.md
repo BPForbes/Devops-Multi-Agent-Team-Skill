@@ -52,24 +52,26 @@ developing ([SKILL.md](../SKILL.md), Client authority;
 ## `/devops` skill modes
 
 Each mode returns an **orchestration card** (skill, tools, behavior,
-`--mode`) and, when it can, runs the matching script so results are
+`--mode`) and, when it can, **runs the matching script** so results are
 not retyped into chat. Trailing text after the command is the input.
+A known mode name may also be given as the first word
+(`/devops tags history` = `--mode history`).
 
-| Command | Modes (`--mode`) | Tools / skill |
-|---------|------------------|---------------|
-| `/devops help` (`?`, `modes`) | `all`, `gates`, `skills`, `stage` | catalog |
-| `/devops question` (`ask`, `q`) | `overview`, `tree`, `symbol`, `search`, `file`, `module`, `library` | `mindmap_*`, `project-mindmap` |
-| `/devops mind-map` (`map`) | `overview`, `build`, `status`, `tree`, `query`, `note` | `mindmap_*` |
-| `/devops clean` (`cleanup`, `tidy`) | `brief`, `scan`, `plan`, `run` | `cleanup_*`, `devops-cleanup` |
-| `/devops stage` (`ci`, `pipeline`) | `research`…`docs`, `full`, `loop` | one pod, or all stages until Clear+PASS then notify human |
-| `/devops allocate` (`assign`) | `pod`, `agent`, `job`, `board` | per-pod / per-agent goals |
-| `/devops goal` | `loop`, `status`, `allocate` | full loop until Clear+PASS; notify human for push |
-| `/devops story` | `research`, `create`, `check`, `graph` | `story_*` |
-| `/devops repro` | `run` | `/repro` |
-| `/devops triage` | `open` | `/triage` |
-| `/devops review` | `inspect` | `/code-review` |
-| `/devops reuse` | `search` | `reuse_search`, `module_map` |
-| `/devops tags` | `history`, `plan`, `create` | `tag_*` |
+| Command | Modes (`--mode`) | Tools / skill | Script (when it can) |
+|---------|------------------|---------------|----------------------|
+| `/devops help` (`?`, `modes`) | `all`, `gates`, `skills`, `stage` | catalog | — |
+| `/devops question` (`ask`, `q`) | `overview`, `tree`, `symbol`, `search`, `file`, `module`, `library` | `mindmap_*`, `project-mindmap` | `devops-mindmap.mjs` (empty search → overview) |
+| `/devops mind-map` (`map`) | `overview`, `build`, `status`, `tree`, `query`, `note` | `mindmap_*` | `devops-mindmap.mjs` |
+| `/devops clean` (`cleanup`, `tidy`) | `brief`, `scan`, `plan`, `run` | `cleanup_*`, `devops-cleanup` | `devops-cleanup.mjs` (`brief`/`scan`) |
+| `/devops stage` (`ci`, `pipeline`) | `research`…`docs`, `full`, `loop` | one pod, or all stages until Clear+PASS then notify human | — |
+| `/devops allocate` (`assign`) | `pod`, `agent`, `job`, `board` | per-pod / per-agent goals | — |
+| `/devops goal` | `loop`, `status`, `allocate` | full loop until Clear+PASS; notify human for push | — |
+| `/devops story` | `research`, `create`, `check`, `graph` | `story_*` | `devops-stories.mjs` (`graph`/`guide`/`check`) |
+| `/devops repro` | `run` | `/repro` | — |
+| `/devops triage` | `open` | `/triage` | — |
+| `/devops review` | `inspect` | `/code-review` | — |
+| `/devops reuse` | `search` | `reuse_search`, `module_map` | `devops-research.mjs reuse-search` |
+| `/devops tags` | `history`, `plan`, `create` | `tag_*` | `devops-tags.mjs` |
 
 Gate commands stay as they were (`status`, `push-ok`, `allow-branch`,
 `gates`, `monitor`, `comments`, `config`, `setup`, `brief`,

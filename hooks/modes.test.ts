@@ -15,6 +15,15 @@ test('parseSkillMode maps aliases and --mode', () => {
   expect(parseSkillMode('tidy', '--mode scan split big functions in src')).toEqual({
     word: 'clean', mode: 'scan', rest: 'split big functions in src',
   })
+  expect(parseSkillMode('tags', 'history')).toEqual({
+    word: 'tags', mode: 'history', rest: '',
+  })
+  expect(parseSkillMode('tags', 'plan --bump minor')).toEqual({
+    word: 'tags', mode: 'plan', rest: '--bump minor',
+  })
+  expect(parseSkillMode('story', 'check STORY-1')).toEqual({
+    word: 'story', mode: 'check', rest: 'STORY-1',
+  })
 })
 
 test('takeModeFlag falls back when the mode is unknown', () => {
@@ -82,15 +91,43 @@ test('help and stage cards list catalog and seats', () => {
   expect(stage).toContain('input: lock down secrets')
 })
 
-test('scriptArgsFor shells out for mind-map and clean', () => {
+test('scriptArgsFor shells out for mind-map, clean, tags, story and reuse', () => {
   expect(scriptNameFor({ word: 'mind-map', mode: 'build', rest: '' }))
     .toBe('devops-mindmap.mjs')
   expect(scriptArgsFor({ word: 'mind-map', mode: 'build', rest: '' }))
     .toEqual(['build', '--save'])
   expect(scriptArgsFor({ word: 'question', mode: 'symbol', rest: 'total' }))
     .toEqual(['query', '--symbol', 'total'])
+  expect(scriptArgsFor({ word: 'question', mode: 'search', rest: '' }))
+    .toEqual(['overview'])
   expect(scriptArgsFor({ word: 'clean', mode: 'brief', rest: 'tidy src' }))
     .toEqual(['brief', '--statement', 'tidy src'])
+  expect(scriptNameFor({ word: 'tags', mode: 'history', rest: '' }))
+    .toBe('devops-tags.mjs')
+  expect(scriptArgsFor({ word: 'tags', mode: 'history', rest: '' }))
+    .toEqual(['history'])
+  expect(scriptArgsFor({ word: 'tags', mode: 'plan', rest: '--bump minor' }))
+    .toEqual(['plan', '--bump', 'minor'])
+  expect(scriptArgsFor({ word: 'tags', mode: 'create', rest: '' }))
+    .toBeUndefined()
+  expect(scriptArgsFor({ word: 'tags', mode: 'create', rest: '--version 1.2.3' }))
+    .toEqual(['create', '--version', '1.2.3'])
+  expect(scriptNameFor({ word: 'story', mode: 'graph', rest: '' }))
+    .toBe('devops-stories.mjs')
+  expect(scriptArgsFor({ word: 'story', mode: 'graph', rest: '' }))
+    .toEqual(['graph'])
+  expect(scriptArgsFor({ word: 'story', mode: 'research', rest: '' }))
+    .toEqual(['guide'])
+  expect(scriptArgsFor({ word: 'story', mode: 'check', rest: 'STORY-1' }))
+    .toEqual(['check', 'STORY-1'])
+  expect(scriptArgsFor({ word: 'story', mode: 'create', rest: '' }))
+    .toBeUndefined()
+  expect(scriptNameFor({ word: 'reuse', mode: 'search', rest: 'total slugify' }))
+    .toBe('devops-research.mjs')
+  expect(scriptArgsFor({ word: 'reuse', mode: 'search', rest: 'total slugify' }))
+    .toEqual(['reuse-search', 'total', 'slugify'])
+  expect(scriptArgsFor({ word: 'reuse', mode: 'search', rest: '' }))
+    .toBeUndefined()
   expect(scriptArgsFor({ word: 'goal', mode: 'loop', rest: 'ship X' }))
     .toBeUndefined()
 })

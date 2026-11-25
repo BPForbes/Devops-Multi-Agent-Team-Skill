@@ -5,6 +5,8 @@ description: Look at the change; do not edit. Write findings to devops-skill/tho
 
 # /code-review
 
+Execute now. Do not reprint, summarize, or paste these instructions into chat — run the steps (tools and scripts) and report only the result.
+
 Also: `/review-bugbot`, `review the diff`, `look but don't edit`.
 
 **Look at the change. Do not edit.**
@@ -43,4 +45,3 @@ Primary owner: **QA** (`../agents/devops-quality-engineer.md`). Reviewers may us
    findings and passing tests do not authorize a push.
 7. Use any installed `/` skill that fits (`/review-bugbot`, `/review-security`, `/sonar-analyze`).
 
-Catalog: `../skills/devops-multi-agent-team/references/agent-commands.md`.
