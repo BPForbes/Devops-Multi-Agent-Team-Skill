@@ -247,6 +247,8 @@ test('the joint Sprint Review demos Done features, records Q&A, and adds backlog
     feedback: ['Show the key name'],
     newGoals,
   }
+  const ownDemo = { attendees: [LEAD, DEV, BA], record: { ...record, demo: [GOAL] } }
+  assert.throws(() => meet(state, 'review', ownDemo), /come from the roster/)
   const empty = { ...record, roster: [] }
   assert.throws(() => meet(state, 'review', { attendees: [LEAD, DEV, BA], record: empty }),
     /lists every Done goal of the sprint.*goal-111111/)

@@ -372,11 +372,8 @@ function review(next, meeting, record) {
   const attendance = record.attendance ?? meeting.attendees
   need(Array.isArray(attendance) && attendance.every(isAgentId),
     'Sprint Review attendance is a list of agent hashes')
+  need(record.demo === undefined, 'the demos come from the roster; drop record.demo')
   const { roster, demo } = parseRoster(next, meeting, record.roster ?? [])
-  for (const g of (record.demo ?? demo)) {
-    const row = next.goals[g]
-    need(row?.sprint === meeting.sprint && row.state === 'done', `${g} is not Done in this sprint`)
-  }
   const added = record.newGoals ?? []
   const board = addReviewGoals(next, added, meeting.held_at)
   return {
