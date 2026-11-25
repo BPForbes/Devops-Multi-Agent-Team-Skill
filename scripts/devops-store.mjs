@@ -12,6 +12,21 @@ function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(INT32_BYTES)), 0, 0, ms)
 }
 
+/**
+ * The path of `rel` inside the project folder `root`. Refuses a symbolic link
+ * on the way, so a read or write cannot be redirected outside the project.
+ */
+export function projectPath(root, rel) {
+  let at = fs.realpathSync(root)
+  for (const part of rel.split(path.sep)) {
+    at = path.join(at, part)
+    if (fs.existsSync(at) && fs.lstatSync(at).isSymbolicLink()) {
+      throw new Error(`refusing to use a symbolic link for the board: ${at}`)
+    }
+  }
+  return at
+}
+
 /** Writes text to a temp file beside `file`, then renames it over `file`. */
 export function writeAtomic(file, text) {
   const tmp = `${file}.${process.pid}.${crypto.randomBytes(UUID_BYTES).toString('hex')}.tmp`

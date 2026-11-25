@@ -60,6 +60,31 @@ function personOnlyText(word: string): string {
     + 'an agent cannot.'
 }
 
+// The Done chain's words. Seats run them on the board (goal_merge, goal_done);
+// typed by the person, they answer Orchestration's merge report.
+const CHAIN_WORDS = new Set(['merge-ok', 'merge-deny', 'done'])
+
+const SEAT_CHAIN_TEXT = 'On the board, a seat runs merge-ok, merge-deny and done with the '
+  + 'goal_merge and goal_done tools, for the Done-chain step it signs. Typed here, these '
+  + "words are the client's answer to the merge report; they grant no push."
+
+/**
+ * The person's approval of the current tree: grants one push (PUSH_KEY) and
+ * approves every merge report waiting for the client on the board. Returns
+ * what happened, or undefined when the tree cannot be read.
+ */
+async function grantPush($: EngineInterface): Promise<string | undefined> {
+  const tree = await headTree($)
+  if (tree === undefined) return undefined
+  await $.state.set(PUSH_KEY, tree)
+  const board = await runPluginScript($, 'devops-client.mjs', ['approve'])
+  return `One push is allowed on tree ${tree.slice(0, 12)} (human word is final; `
+    + 'same as saying "push" in chat). A missing QA PASS or Security CLEAR is '
+    + 'recorded as an override, not a refusal. A new commit voids the grant. '
+    + 'It is consumed by that push. Keep development running.'
+    + (board === undefined ? '' : `\n${board}`)
+}
+
 function isHuman(e: unknown): boolean {
   return (e as { origin?: { kind?: unknown } }).origin?.kind === 'composer'
 }
@@ -461,8 +486,7 @@ export const register: Register = on => {
     const message = e as { text?: unknown; origin?: { kind?: unknown } }
     const kind = typeof message.origin?.kind === 'string' ? message.origin.kind : undefined
     if (typeof message.text === 'string' && chatAuthorizesPush(message.text, kind)) {
-      const tree = await headTree($)
-      if (tree !== undefined) await $.state.set(PUSH_KEY, tree)
+      await grantPush($)
     }
     return next(e)
   })
@@ -472,6 +496,7 @@ export const register: Register = on => {
     if (isPersonOnly(split.word, split.rest) && !isHuman(e)) {
       return { text: personOnlyText(split.word) }
     }
+    if (CHAIN_WORDS.has(split.word) && !isHuman(e)) return { text: SEAT_CHAIN_TEXT }
 
     const mappedEarly = isGateWord(split.word)
       ? split
@@ -587,16 +612,19 @@ export const register: Register = on => {
         ].join('\n'),
       }
     }
-    if (word === 'push-ok') {
+    if (word === 'push-ok' || word === 'merge-ok' || word === 'done') {
       // The grant names the tree it was given for: a later commit voids it.
-      const tree = await headTree($)
-      if (tree === undefined) return { text: 'The tree cannot be read; no push is allowed.' }
-      await $.state.set(PUSH_KEY, tree)
+      const granted = await grantPush($)
+      return { text: granted ?? 'The tree cannot be read; no push is allowed.' }
+    }
+    if (word === 'merge-deny') {
+      const reason = rest.trim()
+      if (reason === '') return { text: 'Usage: /devops merge-deny REASON (the BA follows up).' }
+      await $.state.set(PUSH_KEY, false)
+      const board = await runPluginScript($, 'devops-client.mjs', ['deny', '--reason', reason])
       return {
-        text: `One push is allowed on tree ${tree.slice(0, 12)} (human word is final; `
-          + 'same as saying "push" in chat). A missing QA PASS or Security CLEAR is '
-          + 'recorded as an override, not a refusal. A new commit voids the grant. '
-          + 'It is consumed by that push. Keep development running.',
+        text: 'Merge denied; push permission withdrawn. The merge report goes back to the '
+          + 'Business Analyst with your reason.' + (board === undefined ? '' : `\n${board}`),
       }
     }
     if (word === 'push-reset') {

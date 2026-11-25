@@ -1,9 +1,15 @@
 // Goal board and handoff server state (see references/board.md).
-// Pure functions over a plain object. The orchestration server (mcp/server.mjs)
-// is the only writer; subagents read and act through its tools.
+// Pure functions over a plain object, written by the server (mcp/server.mjs).
+// Subagents read and act through its tools.
+// The client's merge-ok, merge-deny or push-ok also write it.
+// That goes through scripts/devops-client.mjs.
 import crypto from 'node:crypto'
+import path from 'node:path'
 import { isAgentId, isGoalId, isItemId, isJob, isTeamId } from './devops-ids.mjs'
 import { validateHandoff } from './devops-handoff.mjs'
+
+/** The board file, relative to the project folder. */
+export const BOARD_FILE = path.join('devops-skill', 'thoughts', 'non-final', 'board.json')
 
 // Forward hand-offs are judged by the receiver. Send-backs and sign-off
 // are judged by the sender.

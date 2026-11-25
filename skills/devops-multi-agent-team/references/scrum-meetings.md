@@ -102,45 +102,73 @@ is blocking the day and a 30-second terminal or browser run clears it.
 ## Done: the sign-off chain; client decides last
 
 A goal goes Done through an ordered chain of signatures, each recorded
-on the goal (`signoffs`, plus a `<step>_signoff` history event):
+on the goal (`signoffs`, plus a `<step>_signoff` history event). Every
+step's signer runs two words, in order: **merge-ok** (`goal_merge`,
+decision `ok`), then **done** (`goal_done`), which promotes the goal to
+the next signature. A signer who rejects the work runs **merge-deny**
+(`goal_merge`, decision `deny`) with a reason instead.
 
-1. **Peer** (`goal_peer_verify`): when a member believes the goal is
-   done, another member of the building team verifies it. The verifier
-   wrote none of the goal and is not the lead. The goal has passed
-   security; a later send-back voids the verification.
-2. **Team lead** (`goal_signoff`): the lead signs under the same Security
-   and independence rules as before, and only after a current peer
-   verification. The goal becomes `done` (team Done), and a done report
-   is filed as `awaiting_ba`.
-3. **BA, first signature** (`goal_ba_signoff`): the sprint's Business
-   Analyst (the one on the joint Sprint Review) signs after the
-   building team's Sprint Retrospective. Report: `ba_signed`.
-4. **BA, second signature** (`goal_ba_signoff` again): only when no
-   feedback is open. Any open board thread on the goal (another team's
-   feedback, a question) blocks either BA signature until it is
-   resolved. Report: `to_orchestration`.
-5. **Orchestration merge report** (`report_forward`): Orchestration
-   prepares the big picture for the reports the BA promoted: the real
-   branch, how the work fits the overall design, the implementation
-   summary and the risks. Report: `to_person`.
-6. **Client decision** (human only): approve or deny, with a reason to
-   deny (design, implementation, ...). Report: `approved` or `denied`.
-   Approval is not a merge and not a push grant: the real merge stays
-   the person's own act, and a push still needs `/devops push-ok`.
-7. **New approach** (`report_new_approach`): on a denial the BA turns the
-   client's feedback into new backlog goals (objective, acceptance
-   criteria, optional priority and owner), linked to the report
-   (`from_report`). Report: `reworked`.
+1. **Peer**: when a member believes the goal is done, it looks for
+   another member of its own team first (team members work on the same
+   thing), and asks Orchestration only when none is free. The verifier
+   wrote none of the goal, is not the lead, and acts under the building
+   team's hash (and is on the team board's member list when the team has
+   one). The goal has passed security; a later send-back voids the
+   verification.
+2. **Team lead**: the lead signs under the same Security and independence
+   rules as before, and only after a current peer verification. If the
+   lead worked on the goal, another member of the team (not the peer)
+   signs this step instead. The goal becomes `done` (team Done), and a
+   done report is filed as `awaiting_ba`. `goal_signoff` is this step's
+   done on its own.
+3. **BA, first signature**: when a worthy item (usually a feature, not a
+   bug) can be demoed and is put on the sprint's **scheduled** Sprint
+   Review. The signature records the demo entry (`kind`: feature,
+   improvement or bug; optional `surface`). Report: `ba_signed`. The BA is
+   the one the building team named at its Sprint Planning.
+4. **Orchestration prepares** (`report_prepare`): Orchestration starts the
+   merge presentation for the reports the BA signed. Report: `preparing`.
+5. **BA, second signature**: while Orchestration prepares the merge
+   presentation. Report: `to_orchestration`.
+6. **Merge report** (`report_forward`): Orchestration delivers the big
+   picture: the real branch, how the work fits the overall design, the
+   implementation summary and the risks. Report: `to_person`.
+7. **Client** (the person only): `/devops push-ok` (or chat `push`,
+   `/devops merge-ok`, `/devops done`) approves every merge report waiting
+   for it, signs the last step, and grants one push of the current tree
+   through the push gate. Report: `approved`. `/devops merge-deny REASON`
+   withdraws the push grant and sends the report back to the BA. Report:
+   `denied`.
+8. **New approach** (`report_new_approach`): after a denial the BA, on
+   standby, asks the client why if the reason is unclear, then turns the
+   feedback into new backlog goals (objective, acceptance criteria,
+   optional priority and owner), linked to the report (`from_report`) and
+   carrying the client's reason (`client_feedback`). Report: `reworked`.
+   The BA notes the feedback on the mind map (`mindmap_note`); the
+   Researcher still builds and structures the map.
+
+**merge-deny and reopening.** QA, Review and Security send work back with
+their existing send-back hand-offs, which carry the reason. On the chain,
+merge-deny by a step's signer reopens the goal: it returns to
+`in_progress`, its verdicts and signatures start over, and its live report
+becomes `reopened`. Any feedback can reopen a goal: the building team's
+BA (for example after Sprint Review feedback) or the client may deny any
+step, even on a Done goal. A Done goal that is reopened is flagged
+`needs_client_review`: the BA asks Orchestration to have the client review
+the recommendations. Where an AI recommendation conflicts with the
+client's, the client's most recent feedback stands. The BA follows up on
+the reason for every denial; any seat that needs clarification asks
+through a board thread or a hand-off.
 
 The lead's Done is a **team** Done, not the client's final word. The
-client's
-typed `/devops push-ok` (or chat `push`) on the exact tree is the real
-final sign-off before a push, and it is final even without QA PASS or
-Security CLEAR ([qa-publish-policy.md](qa-publish-policy.md)). If the
+client's typed `/devops push-ok` (or chat `push`) on the exact tree is the
+real final sign-off before a push, and it is final even without QA PASS
+or Security CLEAR ([qa-publish-policy.md](qa-publish-policy.md)). If the
 client ordered the work without seat sign-offs, do the work and record
-the override; do not stall the meeting process against that order. On
-the board the client's own Done is `clientSignOff`, which records every
-skipped check ([client-and-agile.md](client-and-agile.md)).
+the override under `devops-skill/thoughts/non-final/`; do not stall the
+meeting process against that order. The board's client step comes only
+after the BA's two signatures; it never replaces them
+([client-and-agile.md](client-and-agile.md)).
 
 Only the lead holds a meeting, attendees are agent hashes (the BA's
 hash among them, named as `businessAnalyst`, is required for Planning,

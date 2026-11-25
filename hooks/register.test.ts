@@ -50,10 +50,13 @@ function fakeGit(argv: string[], git: Record<string, string | undefined>) {
 }
 
 /** The fake session's notes and git output; a test sets only what it needs. */
-interface Setup { security?: string; git?: Record<string, string | undefined>; cwd?: string | null }
+interface Setup {
+  security?: string; git?: Record<string, string | undefined>; cwd?: string | null
+  runs?: string[][]
+}
 
 function engine(on: any, note: string | undefined, setup: Setup = {}) {
-  const { security, git = {}, cwd = '/work' } = setup
+  const { security, git = {}, cwd = '/work', runs } = setup
   const state = new Map<string, unknown>()
   on('state.get', (_: unknown, e: { key: string }) => ({ value: { value: state.get(e.key), version: 1 } }))
   on('state.set', (_: unknown, e: { key: string; value: unknown }) => {
@@ -71,6 +74,7 @@ function engine(on: any, note: string | undefined, setup: Setup = {}) {
   on('ui.status', () => ({ value: undefined }))
   on('process.run', (_: unknown, e: { argv?: string[] }) => {
     const argv = e.argv ?? []
+    runs?.push(argv)
     if (argv[0] === 'git') return { value: fakeGit(argv, git) }
     if (argv.some(a => a.includes('devops-claude-settings.mjs'))) {
       const action = argv.find(a => ['enable', 'disable', 'skills', 'skill', 'show'].includes(a))
@@ -620,4 +624,51 @@ test('a push is refused when the shell\'s directory cannot be read', async ($, o
   const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
   expect(refused.deny).toBeTruthy()
   expect(state.get('pushAuthorized')).toBe(TREE)
+})
+
+/** The devops-client.mjs runs among the fake session's process calls. */
+const clientRuns = (runs: string[][]) => runs
+  .filter(argv => argv.some(a => a.endsWith('devops-client.mjs')))
+  .map(argv => argv.slice(2, -2))
+
+test('the person\'s merge-ok or done grants the push, approves the report', async ($, on) => {
+  const runs: string[][] = []
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  for (const args of ['merge-ok', 'done']) {
+    state.set('pushAuthorized', false)
+    const ran = await $.command.run({ command: 'devops', args, origin: { kind: 'composer' } })
+    expect(ran.text).toContain('One push is allowed')
+    expect(state.get('pushAuthorized')).toBe(TREE)
+  }
+  expect(clientRuns(runs)).toEqual([['approve'], ['approve']])
+})
+
+test('the person\'s merge-deny needs a reason, withdraws the push', async ($, on) => {
+  const runs: string[][] = []
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('pushAuthorized', TREE)
+  const person = { command: 'devops', origin: { kind: 'composer' } }
+  const bare = await $.command.run({ ...person, args: 'merge-deny' })
+  expect(bare.text).toContain('Usage: /devops merge-deny REASON')
+  expect(state.get('pushAuthorized')).toBe(TREE)
+  const denied = await $.command.run({
+    command: 'devops', args: 'merge-deny warn instead', origin: { kind: 'composer' },
+  })
+  expect(denied.text).toContain('goes back to the Business Analyst')
+  expect(state.get('pushAuthorized')).toBe(false)
+  expect(clientRuns(runs)).toEqual([['deny', '--reason', 'warn instead']])
+})
+
+test('a seat typing merge-ok, merge-deny or done is pointed to the board tools', async ($, on) => {
+  const runs: string[][] = []
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  for (const args of ['merge-ok', 'merge-deny no', 'done']) {
+    const ran = await $.command.run({ command: 'devops', args, origin: { kind: 'agent' } })
+    expect(ran.text).toContain('goal_merge and goal_done')
+  }
+  expect(state.get('pushAuthorized')).toBe(undefined)
+  expect(clientRuns(runs)).toEqual([])
 })

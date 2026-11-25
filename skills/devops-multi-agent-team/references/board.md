@@ -121,9 +121,12 @@ A reproduction between seats uses topic `repro` and the hand-off template in
 A seat never moves a goal on its own. It sends a handoff, and Orchestration
 moves the goal when the hand-off says the step is done. The Done chain is
 the one exception, as before for `goal_signoff`: each signer acts for
-itself through its own tool (`goal_peer_verify`, `goal_signoff`,
-`goal_ba_signoff`, `report_new_approach`), and the board checks who may sign
-which step ([scrum-meetings.md](scrum-meetings.md), Done).
+itself with merge-ok, merge-deny and done (`goal_merge`, `goal_done`,
+`goal_signoff`, `report_new_approach`), and the board checks who may sign
+which step ([scrum-meetings.md](scrum-meetings.md), Done). The client's
+`/devops push-ok`, `merge-ok`, `done` or `merge-deny` writes its own step
+through `scripts/devops-client.mjs`, with the same board functions and
+lock.
 
 ## Storage
 

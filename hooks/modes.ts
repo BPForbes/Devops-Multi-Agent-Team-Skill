@@ -152,17 +152,18 @@ const SPECS: ModeSpec[] = [
     defaultMode: 'daily',
     skill: 'Scrum meetings; client (human) is supreme (client-and-agile.md, scrum-meetings.md)',
     tools: [
-      'meeting_schedule', 'meeting_hold', 'goal_peer_verify', 'goal_signoff', 'goal_ba_signoff',
-      'report_forward', 'report_new_approach',
+      'meeting_schedule', 'meeting_hold', 'goal_merge', 'goal_done', 'goal_signoff',
+      'report_prepare', 'report_forward', 'report_new_approach',
     ],
     behavior: [
       'The human is the client: seat process never blocks a clear client order.',
-      'Each team lead schedules (meeting_schedule) and holds (meeting_hold) its meetings,',
-      '  signs goals Done (goal_signoff) after a peer verified them (goal_peer_verify).',
-      'Done chain: peer → lead → BA after the retro → BA again with no open feedback',
-      '  (goal_ba_signoff) → Orchestration merge report (report_forward) → client',
-      '  approves or denies; on a denial the BA files the new approach (report_new_approach).',
-      'The real merge is the client\'s; a merge approval is not push-ok.',
+      'Each team lead schedules (meeting_schedule) and holds (meeting_hold) its meetings.',
+      'Done chain: each signer runs merge-ok then done (goal_merge, goal_done); merge-deny',
+      '  with a reason reopens the goal. Peer → lead (another member if the lead wrote it)',
+      '  → BA on the scheduled review\'s demo list → BA again while Orchestration prepares',
+      '  (report_prepare) → merge report (report_forward) → client push-ok or merge-deny;',
+      '  on a denial the BA files the new approach (report_new_approach).',
+      'Typed /devops push-ok, merge-ok, done or merge-deny are the client\'s answer.',
       'Business Analyst attends planning, daily, refinement and the joint review.',
       'planning: sprint goal, backlog goals, tasks (2 h per sprint week).',
       'daily: done/today/blockers; stress and strain; lead reallocates',
@@ -268,7 +269,7 @@ const MODE_FLAG = /(?:^|\s)--mode\s+(\S+)/i
 export const GATE_WORDS = [
   '', 'status', 'languages', 'setup', 'brief', 'push-ok', 'push-reset',
   'on', 'off', 'enable', 'disable', 'skill', 'skills',
-  'allow-branch', 'comments', 'config', 'monitor', 'gates',
+  'allow-branch', 'comments', 'config', 'monitor', 'gates', 'merge-ok', 'merge-deny', 'done',
 ] as const
 
 export function skillWords(): string[] {

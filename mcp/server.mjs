@@ -7,7 +7,7 @@
 // secret.
 
 import fs from 'node:fs'
-import { UNFENCED, updateJson } from '../scripts/devops-store.mjs'
+import { UNFENCED, projectPath, updateJson } from '../scripts/devops-store.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -28,14 +28,14 @@ import {
   acceptWork, allowSameTeam, ackHandoff, addGoal, assignWork, blameFor, closeHandoff,
   completeWork, createSprint, emptyBoard, GOAL_STATES, inboxFor, markThreadRead, moveGoal,
   normalizeBoard, openThread, replyThread, resolveThread, routeHandoff, sendHandoff, sprintView,
-  threadsFor, unreadThreads, workInbox, backlogView, MAX_SPRINT_WEEKS,
+  threadsFor, unreadThreads, workInbox, backlogView, BOARD_FILE, MAX_SPRINT_WEEKS,
 } from '../scripts/devops-board.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 import { isTeamId } from '../scripts/devops-ids.mjs'
 import { RISKS, planAllocation, spinUp } from '../scripts/devops-allocation.mjs'
 import {
-  MEETING_KINDS, baSignOff, forwardReports, holdMeeting, leadSignOff, meetingsFor, newApproach,
-  peerVerify, reportsFor, scheduleMeeting,
+  MEETING_KINDS, forwardReports, goalDone, goalVerdict, holdMeeting, leadSignOff, meetingsFor,
+  newApproach, prepareMerge, reportsFor, scheduleMeeting,
 } from '../scripts/devops-scrum.mjs'
 import {
   needsAttention, openBoard, recordRefusal, teamIntake, teamMove, teamSignOff,
@@ -160,26 +160,14 @@ const dest = { type: 'string', description: 'Project folder. Defaults to the fir
 const langs = { description: '"auto" (detect) or a list of language ids from list_languages. Layers do not restrict: any id works anywhere.', anyOf: [{ type: 'string', enum: ['auto'] }, { type: 'array', items: { type: 'string' } }] }
 const svcs = { description: '"auto" (detect), "none", or a list of service ids from list_services (docker, ollama, aws, ...).', anyOf: [{ type: 'string', enum: ['auto', 'none'] }, { type: 'array', items: { type: 'string' } }] }
 
-const BOARD_FILE = path.join('devops-skill', 'thoughts', 'non-final', 'board.json')
 const now = () => new Date().toISOString()
 const GOAL_STATE = {
   type: 'string', enum: ['backlog', 'ready', 'in_progress', 'review', 'qa', 'security', 'done'],
 }
 
-/**
- * The board file's path inside the project. Refuses a symbolic link on the way,
- * so a read or write cannot be redirected outside the project.
- */
+/** The board file's path inside the project (projectPath refuses symbolic links). */
 function boardFile(args, rel = BOARD_FILE) {
-  const root = fs.realpathSync(projectDir(args))
-  let at = root
-  for (const part of rel.split(path.sep)) {
-    at = path.join(at, part)
-    if (fs.existsSync(at) && fs.lstatSync(at).isSymbolicLink()) {
-      throw new Error(`refusing to use a symbolic link for the board: ${at}`)
-    }
-  }
-  return at
+  return projectPath(projectDir(args), rel)
 }
 
 function readBoard(args) {
@@ -198,6 +186,14 @@ const TEAM_DIR = path.join('.devops', 'teams')
 function teamFile(args) {
   if (!isTeamId(args.team)) throw new Error('team must look like team-<hex>')
   return boardFile(args, path.join(TEAM_DIR, `${args.team}.json`))
+}
+
+/** The seat hashes listed on the team's own board, when it has one. */
+function teamMembers(args) {
+  if (!isTeamId(args.team)) return undefined
+  const file = teamFile(args)
+  if (!fs.existsSync(file)) return undefined
+  return JSON.parse(fs.readFileSync(file, 'utf8')).members?.map(m => m.agent)
 }
 
 function boardOrThrow(current, team) {
@@ -1048,11 +1044,64 @@ const TOOLS = [
     })),
   },
   {
-    name: 'goal_peer_verify',
+    name: 'goal_merge',
     description: [
-      'Done chain step 1: a member (`caller`) of the team that builds the goal, who did not',
-      'write it and is not its lead, verifies it once it has passed security. A later',
-      'send-back voids the verification.',
+      'merge-ok or merge-deny on the Done-chain step a goal waits for, by that step\'s',
+      'signer (`caller`): a team member (peer), the team lead (another member when the lead',
+      'wrote the goal), or the Business Analyst. merge-ok comes before goal_done. merge-deny',
+      'needs a reason and reopens the goal; the BA may also deny any step to reopen a goal',
+      'on feedback (a Done goal then waits for the client\'s review). The client answers a',
+      'merge report with its own /devops merge-ok, merge-deny or push-ok.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, team: { type: 'string' }, goal: { type: 'string' },
+        decision: { enum: ['ok', 'deny'] }, reason: { type: 'string', maxLength: MAX_TASK_TEXT },
+      },
+      required: ['caller', 'goal', 'decision'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: goalVerdict(board, {
+        goal: args.goal, by: args.caller, team: args.team, members: teamMembers(args),
+        decision: args.decision, reason: args.reason, at: now(),
+      }),
+    })),
+  },
+  {
+    name: 'goal_done',
+    description: [
+      '"done" on the Done-chain step a goal waits for, after the same caller\'s merge-ok',
+      '(goal_merge): the peer verifies, the lead signs (filing the done report), the',
+      'Business Analyst signs when the goal goes on the scheduled Sprint Review\'s demo list',
+      '(`kind`, `surface`) and again once Orchestration prepares the merge presentation.',
+      'The client\'s push-ok signs last.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, team: { type: 'string' }, goal: { type: 'string' },
+        kind: { enum: ['feature', 'improvement', 'bug'] },
+        surface: { enum: ['gui', 'browser', 'terminal', 'other'] },
+      },
+      required: ['caller', 'goal'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => goalDone(board, {
+      goal: args.goal, by: args.caller, team: args.team, members: teamMembers(args),
+      kind: args.kind, surface: args.surface, at: now(),
+    })),
+  },
+  {
+    name: 'goal_signoff',
+    description: [
+      "The lead step's done (goal_done does the same for every step): the team lead",
+      '(`caller`), or another member when the lead wrote the goal, after its merge-ok, once',
+      'the goal has passed security and a team member verified it. Files a done report that',
+      'waits for the Business Analyst.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -1060,62 +1109,44 @@ const TOOLS = [
         dest, caller: { type: 'string' }, team: { type: 'string' }, sprint: { type: 'string' },
         goal: { type: 'string' },
       },
-      required: ['caller', 'team', 'sprint', 'goal'],
-      additionalProperties: false,
-    },
-    annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => ({
-      board: peerVerify(board, {
-        sprint: args.sprint, goal: args.goal, peer: args.caller, team: args.team, at: now(),
-      }),
-    })),
-  },
-  {
-    name: 'goal_signoff',
-    description: [
-      "Done chain step 2: the team lead's sign-off that a goal is done for the team: only",
-      'the lead (`caller`) of the team that builds it, once it has passed security (default',
-      'path) and a team member verified it. Files a done report that waits for the BA',
-      '(goal_ba_signoff); the client\'s typed push-ok stays the push gate.',
-    ].join(' '),
-    inputSchema: {
-      type: 'object',
-      properties: {
-        dest, caller: { type: 'string' }, sprint: { type: 'string' }, goal: { type: 'string' },
-      },
       required: ['caller', 'sprint', 'goal'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => boardChange(args, board => leadSignOff(board, {
-      sprint: args.sprint, goal: args.goal, lead: args.caller, at: now(),
+      sprint: args.sprint, goal: args.goal, lead: args.caller, team: args.team,
+      members: teamMembers(args), at: now(),
     })),
   },
   {
-    name: 'goal_ba_signoff',
+    name: 'report_prepare',
     description: [
-      'Done chain steps 3 and 4: the sprint\'s Business Analyst (`caller`, the BA of the',
-      'joint Sprint Review) signs a lead-signed goal: first after the building team\'s',
-      'retrospective, then again, which promotes the report to Orchestration. Each is',
-      'refused while a feedback thread on the goal is open.',
+      'Orchestration only: start preparing the merge presentation for done reports the BA',
+      'signed once. This opens the BA\'s second signature; report_forward then delivers the',
+      'merge report to the client.',
     ].join(' '),
     inputSchema: {
       type: 'object',
-      properties: { dest, caller: { type: 'string' }, goal: { type: 'string' } },
-      required: ['caller', 'goal'],
+      properties: { dest, ids: { type: 'array', items: { type: 'string' }, minItems: 1 } },
+      required: ['ids'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => ({
-      board: baSignOff(board, { goal: args.goal, ba: args.caller, at: now() }),
-    })),
+    run: args => {
+      if (BOUND_SEAT) throw new Error('only Orchestration prepares the merge presentation')
+      return boardChange(args, board => ({
+        board: prepareMerge(board, { ids: args.ids, at: now() }),
+      }))
+    },
   },
   {
     name: 'report_new_approach',
     description: [
-      'After the client denies a merge report, the sprint\'s Business Analyst (`caller`)',
-      'files the new approach: new backlog goals, each with the objective it answers and',
-      'its acceptance criteria (priority and owner optional). The report becomes reworked.',
+      'After the client denies a merge report, the building team\'s Business Analyst',
+      '(`caller`) files the new approach: new backlog goals, each with the objective it',
+      'answers and its acceptance criteria (priority and owner optional), carrying the',
+      'client\'s reason, which wins over a conflicting AI recommendation. The report becomes',
+      'reworked.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -1136,10 +1167,10 @@ const TOOLS = [
   {
     name: 'report_forward',
     description: [
-      'Orchestration only, Done chain step 5: pass the done reports the BA promoted on to',
-      'the person as one merge report: a summary and the big-picture merge plan (the real',
-      'branch, how it fits the design, the implementation, the risks). The client approves',
-      'or denies it; the person\'s typed /devops push-ok stays the push gate.',
+      'Orchestration only: deliver the done reports the BA signed twice to the client as one',
+      'merge report: a summary and the big-picture merge plan (the real branch, how it fits',
+      'the design, the implementation, the risks). The client\'s /devops push-ok (or',
+      'merge-ok) approves it and grants the push; merge-deny sends it back to the BA.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -1500,8 +1531,10 @@ const RESOURCE_PATTERNS = [
     return {
       awaitingBa: at('awaiting_ba'),
       baSigned: at('ba_signed'),
+      preparing: at('preparing'),
       toOrchestration: at('to_orchestration'),
       toPerson: at('to_person'),
+      reopened: at('reopened'),
       decided: reportsFor(board).filter(r => ['approved', 'denied', 'reworked'].includes(r.state)),
     }
   }],

@@ -100,10 +100,13 @@ teams and seats from it (`allocation_plan`), spins up the board
 [scrum-meetings.md](references/scrum-meetings.md)). Every team lead,
 whatever the team's job, runs its team's meetings and signs its tasks
 off as done (`goal_signoff`) after a team member verified them; the
-Business Analyst signs twice (after the retro, then with no open
-feedback), and the Orchestrator turns that into a merge report the
-person approves or denies; the person's typed `/devops push-ok` is the
-real final sign-off before any push. A one-file fix gets
+Business Analyst signs twice (when the goal goes on the scheduled Sprint
+Review, then while the Orchestrator prepares the merge presentation), and
+the Orchestrator delivers a merge report the person approves with
+`/devops push-ok` or denies with `/devops merge-deny REASON`; push-ok is
+the real final sign-off before any push. Every AI step is merge-ok, then
+done (`goal_merge`, `goal_done`); merge-deny with a reason reopens the
+goal. A one-file fix gets
 one Coder and one Reviewer, QA and Security, each on its own team that
 wrote nothing. The
 ceiling is 2 to 3 seats of each of Researcher, Coder, Reviewer, QA and
@@ -169,7 +172,10 @@ Clear does not authorize a push either.
 - **Gate words are the person's alone.** `on`, `off`, `enable`,
   `disable`, `skill`, `skills`, `push-ok`, `push-reset`, `gates`,
   `allow-branch`, `comments`, `monitor`, `config` writes and
-  `setup claude` run only as commands the person types. Person-typed
+  `setup claude` run only as commands the person types. Typed by the
+  person, `merge-ok`, `done` and `merge-deny REASON` answer the merge
+  report; a seat runs them on the board with `goal_merge` and
+  `goal_done` instead. Person-typed
   aliases (`push`, `go`, `publish`, chat `push` / `push it`) map onto
   `push-ok`. Agents cannot flip gates. One-shot `push-ok` takes no
   `on|off` parameter and is final (see Client authority).

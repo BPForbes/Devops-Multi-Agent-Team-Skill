@@ -65,6 +65,7 @@
     "scripts/devops-teams.mjs",
     "scripts/devops-allocation.mjs",
     "scripts/devops-scrum.mjs",
+    "scripts/devops-client.mjs",
     "standards.json",
     "services.json",
     "skills",
