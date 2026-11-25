@@ -246,15 +246,39 @@ function daily(next, meeting, record) {
   }
 }
 
-/** Refuses a refinement item that is not an upcoming goal with points and a priority. */
+/**
+ * Refuses a refinement item that is not an upcoming goal with points and a
+ * priority. Returns the goal row and the item's checked client fields.
+ */
 function checkItem(next, meeting, item) {
   const row = next.goals[item.goal]
   need(row !== undefined, `goal is not on the board: ${item.goal}`)
   need(row.sprint !== meeting.sprint, `${item.goal} is in this sprint; refine upcoming goals`)
   const sized = Number.isInteger(item.points) && item.points >= 1 && item.points <= POINTS_MAX
   need(sized, `points are 1 to ${POINTS_MAX}`)
-  need(Number.isInteger(item.priority) && item.priority >= 1, 'priority is 1 or more (1 is first)')
-  return row
+  need(item.priority !== undefined, 'priority is 1 or more (1 is first)')
+  return { row, fields: clientFields(item) }
+}
+
+/**
+ * The client-facing fields a backlog goal may carry, checked: the client
+ * `objective` it serves (the BA's link from chat to board), its
+ * `acceptance` criteria, its `priority` (1 is first) and an `owner` team.
+ */
+function clientFields(item) {
+  const out = {}
+  if (filled(item.objective)) out.objective = String(item.objective).trim()
+  if (item.acceptance !== undefined) out.acceptance = texts(item.acceptance, 'acceptance')
+  if (item.priority !== undefined) {
+    const ranked = Number.isInteger(item.priority) && item.priority >= 1
+    need(ranked, 'priority is 1 or more (1 is first)')
+    out.priority = item.priority
+  }
+  if (item.owner !== undefined) {
+    need(isTeamId(item.owner), `owner is a team hash: ${item.owner}`)
+    out.owner = item.owner
+  }
+  return out
 }
 
 /** Backlog Refinement: upcoming goals clarified, sized and ordered for the next sprints. */
@@ -263,9 +287,8 @@ function refinement(next, meeting, record) {
   const items = record.items
   need(nonEmpty(items), 'Backlog Refinement works one upcoming goal or more')
   for (const item of items) {
-    const row = checkItem(next, meeting, item)
-    const { points, priority } = item
-    Object.assign(row, { points, priority, refined_at: meeting.held_at })
+    const { row, fields } = checkItem(next, meeting, item)
+    Object.assign(row, fields, { points: item.points, refined_at: meeting.held_at })
     if (filled(item.notes)) row.notes = String(item.notes).trim()
   }
   const refined = items.map(i => ({ goal: i.goal, points: i.points, priority: i.priority }))
@@ -328,11 +351,15 @@ function parseQuestions(questions) {
 
 /** Adds new backlog goals named during the Sprint Review. */
 function addReviewGoals(board, added, at) {
-  for (const g of added) {
+  const fields = added.map(g => {
     need(isGoalId(g.goal) && board.goals[g.goal] === undefined, `${g.goal} is not a new goal`)
-  }
+    return clientFields(g)
+  })
   let next = board
-  for (const g of added) next = addGoal(next, { goal: g.goal, title: g.title, at })
+  added.forEach((g, i) => {
+    next = addGoal(next, { goal: g.goal, title: g.title, at })
+    Object.assign(next.goals[g.goal], fields[i])
+  })
   return next
 }
 

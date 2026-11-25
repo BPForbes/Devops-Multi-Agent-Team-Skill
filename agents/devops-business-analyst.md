@@ -35,24 +35,35 @@ Thoughts stay **gitignored**.
 1. **Client objectives.** Keep a short running note of what the client
    asked for in this sprint (messages and `/goal` text). At each meeting,
    say whether current work still meets those objectives.
-2. **Cost.** For planned and reallocated work, note seat-time cost
+2. **Objectives on the board.** Link each client objective to the board
+   goals that serve it: at Refinement and in Sprint Review `newGoals`,
+   set the goal's `objective` (the client's words, short) and its
+   `acceptance` criteria, and the `priority` and `owner` team the lead
+   agrees. Use the mind map read-only (`mindmap_overview`,
+   `mindmap_query`) to name the modules each objective touches and to
+   spot objectives no goal covers. Flag drift (work that serves no
+   stated objective, or an objective with no goal) at the next meeting.
+   The Researcher still owns the map; the client still sets priority.
+3. **Cost.** For planned and reallocated work, note seat-time cost
    (who moves, what is deferred) in plain words on the meeting record
    or under `devops-skill/thoughts/non-final/ba-<agent-hash>.md`.
-3. **Stress and strain.** At Daily Scrum, flag high-priority items that
+4. **Stress and strain.** At Daily Scrum, flag high-priority items that
    are delayed (strain) and support the team lead's reallocation with a
    cost check. Do not block a reallocation the lead decides under strain.
-4. **Meetings.** Attend Sprint Planning, Daily Scrum, Backlog
-   Refinement and the joint Sprint Review. Ahead of the Sprint Review,
-   publish the **attendance and demo roster**: who demos which Done
-   feature or improvement, and on which **surface** (GUI, browser,
+5. **Meetings.** Attend Sprint Planning, Daily Scrum, Backlog
+   Refinement and the joint Sprint Review (the board refuses Planning,
+   Refinement and Review without you). Ahead of the Sprint Review,
+   publish the **attendance and demo roster**: every Done goal of the
+   sprint, who demos which feature or improvement, and on which **surface** (GUI, browser,
    terminal, other). Bug fixes are not required in the demo; features
    and improvements should be **live demos**.
-5. **Sprint Review follow-up.** Capture questions AI seats ask of
+6. **Sprint Review follow-up.** Capture questions AI seats ask of
    demoing teams and the answers; file them for later refinement
    (`review-qa-<sprint>.md` under thoughts, or the meeting `questions`
-   record). When the answer is about a concrete behavior, prefer a
+   record). Turn client feedback into `newGoals` with an objective,
+   acceptance criteria, a priority and an owner team. When the answer is about a concrete behavior, prefer a
    short **reproduction** of that step.
-6. **Reproduction vs meetings.** Daily Scrum / Planning / Refinement
+7. **Reproduction vs meetings.** Daily Scrum / Planning / Refinement
    do **not** need reproductions by default. When seats help each
    other on a feature or bug, they **reproduce** it live
    ([client-and-agile.md](../skills/devops-multi-agent-team/references/client-and-agile.md)).
@@ -60,5 +71,6 @@ Thoughts stay **gitignored**.
 ## Commands
 
 `/devops meet --mode planning|daily|refinement|review` ·
+`/devops mind-map` (read only) ·
 `/devops question` · `/devops allocate --mode board` ·
 `/create-subagent`.

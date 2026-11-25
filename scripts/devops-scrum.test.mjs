@@ -197,6 +197,32 @@ test('Backlog Refinement sizes and orders upcoming goals, not ones already in th
   assert.throws(() => refine({ goal: NEXT, points: 21, priority: 1 }), /1 to 13/)
 })
 
+test('backlog goals carry the client objective, acceptance criteria, priority and owner', () => {
+  const planned = meet(sprintBoard(), 'planning', { record: PLAN })
+  const item = {
+    goal: NEXT, points: 3, priority: 2, objective: 'Configs never crash the parser',
+    acceptance: ['empty file parses', 'unknown key warns once'],
+  }
+  const refined = meet(planned, 'refinement', { record: { businessAnalyst: BA, items: [item] } })
+  const row = refined.board.goals[NEXT]
+  assert.equal(row.objective, 'Configs never crash the parser')
+  assert.deepEqual(row.acceptance, ['empty file parses', 'unknown key warns once'])
+  const bad = { businessAnalyst: BA, items: [{ ...item, acceptance: [''] }] }
+  assert.throws(() => meet(planned, 'refinement', { record: bad }), /acceptance must be/)
+  const added = {
+    goal: 'goal-444444', title: 'Warn on unknown keys', priority: 1, owner: TEAM,
+    acceptance: ['warns with the key name'],
+  }
+  const review = goals => ({ record: { ...EMPTY_REVIEW, newGoals: goals } })
+  const reviewed = meet(planned, 'review', review([added]))
+  assert.deepEqual(
+    [reviewed.board.goals['goal-444444'].priority, reviewed.board.goals['goal-444444'].owner],
+    [1, TEAM],
+  )
+  assert.throws(() => meet(planned, 'review', review([{ ...added, owner: 'A1' }])),
+    /owner is a team hash/)
+})
+
 test('the joint Sprint Review demos Done features, records Q&A, and adds backlog goals', () => {
   let state = meet(judgedBoard(), 'planning', { record: PLAN })
   assert.throws(() => meet(state, 'review', {
