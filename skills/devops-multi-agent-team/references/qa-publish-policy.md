@@ -15,17 +15,26 @@ feedback fix outside the exceptions in "Review-bot feedback" below is
 gated instead by an independent Reviewer's Satisfied, the
 repository's CI and the human's go.
 
-**What authorizes a push.** Three things, all on the exact tree being
-pushed: QA's `Publish gate: PASS`, Security's `Security: CLEAR`, and the
-person's typed `/devops push-ok`. None of the three can stand in for
-another, and nothing overrides any of them. Chat words never authorize a
-push, and free-form `/devops` wording never changes a gate.
+**What authorizes a push.** By default, three things, all on the exact
+tree being pushed: QA's `Publish gate: PASS`, Security's
+`Security: CLEAR`, and the person's typed `/devops push-ok`. None of the
+three can stand in for another. Chat words never authorize a push, and
+free-form `/devops` wording never changes a gate.
+
+**Development bypass.** When role contingencies would deadlock coding or
+publishing, the person may type `/devops develop on`. While that is on,
+their typed `/devops push-ok` alone authorizes one push on the current
+tree (QA PASS and Security CLEAR are not required for that push). Agents
+must still obey the human's development orders over this skill's process
+rules ([SKILL.md](../SKILL.md), Development bypass). `/devops develop off`
+restores the default three-way check. Free-form words never turn develop
+mode on or off.
 
 The Claude mod enforces the mechanical part at the tool layer:
 `git push`, `gh` writes, the GitHub write tools and branch creation are
-refused until all three hold for the current tree, a push may send only
-`HEAD`, and merges are refused outright: the person merges on GitHub (see
-the README, "The mod").
+refused until the active authorize rule holds for the current tree, a
+push may send only `HEAD`, and merges are refused outright: the person
+merges on GitHub (see the README, "The mod").
 
 ## Fast validation
 

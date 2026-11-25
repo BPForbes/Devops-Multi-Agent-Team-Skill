@@ -252,7 +252,7 @@ const MODE_FLAG = /(?:^|\s)--mode\s+(\S+)/i
 /** Known gate subcommands (not skill modes). */
 export const GATE_WORDS = [
   '', 'status', 'languages', 'setup', 'brief', 'push-ok', 'push-reset',
-  'allow-branch', 'comments', 'config', 'monitor', 'gates',
+  'develop', 'allow-branch', 'comments', 'config', 'monitor', 'gates',
 ] as const
 
 export function skillWords(): string[] {
@@ -336,9 +336,12 @@ const COMMAND_HELP: string[] = [
   '                     only .devops/ and the thought folders; the plugin supplies the rest',
   '/devops brief [TOPIC | role NAME]  one section of the skill, or a seat\'s brief',
   '/devops push-ok      (you) allow ONE push on this tree after QA PASS and Security CLEAR',
+  '                     (or push-ok alone while /devops develop on)',
   '/devops push-reset   (you) withdraw that permission',
+  '/devops develop on|off (you) development bypass: human orders beat skill contingencies;',
+  '                     while on, push-ok alone authorizes a push (no QA/Security required)',
   '/devops allow-branch NAME   (you) allow creating that git branch',
-  '/devops gates on|off (you) turn the branch gate on or off; the push check is always on',
+  '/devops gates on|off (you) turn the branch gate on or off; push check is separate (see develop)',
   '/devops monitor on|off (you) turn the failed-check monitor on or off',
   '/devops comments warn|strict|off (you) lint gate on git commit (comment and code rules): ' +
     'warn (default), refuse a commit with blocking findings, or off',
@@ -374,7 +377,8 @@ export function helpCatalog(mode: string): string {
   parts.push(
     'Free-form phrases map onto these skill modes, never onto a gate word. Call the named',
     'tools; keep large file bodies out of chat. Keep development running.',
-    'Only the person\'s typed /devops push-ok authorizes a push.',
+    'Only the person\'s typed /devops push-ok authorizes a push. With /devops develop on,',
+    'push-ok alone is enough; agents must obey the human over skill contingencies.',
   )
   return parts.join('\n')
 }

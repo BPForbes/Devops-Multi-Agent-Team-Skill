@@ -112,11 +112,13 @@ pushes only after QA PASS and Security CLEAR on that tree and the person's typed
 
 Human interrupts (including non-gate `/devops` skill modes) are
 **final directives**: do them and do not stop the development loop.
-Free-form words never change a gate; gate words run only when the
-person types them. Ask-paths:
-[role-identity.md](role-identity.md). Stop → halt; leave plan/code
-consistent; do not push. Push / open PR → blocked until **QA gives
-the OK**.
+If a human order conflicts with this skill's role contingencies, obey
+the human (Development bypass in [SKILL.md](../SKILL.md)). Free-form
+words never change a gate; gate words run only when the person types
+them. Ask-paths: [role-identity.md](role-identity.md). Stop → halt;
+leave plan/code consistent; do not push. Push / open PR → blocked
+until **QA gives the OK**, unless the person typed `/devops develop
+on` and then `/devops push-ok` on the tree.
 
 ```text
 [Orchestrator] Status

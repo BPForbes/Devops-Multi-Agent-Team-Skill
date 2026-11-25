@@ -20,8 +20,9 @@ const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
 // Words that change what may be pushed, or switch a check off. Only the
 // person may run them.
 const HUMAN_ONLY_WORDS = new Set([
-  'push-ok', 'push-reset', 'gates', 'allow-branch', 'comments', 'monitor',
+  'push-ok', 'push-reset', 'develop', 'gates', 'allow-branch', 'comments', 'monitor',
 ])
+const DEVELOP_REF = { plugin: 'devops-multi-agent-team', key: 'develop' } as const
 // `config` reads are open to every seat; these subcommands write.
 const CONFIG_WRITES = new Set(['set', 'unset', 'add', 'remove', 'rule'])
 
@@ -95,26 +96,37 @@ const PUSH_KEY = { plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as
 
 /**
  * The publish check shared by every path that publishes (git push, GitHub
- * write tools). All three must hold on this exact tree, and nothing overrides
- * any of them: a latest QA note of PASS, a latest security note of CLEAR, and
- * the person's /devops push-ok. Returns the refusal, or undefined.
+ * write tools). Default: QA PASS, Security CLEAR, and the person's
+ * /devops push-ok must all hold on this exact tree. With /devops develop on,
+ * push-ok alone is enough (development bypass). Returns the refusal, or
+ * undefined.
  */
 async function publishDenial($: EngineInterface, what: string): Promise<string | undefined> {
   const tree = await headTree($)
   if (tree === undefined) return `${PLUGIN}: ${what} is refused: the tree cannot be read.`
+  const granted = (await $.state.get(PUSH_KEY)).value
+  const developOn = (await $.state.get(DEVELOP_REF)).value === true
+  if (developOn) {
+    if (granted !== tree) {
+      return `${PLUGIN}: ${what} is refused: development bypass is on, but the `
+        + 'person has not authorized this push. Ask them to type /devops push-ok on the current tree.'
+    }
+    return undefined
+  }
   const qa = await latestQaVerdict($)
   if (qa.verdict !== 'PASS' || qa.tree !== tree) {
     const other = qa.tree !== undefined && qa.tree !== tree ? ', for another tree' : ''
     return `${PLUGIN}: ${what} is refused. Only QA may give the OK to push: the latest QA `
       + `note must say "Publish gate: PASS" for tree ${tree.slice(0, 12)} `
-      + `(latest: ${qa.verdict ?? 'none'}${other}).`
+      + `(latest: ${qa.verdict ?? 'none'}${other}). `
+      + 'Or the person can type /devops develop on, then /devops push-ok.'
   }
   const security = await latestSecurityVerdict($)
   if (security.verdict !== 'CLEAR' || security.tree !== tree) {
     return `${PLUGIN}: ${what} is refused: Security must be CLEAR on this tree. `
-      + 'Write the security note with "Security: CLEAR" and the tree.'
+      + 'Write the security note with "Security: CLEAR" and the tree. '
+      + 'Or the person can type /devops develop on, then /devops push-ok.'
   }
-  const granted = (await $.state.get(PUSH_KEY)).value
   if (granted !== tree) {
     return `${PLUGIN}: ${what} is refused: QA PASS and Security CLEAR are recorded, but the `
       + 'person has not authorized this push. Ask them to type /devops push-ok on the current tree.'
@@ -446,6 +458,7 @@ export const register: Register = on => {
 
     if (word === '' || word === 'status') {
       const gates = (await $.state.get({ plugin: 'devops-multi-agent-team', key: 'gates' } as const)).value ?? true
+      const develop = (await $.state.get(DEVELOP_REF)).value === true
       const authorized = (await $.state.get(PUSH_KEY)).value ?? false
       const tree = await headTree($)
       const security = await latestSecurityVerdict($)
@@ -455,7 +468,8 @@ export const register: Register = on => {
       return {
         text: [
           `languages: ${languages.length === 0 ? '(none detected)' : languages.join(', ')}`,
-          `branch gate: ${gates ? 'on' : 'OFF'}; push check: always on`,
+          `branch gate: ${gates ? 'on' : 'OFF'}; develop bypass: ${develop ? 'ON (push-ok alone)' : 'off'}; `
+            + `push check: ${develop ? 'push-ok only' : 'QA+Security+push-ok'}`,
           `check monitor: ${((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) ? 'on' : 'OFF'}; failing checks now: ${Object.entries((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const)).value ?? {}).map(([k, n]) => `${k} x${n}`).join(', ') || 'none'}`,
           `latest QA note: ${qa.verdict ?? 'none'}${qa.file ? ` (${qa.file.split('/').pop()})` : ''}`,
           `latest security note: ${security.verdict ?? 'none'}`,
@@ -537,10 +551,21 @@ export const register: Register = on => {
       await $.state.set({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const, rest === 'on')
       return { text: `Check monitor ${rest}.` }
     }
+    if (word === 'develop') {
+      if (rest !== 'on' && rest !== 'off') return { text: 'Usage: /devops develop on|off' }
+      await $.state.set(DEVELOP_REF, rest === 'on')
+      return {
+        text: rest === 'on'
+          ? 'Development bypass on. Human orders beat skill contingencies; '
+            + 'a typed /devops push-ok alone authorizes one push on this tree '
+            + '(QA PASS and Security CLEAR are not required while develop is on).'
+          : 'Development bypass off. Push again needs QA PASS, Security CLEAR, and /devops push-ok.',
+      }
+    }
     if (word === 'gates') {
       if (rest !== 'on' && rest !== 'off') return { text: 'Usage: /devops gates on|off' }
       await $.state.set({ plugin: 'devops-multi-agent-team', key: 'gates' } as const, rest === 'on')
-      return { text: `Branch gate ${rest}. The push check is always on.` }
+      return { text: `Branch gate ${rest}. The push check is unchanged (see /devops develop).` }
     }
     const fallback = interpretSkillIntent(e.args)
     if (fallback !== undefined) return { text: await runSkillMode($, fallback) }
@@ -683,12 +708,14 @@ export const register: Register = on => {
       return { sections: [...composed.sections, ...mindmapSection] }
     }
     const gates = await $.state.get(GATES_REF)
+    const develop = await $.state.get(DEVELOP_REF)
     const lint = await $.state.get(LINT_MODE_REF)
     const standards = await currentStandards($, root)
     const text = card({
       languages,
       hasProfile,
       gates: gates.value ?? true,
+      develop: develop.value === true,
       lintMode: lint.value ?? 'warn',
       standards: standards || undefined,
     })

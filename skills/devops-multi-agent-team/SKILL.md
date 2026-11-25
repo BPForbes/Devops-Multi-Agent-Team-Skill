@@ -51,10 +51,13 @@ and edited by hand afterwards.
 - **No profile:** say so, run `node <plugin>/scripts/devops-setup.mjs
   detect`, show the human the result and ask before installing one.
   Do not guess commands from memory.
-- **Precedence:** the project's own `AGENTS.md`, `CLAUDE.md` and rule
-  files win over this skill; the profile wins over this skill's
-  defaults. Where this skill's "no push until QA" gate and a project
-  workflow differ, follow the stricter one.
+- **Precedence:** the **human's explicit development orders** win over
+  this skill's process rules (see Development bypass below). Then the
+  project's own `AGENTS.md`, `CLAUDE.md` and rule files win over this
+  skill; the profile wins over this skill's defaults. Where this skill's
+  "no push until QA" gate and a project workflow differ, follow the
+  stricter one **unless** the human has ordered a development bypass
+  (`/devops develop on` plus their typed `/devops push-ok`).
 - **Services and sandbox:** the profile also lists the services in use
   (containers, cloud, AI, VMs) and the sandbox every build, test and scan
   runs in. Read [services-and-sandbox.md](references/services-and-sandbox.md);
@@ -132,11 +135,13 @@ Do not `git add` anything under `devops-skill/thoughts/` (both folders are in `.
 
 **Default publish path:** Review Satisfied → Security Clear → QA PASS on
 the same tree, then the person types `/devops push-ok`. Nothing else
-authorizes a push: not Review Satisfied, not Security Clear, not the
-Orchestrator, and not a chat word. Every change except review-bot
+authorizes a push by default: not Review Satisfied, not Security Clear,
+not the Orchestrator, and not a chat word. With the person's typed
+`/devops develop on`, their typed `/devops push-ok` alone authorizes
+one push (Development bypass below). Every change except review-bot
 feedback fixes (see [qa-publish-policy.md](references/qa-publish-policy.md),
-"Review-bot feedback") still gets Security's review first; Clear does
-not authorize a push either.
+"Review-bot feedback") still gets Security's review first unless the
+person ordered the bypass; Clear does not authorize a push either.
 
 ### Human authority and `/devops`
 
@@ -153,9 +158,38 @@ not authorize a push either.
 - **Do not stop development.** A `/devops` command never pauses or
   cancels the current goal loop; apply it and keep working.
 - **Gate words are the person's alone.** `push-ok`, `push-reset`,
-  `gates`, `allow-branch`, `comments`, `monitor`, `config` writes and
-  `setup claude` run only as commands the person types. Free-form words
-  never change a gate.
+  `develop`, `gates`, `allow-branch`, `comments`, `monitor`, `config`
+  writes and `setup claude` run only as commands the person types.
+  Free-form words never change a gate.
+
+### Development bypass (human over skill contingencies)
+
+A **development deadlock** is when this skill's role contingencies
+(seat order, "wait for Researcher", independence staffing, Review →
+Security → QA before any code lands, or similar) stop coding or
+pushing even though the human has ordered the work. Deadlock is a
+failure mode; it is not compliance.
+
+- **Obey the human.** Every seat and the Orchestrator **must** follow
+  the human's explicit development orders. If those orders conflict
+  with this skill's process policy (role order, independence
+  preferences, publish-gate prose, "do not start X until Y"), **obey
+  the human** and do the work. Do not refuse, stall, or re-litigate
+  the skill against a clear human directive.
+- **What yields.** Skill contingencies that block writing code,
+  committing, staffing a Coder early, skipping a seat the human said
+  to skip, or continuing after a send-back the human waved off. Keep
+  developing and pushing when the human said to.
+- **What still needs a typed gate word.** Free-form chat still never
+  flips a mechanical gate by itself. To lift the QA PASS / Security
+  CLEAR requirement on the tool-layer push check, the person types
+  `/devops develop on`. A push still needs their typed
+  `/devops push-ok` on the current tree (consumed by that push).
+  `/devops develop off` restores the normal three-way check.
+- **Record it.** When a human order overrides a skill contingency,
+  note the order and what was skipped under
+  `devops-skill/thoughts/non-final/` and keep going. Do not ask the
+  human to re-approve the same override on every turn.
 
 ### Reviewer entrypoint (before QA)
 
