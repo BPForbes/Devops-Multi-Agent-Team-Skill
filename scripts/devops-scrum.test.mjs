@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { addGoal, createSprint, emptyBoard, moveGoal } from './devops-board.mjs'
+import {
+  addGoal, assignWork, createSprint, emptyBoard, moveGoal, workInbox,
+} from './devops-board.mjs'
 import {
   clientSignOff, forwardReports, holdMeeting, leadSignOff, meetingsFor, reportsFor,
   scheduleMeeting, timebox,
@@ -142,6 +144,27 @@ test('Daily Scrum records stress, strain and lead reallocations with the BA pres
     minutes: 5, attendees: [LEAD, DEV], record: { ...record, updates: [UPDATE] },
   }
   assert.throws(() => meet(planned, 'daily', missing), /Business Analyst/)
+})
+
+test('a Daily Scrum reallocation onto a goal and job moves the seat\'s board work', () => {
+  const planned = meet(sprintBoard(), 'planning', { record: PLAN })
+  const given = assignWork(planned.board, {
+    goal: NEXT, job: 'coder', agent: DEV, team: TEAM, description: 'polish', by: LEAD, at: AT,
+  })
+  const state = { ...planned, board: given.board }
+  const move = {
+    agent: DEV, to: 'parser fix', reason: 'priority 1 delayed',
+    goal: GOAL, job: 'coder', from: given.id,
+  }
+  const record = { businessAnalyst: BA, updates: [UPDATE], reallocations: [move] }
+  const daily = meet(state, 'daily', { minutes: 10, attendees: [LEAD, DEV, BA], record })
+  const held = daily.board.meetings[daily.id].record.reallocations[0]
+  assert.equal(daily.board.assignments[given.id].state, 'released')
+  assert.deepEqual(workInbox(daily.board, DEV).map(w => [w.id, w.goal]), [[held.work, GOAL]])
+  const half = { ...record, reallocations: [{ ...move, job: undefined, from: undefined }] }
+  const halfMove = { minutes: 10, attendees: [LEAD, DEV, BA], record: half }
+  const refused = () => meet(state, 'daily', halfMove)
+  assert.throws(refused, /both its goal and its job/)
 })
 
 test('Backlog Refinement sizes and orders upcoming goals, not ones already in the sprint', () => {

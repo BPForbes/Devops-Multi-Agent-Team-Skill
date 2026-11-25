@@ -1,6 +1,8 @@
 // Scrum meetings on the goal board (see references/scrum-meetings.md).
 // Pure functions over the board.
-import { addGoal, mintId, need, normalizeBoard } from './devops-board.mjs'
+import {
+  addGoal, assignWork, mintId, need, normalizeBoard, releaseWork,
+} from './devops-board.mjs'
 import { isAgentId, isGoalId, isJob, isTeamId } from './devops-ids.mjs'
 
 /** Minutes per sprint week each kind may take at most; a daily scrum is 15 minutes flat. */
@@ -185,25 +187,55 @@ function parseReallocations(reallocations, attendees) {
       'a reallocation names an attending agent')
     need(filled(move.to) && filled(move.reason),
       'a reallocation says where the agent goes and why')
+    need((move.goal === undefined) === (move.job === undefined),
+      'a reallocation onto board work names both its goal and its job')
+    need(move.goal === undefined || (isGoalId(move.goal) && isJob(move.job)),
+      'a reallocation names a goal hash and a job')
   }
   return rows.map(m => ({
     agent: m.agent, to: String(m.to).trim(), reason: String(m.reason).trim(),
     cost: filled(m.cost) ? String(m.cost).trim() : '',
+    ...(m.goal === undefined ? {} : { goal: m.goal, job: m.job }),
+    ...(filled(m.from) ? { from: String(m.from).trim() } : {}),
   }))
+}
+
+/**
+ * Puts the lead's reallocations onto the board: a move that names a goal and
+ * a job becomes assigned work for the moved seat (assignWork), and the open work
+ * it leaves (`from`, a work id) is released. Free-text moves stay on the
+ * record only. Returns the board and the moves with their new work ids.
+ */
+function applyReallocations(board, meeting, moves) {
+  const { lead: by, held_at: at, team } = meeting
+  let next = board
+  const applied = moves.map(move => {
+    if (move.goal === undefined) return move
+    if (move.from !== undefined) {
+      next = releaseWork(next, { id: move.from, agent: move.agent, team, by, at })
+    }
+    const description = `Daily Scrum reallocation to ${move.to}: ${move.reason}`
+    const made = assignWork(next, { ...move, team, description, by, at })
+    next = made.board
+    return { ...move, work: made.id }
+  })
+  return { board: next, reallocations: applied }
 }
 
 /** Daily Scrum: updates, blockers, stress/strain, and lead reallocations. */
 function daily(next, meeting, record) {
   requireBa(meeting, record, 'Daily Scrum')
   const { notes, blockers } = dailyUpdates(record.updates, meeting.attendees)
+  const moves = parseReallocations(record.reallocations, meeting.attendees)
+  const { board, reallocations } = applyReallocations(next, meeting, moves)
   return {
-    board: next,
+    board,
     record: {
       updates: notes,
       blockers,
       stress: parseStress(record.stress),
       strain: parseStrain(record.strain),
-      reallocations: parseReallocations(record.reallocations, meeting.attendees),
+      reallocations,
       ...baField(record),
     },
   }

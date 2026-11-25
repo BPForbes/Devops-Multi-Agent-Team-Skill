@@ -41,7 +41,11 @@ addition the lead and Business Analyst record:
   lower-priority work still has seats.
 - **reallocations** — the lead's moves: which agent leaves which work and
   joins which higher-priority goal or job, and why. The BA notes cost
-  (deferred scope, seat-time).
+  (deferred scope, seat-time). A move that names `goal` and `job` is
+  applied to the board when the meeting is held: the agent gets that
+  assigned work (its id lands on the move as `work`), and the open work
+  it leaves, named by its work id in `from`, is released. A move with
+  only free text `to` stays on the record.
 
 Only the team lead decides a reallocation; the BA does not veto it.
 

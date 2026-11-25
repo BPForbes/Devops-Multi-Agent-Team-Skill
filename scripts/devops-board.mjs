@@ -491,6 +491,20 @@ export function acceptWork(board, { id, agent, at }) {
   return next
 }
 
+/**
+ * A team lead releases a seat's open work when it moves the seat elsewhere
+ * (a Daily Scrum reallocation). The work leaves the seat's inbox.
+ */
+export function releaseWork(board, { id, agent, team, by, at }) {
+  const row = ownWork(board, id, agent)
+  need(row.state === 'assigned' || row.state === 'accepted',
+    `work ${id} is ${row.state}; only open work is released`)
+  need(team === undefined || row.team === team, `work ${id} belongs to team ${row.team}`)
+  const next = normalizeBoard(structuredClone(board))
+  Object.assign(next.assignments[id], { state: 'released', released_at: at, released_by: by })
+  return next
+}
+
 /** The assigned seat reports the work done. */
 export function completeWork(board, { id, agent, at }) {
   const row = ownWork(board, id, agent)
