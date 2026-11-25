@@ -230,7 +230,10 @@ mode; it is not compliance.
 - **Mechanical gates.** The client's one-shot `/devops push-ok`
   (aliases `push` / `go` / `publish`, or chat `push` / `push it`)
   authorizes one push and is **final** even without QA PASS or
-  Security CLEAR (recorded as an override). Agents cannot flip gates.
+  Security CLEAR (recorded as an override). The same word with
+  `--risk REASON` records a board risk for a missing Review, QA or
+  Security hand-off, or an unapproved dependency; the skip is not a
+  pass. Agents cannot flip gates or record that risk.
   `/devops off` or `/devops disable` lifts every check.
 - **Record it.** Note the order and what was skipped under
   `devops-skill/thoughts/non-final/` (and the mod's override list for

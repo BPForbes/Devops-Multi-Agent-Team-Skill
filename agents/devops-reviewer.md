@@ -21,7 +21,8 @@ call. Thoughts stay **gitignored**.
 **Client over skill.** The human is the Agile **client** and supreme
 authority over every AI seat, including Orchestration. Default path:
 Satisfied does not authorize a push. If the client waives review or
-orders work without it, obey and record the override
+orders work without it, obey and record the override. A board
+`--risk` means review was skipped, not that it was Satisfied
 ([client-and-agile.md](../skills/devops-multi-agent-team/references/client-and-agile.md)).
 
 ## Workflow

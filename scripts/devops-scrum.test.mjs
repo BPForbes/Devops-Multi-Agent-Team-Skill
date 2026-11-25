@@ -904,6 +904,70 @@ test('the BA may sign over a reported bug for a big matter, with the reason on r
   assert.equal(validateEnvelope(sig).ok, true)
 })
 
+/** GOAL at security, peer-verified, with no Review, QA or Security hand-off. */
+function unverdicted() {
+  const planned = meet(judgedBoard(), 'planning', { record: PLAN })
+  let board = planned.board
+  for (const step of ['ready', 'in_progress', 'review', 'qa', 'security']) {
+    board = moveGoal(board, { goal: GOAL, state: step, at: AT })
+  }
+  const target = board.goals[GOAL]
+  target.signoffs = [{ step: 'peer', by: DEV, at: AT, seq: 0 }]
+  target.reviews = [
+    { step: 'peer', by: DEV, verdict: 'ok', at: AT },
+    { step: 'lead', by: LEAD, verdict: 'ok', at: AT },
+  ]
+  return { ...planned, board }
+}
+
+/** Skipped checks stay skips: no clear hand-off, no pass verdict, roster has none. */
+function assertSkipsAreNotPasses(board, goal) {
+  const risks = board.goals[goal].risks ?? []
+  assert.ok(risks.length > 0)
+  for (const risk of risks) {
+    assert.equal(risk.who, 'client')
+    assert.equal(risk.skipped.some(item => /pass|clear|ok/i.test(item.check)), false)
+  }
+  for (const envelope of Object.values(board.signatures)) {
+    if (envelope.body.risk === undefined) continue
+    const checked = validateEnvelope(envelope)
+    assert.equal(checked.ok, true, checked.errors.join('; '))
+    if (envelope.body.verdict === 'ok') assert.equal(envelope.body.step, 'client')
+  }
+  const cleared = Object.values(board.handoffs).some(h => h.payload.result === 'clear')
+  assert.equal(cleared, false)
+}
+
+test('the client can record missing Review, QA and Security checks; the lead can then sign', () => {
+  const state = unverdicted()
+  const sign = () => leadSignOff(state.board, { sprint: state.sprint, goal: GOAL, lead: LEAD, at: AT })
+  assert.throws(sign, /no review hand-off to QA/)
+  const reason = 'Ship the demo; Review, QA and Security have not handed it on'
+  assert.throws(() => clientSignOff(state.board, { goals: [GOAL], at: AT }),
+    /a risk override needs a reason/)
+  const waived = clientSignOff(state.board, { goals: [GOAL], risk: reason, at: AT })
+  assert.equal(waived.risks, 1)
+  assert.deepEqual(waived.board.goals[GOAL].risks[0].skipped.map(item => item.check),
+    ['review', 'qa', 'security'])
+  const done = leadSignOff(waived.board, { sprint: state.sprint, goal: GOAL, lead: LEAD, at: AT })
+  const report = done.id
+  assert.equal(done.board.goals[GOAL].state, 'done')
+  assert.equal(done.board.reports[report].risks[0].reason, reason)
+  assert.equal(done.board.goals[GOAL].signoffs.at(-1).risk.who, 'client')
+  assertSkipsAreNotPasses(done.board, GOAL)
+  const reviewed = meet({ ...state, board: done.board }, 'review', {
+    attendees: [LEAD, DEV, BA],
+    record: {
+      businessAnalyst: BA,
+      roster: [{ agent: DEV, goal: GOAL, kind: 'feature' }],
+      feedback: [],
+    },
+  })
+  const row = reviewed.board.meetings[reviewed.id].record.roster[0]
+  assert.deepEqual(Object.keys(row), ['agent', 'goal', 'kind'])
+  assert.equal(JSON.stringify(row).includes('pass'), false)
+})
+
 test('push-ok approves an item on its own; only a dependency can hold it back', () => {
   const { board, report } = delivered()
   const approve = b => clientSignOff(b, { ids: [report], at: AT })
@@ -916,6 +980,21 @@ test('push-ok approves an item on its own; only a dependency can hold it back', 
   const deniedDep = structuredClone(unrelated)
   deniedDep.goals[GOAL].depends_on = [NEXT]
   assert.throws(() => approve(deniedDep), /goal-222222, which the client denied/)
+  const reason = 'Ship this item; the dependency is still open'
+  assert.throws(() => clientSignOff(dependent, { ids: [report], risk: ' ', at: AT }),
+    /a risk override needs a reason/)
+  const over = clientSignOff(dependent, { ids: [report], risk: reason, at: AT })
+  assert.equal(over.board.reports[report].state, 'approved')
+  assert.equal(over.board.goals[NEXT].signoffs, undefined)
+  assert.equal(over.board.reports[report].risks[0].skipped[0].check, 'dependency')
+  assert.equal(over.board.reports[report].risks[0].reason, reason)
+  const skipped = Object.values(over.board.signatures).find(e => e.body.verdict === 'skipped')
+  assert.equal(skipped.signer, 'client')
+  assert.equal(validateEnvelope(skipped).ok, true)
+  const clientOk = Object.values(over.board.signatures)
+    .find(e => e.body.step === 'client' && e.body.verdict === 'ok')
+  assert.equal(clientOk.body.risk.skipped[0].detail.includes(NEXT), true)
+  assert.notEqual(over.board.goals[NEXT].signoffs?.at(-1)?.step, 'client')
   const signedDep = structuredClone(dependent)
   signedDep.goals[NEXT].signoffs = [{ step: 'client', by: 'client', at: AT }]
   const approved = approve(signedDep).board

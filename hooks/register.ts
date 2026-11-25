@@ -68,6 +68,7 @@ const CHAIN_SCRIPT = 'devops-chain.mjs'
 const PUSH_REPORTS = { plugin: 'devops-multi-agent-team', key: 'pushReports' } as const
 
 const REPORT_ID = /^report-[0-9a-f]{6}$/
+const GOAL_ID = /^goal-[0-9a-f]{6}$/
 
 /** The merge report ids named in typed words, and the words left over. */
 function reportIds(rest: string): { ids: string[]; words: string[] } {
@@ -76,19 +77,66 @@ function reportIds(rest: string): { ids: string[]; words: string[] } {
   return { ids: all.filter(isReport), words: all.filter(w => !isReport(w)) }
 }
 
+/** `--risk REASON` and `--goal` hashes in the words left after report ids. */
+function riskOverride(words: string[]): { risk?: string; goals: string[]; error?: string } {
+  const goals: string[] = []
+  let risk: string | undefined
+  for (let i = 0; i < words.length; i += 1) {
+    if (words[i] === '--goal') {
+      const goal = words[i + 1]
+      if (!GOAL_ID.test(goal ?? '')) {
+        return { goals, error: 'Usage: /devops push-ok --risk REASON --goal goal-<hex>' }
+      }
+      goals.push(goal)
+      i += 1
+      continue
+    }
+    if (words[i] !== '--risk') continue
+    const reason = words[i + 1]
+    if (reason === undefined || reason.startsWith('--') || reason.trim() === '') {
+      return {
+        goals,
+        error: 'a risk override needs a reason: /devops push-ok REPORT... --risk REASON',
+      }
+    }
+    risk = reason
+    i += 1
+  }
+  return { risk, goals }
+}
+
+function approveArgs(ids: string[], goals: string[], risk?: string): string[] {
+  return [
+    'approve', ...ids,
+    ...goals.flatMap(goal => ['--goal', goal]),
+    ...(risk === undefined ? [] : ['--risk', risk]),
+  ]
+}
+
 /**
  * The person's approval of the current tree: grants one push (PUSH_KEY). A
  * push-ok naming merge reports first approves them on the board; if the
- * board refuses one (a dependency not approved), nothing is granted. Returns
- * what happened.
+ * board refuses one (a dependency not approved, and no --risk reason),
+ * nothing is granted. `--risk` is the client's reason for skipping a check
+ * or dependency; a goal-only risk records that and does not grant a push.
+ * Returns what happened.
  */
-async function grantPush($: EngineInterface, ids: string[] = []): Promise<string> {
+async function grantPush(
+  $: EngineInterface,
+  ids: string[] = [],
+  risk?: string,
+  goals: string[] = [],
+): Promise<string> {
   const tree = await headTree($)
   if (tree === undefined) return 'The tree cannot be read; no push is allowed.'
-  const ran = ids.length > 0
-    ? await runPluginScript($, CHAIN_SCRIPT, ['approve', ...ids])
+  const boardCall = ids.length > 0 || goals.length > 0
+  const ran = boardCall
+    ? await runPluginScript($, CHAIN_SCRIPT, approveArgs(ids, goals, risk))
     : await waitingRefusal($)
   if (!ran.ok) return `No push granted: ${ran.out ?? 'the board could not be updated'}`
+  if (goals.length > 0 && ids.length === 0) {
+    return `${ran.out ?? 'Risk recorded.'}\nNo push is granted until a merge report is approved.`
+  }
   await $.state.set(PUSH_KEY, tree)
   await $.state.set(PUSH_REPORTS, ids)
   const board = ids.length > 0 ? `\n${ran.out ?? ''}`
@@ -702,7 +750,10 @@ export const register: Register = on => {
     }
     if (word === 'push-ok' || word === 'merge-ok' || word === 'done') {
       // The grant names the tree it was given for: a later commit voids it.
-      return { text: await grantPush($, reportIds(rest).ids) }
+      const { ids, words } = reportIds(rest)
+      const parsed = riskOverride(words)
+      if (parsed.error !== undefined) return { text: parsed.error }
+      return { text: await grantPush($, ids, parsed.risk, parsed.goals) }
     }
     if (word === 'merge-deny') {
       const { ids, words } = reportIds(rest)

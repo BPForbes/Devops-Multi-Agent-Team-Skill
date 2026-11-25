@@ -29,7 +29,9 @@ Do until you achieve **X**. Do not stop at a plan or a partial implement.
 6. Mark the local goal file (and `UpdateGoal`) complete only when the criteria are met, or the human stops the goal.
 7. **When the gate is ready:** Orchestrator **notifies the human** and
    waits. Do not push. Tell the person QA passed and Security is clear;
-   they type `/devops push-ok`.
+   they type `/devops push-ok`. A missing Review, QA or Security hand-off,
+   or a dependency not yet approved, is a `--risk REASON` on that word
+   (the client only). The skip is recorded, not reported as a pass.
    Security Clear alone never authorizes a push.
 
 Catalog: `../skills/devops-multi-agent-team/references/agent-commands.md`.

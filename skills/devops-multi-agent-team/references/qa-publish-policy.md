@@ -28,7 +28,11 @@ CLEAR so the mod does not deadlock development. Each override is
 recorded (tree, rule, what was published, time) and applies to that
 tree and one push only. Agents cannot grant a push. Saying `push` in
 chat is the same as `/devops push-ok` when it comes from the client.
-If the client orders work without seat sign-off, do the work.
+If the client orders work without seat sign-off, do the work. That
+publish-gate override is the QA PASS / Security CLEAR note. The board
+has its own client risk (`/devops push-ok --risk REASON`) for a missing
+Review, QA or Security hand-off, or for a dependency not yet approved.
+That risk is not a PASS or a CLEAR.
 
 **Skill off.** `/devops off` or `/devops disable` turns the whole skill
 off: session checks stop, and `.claude/settings.json` sets

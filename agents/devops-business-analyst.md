@@ -64,7 +64,9 @@ and carry the client's feedback back as goals.
 6. **Sprint Review follow-up.** Capture questions AI seats ask of
    demoing teams and the answers; file them for later refinement
    (`review-qa-<sprint>.md` under thoughts, or the meeting `questions`
-   record). Turn client feedback into `newGoals` with an objective,
+   record). A client risk on a Done goal means Review, QA or Security was
+   skipped; do not treat that as a pass on the roster or in the merge
+   report. Turn client feedback into `newGoals` with an objective,
    acceptance criteria, a priority and an owner team. When the answer
    is about a concrete behavior, prefer a short **reproduction** of
    that step.

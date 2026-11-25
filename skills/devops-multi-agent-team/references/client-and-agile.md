@@ -60,6 +60,11 @@ Reviewer, QA, Security, Business Analyst, and every other role).
   never replaces them. A client order to ship sooner is still obeyed at
   once: the push gate lets push-ok override a missing QA PASS or Security
   CLEAR and records it, so nothing on the board blocks that order.
+  On the board, only the person can waive a missing Review, QA or Security
+  hand-off, or a merge report whose dependency is not yet approved, with
+  `/devops push-ok ... --risk REASON`. The board records that skip as a
+  risk (who, when, what was skipped, why), not as a passed check. A seat
+  cannot record it.
 - Any client feedback can reopen a goal, even a Done one. When AI
   recommendations conflict with the client's, the client's most recent
   feedback stands.

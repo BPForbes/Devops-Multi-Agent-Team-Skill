@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import fs from 'node:fs'
 import { BOARD_FILE, emptyBoard, normalizeBoard } from './devops-board.mjs'
-import { isAgentId } from './devops-ids.mjs'
+import { isAgentId, isGoalId } from './devops-ids.mjs'
 import { isMain } from './devops-main.mjs'
 import {
   clientSignOff, decideBug, decideLoad, goalDone, goalVerdict, raiseToAnalyst, recordMerged,
@@ -16,7 +16,10 @@ import { TEAM_DIR, readMembers } from './devops-teams.mjs'
 
 const USAGE = [
   'usage: devops-chain <command> [--dest DIR]',
-  '  approve REPORT...                 the client approves the named merge reports',
+  '  approve REPORT... [--risk REASON] [--goal GOAL]',
+  '                                    the client approves the named reports;',
+  '                                    --risk records a skipped check or dependency',
+  '                                    (a seat bound with DEVOPS_SEAT cannot)',
   '  deny [REPORT...] --reason TEXT    the client denies them (all waiting when none named)',
   '  pushed --tree TREE REPORT...      record the push of approved reports',
   '  waiting                           list the merge reports waiting for the client',
@@ -36,9 +39,13 @@ const SEAT_WORDS = new Set(['merge-ok', 'merge-deny', 'done', 'raise'])
 
 /** The client's words on merge and bug reports. */
 const PERSON_WORDS = Object.freeze({
-  approve: (board, { ids, at }) => {
-    const done = clientSignOff(board, { ids, at })
-    return { board: done.board, text: `Merge report approved: ${done.approved.join(', ')}` }
+  approve: (board, { ids, goals = [], at, risk }) => {
+    const done = clientSignOff(board, { ids, goals, at, risk })
+    const approved = done.approved.length === 0 ? 'No merge report approved.'
+      : `Merge report approved: ${done.approved.join(', ')}`
+    const note = done.risks > 0 ? ` Risk recorded (${done.risks}).`
+      : (risk === undefined ? '' : ' No check or dependency was skipped.')
+    return { board: done.board, text: `${approved}${note}` }
   },
   deny: denyReports,
   load: (board, { ids, words, reason, at }) => {
@@ -71,12 +78,38 @@ function denyReports(board, { ids, reason, at }) {
 }
 
 /**
+ * A bound seat: an agent hash on `who`, or `who` itself when the chain
+ * was started with DEVOPS_SEAT.
+ */
+function seatActor(who) {
+  const seat = typeof who === 'object' && who !== null ? who.seat : who
+  return isAgentId(seat) ? seat : undefined
+}
+
+/** The client's risk reason, or undefined when they did not pass one. */
+function statedRisk(risk) {
+  if (risk === undefined) return undefined
+  const reason = String(risk).trim()
+  if (reason === '' || reason.startsWith('--')) throw new Error('a risk override needs a reason')
+  return reason
+}
+
+/**
  * Applies one decision to the board. `who` is the seat for a seat word,
- * the pusher for `pushed`. Returns { board, text }.
+ * the pusher for `pushed`. Returns { board, text }. A risk override is the
+ * client's alone: a seat's words never grant a push.
  */
 export function decide(board, options) {
-  const { command, ids, tree, who, at, onBase } = options
-  if (Object.hasOwn(PERSON_WORDS, command)) return PERSON_WORDS[command](board, options)
+  const { command, ids, goals = [], tree, who, at, onBase } = options
+  const risk = statedRisk(options.risk)
+  if ((risk !== undefined || goals.length > 0) && seatActor(who) !== undefined) {
+    throw new Error('only the client records a risk override; a seat\'s words never grant a push')
+  }
+  for (const goal of goals) {
+    if (!isGoalId(goal)) throw new Error(`a risk override names a goal hash: ${goal}`)
+  }
+  const acting = { ...options, risk, goals }
+  if (Object.hasOwn(PERSON_WORDS, command)) return PERSON_WORDS[command](board, acting)
   if (command === 'pushed') {
     const next = recordPush(board, { ids, by: who, tree, at })
     return { board: next, text: `Push recorded on ${ids.join(', ')} by ${who}` }
@@ -155,11 +188,13 @@ function deleteSide(root, side) {
 function parse(argv) {
   const values = name => argv.flatMap((a, i) => (a === name ? [argv[i + 1]] : []))
   const valued = new Set(['--dest', '--reason', '--tree', '--kind', '--surface', '--demoer',
-    '--base', '--override', '--proposal', '--alternative'])
+    '--base', '--override', '--proposal', '--alternative', '--risk', '--goal'])
   const positional = argv.slice(1)
     .filter((a, i) => !valued.has(a) && !valued.has(argv[i]) && a !== '--meets')
   const one = name => values(name)[0]
-  return { command: argv[0], positional, one, flag: name => argv.includes(name) }
+  return {
+    command: argv[0], positional, one, all: values, flag: name => argv.includes(name),
+  }
 }
 
 /** The merge reports waiting for the client, as one line. */
@@ -181,7 +216,7 @@ function actor(root, command) {
 }
 
 function main(argv) {
-  const { command, positional, one, flag } = parse(argv)
+  const { command, positional, one, all, flag } = parse(argv)
   const known = [...Object.keys(PERSON_WORDS), 'pushed', 'waiting', 'merged', ...SEAT_WORDS]
   if (!known.includes(command)) return console.log(USAGE) ?? 2
   const root = path.resolve(one('--dest') ?? process.cwd())
@@ -190,6 +225,10 @@ function main(argv) {
   if (command === 'waiting') return console.log(waitingText(file)) ?? 0
   const base = one('--base')
   const proposal = one('--proposal')
+  const riskValue = one('--risk')
+  if (flag('--risk') && (riskValue === undefined || String(riskValue).startsWith('--'))) {
+    throw new Error('a risk override needs a reason')
+  }
   const extra = {
     kind: one('--kind'), surface: one('--surface'), demoer: one('--demoer'), meets: flag('--meets'),
     override: one('--override'), alternative: one('--alternative'),
@@ -199,7 +238,7 @@ function main(argv) {
   updateJson(file, emptyBoard(), current => {
     done = decide(normalizeBoard(current), {
       command, ids: positional, words: positional.slice(1), goal: positional[0],
-      reason: one('--reason'), tree: one('--tree'),
+      goals: all('--goal'), reason: one('--reason'), risk: riskValue, tree: one('--tree'),
       who: actor(root, command), extra, at: new Date().toISOString(),
       onBase: tree => base !== undefined && treesOn(root, base).has(tree),
     })

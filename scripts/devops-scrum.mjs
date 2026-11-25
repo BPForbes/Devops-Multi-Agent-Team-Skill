@@ -563,41 +563,119 @@ function goalAuthors(next, goal) {
   ]))
 }
 
-/**
- * Refuses a sign-off unless, since the goal's last send-back or return to the
- * backlog (whichever is later) and in this order,
- * the goal was reviewed into the QA team the allocation names, that QA team
- * handed it to its Security team, and that Security team's latest sign-off
- * after the hand-off is clear. No verdict counts from a seat that ever
- * authored the goal, in any sprint, or from its team lead, whatever team the
- * seat names (teams are self-declared on a shared server).
- */
-function checkVerdicts(next, sprint, goal) {
+/** Hand-offs for `goal` since its last send-back or return to the backlog. */
+function handoffsSince(next, goal) {
+  const mine = Object.values(next.handoffs ?? {})
+    .slice(next.goals[goal].judged_from ?? 0)
+    .filter(h => h.payload.goal === goal)
+  return mine.slice(mine.findLastIndex(h => SEND_BACKS.has(h.payload.kind)) + 1)
+}
+
+/** True for a hand-off whose sender never authored the goal and is not its lead. */
+function seatIndependent(next, sprint, goal) {
   const teams = allocatedTeams(next, sprint)
-  const team = job => teams.find(t => (t[`${job}_goals`] ?? []).includes(goal))?.team
-  const [qa, security] = [team('qa'), team('security')]
-  need(qa !== undefined && security !== undefined,
-    `${goal} has no QA and Security team in the allocation`)
-  const all = Object.values(next.handoffs ?? {})
   const authors = goalAuthors(next, goal)
   const owner = teams.find(t => (t.goals ?? []).includes(goal))?.lead
-  const independent = h => !authors.has(h.payload.from?.agent) && h.payload.from?.agent !== owner
-  const mine = all.slice(next.goals[goal].judged_from ?? 0).filter(h => h.payload.goal === goal)
-  const since = mine.slice(mine.findLastIndex(h => SEND_BACKS.has(h.payload.kind)) + 1)
-  const at = (kind, from, to, after = -1) => since.findIndex((h, i) => i > after
-    && h.payload.kind === kind && h.payload.to?.team === to
-    && (from === undefined || h.payload.from?.team === from) && independent(h))
-  const reviewed = at('review-to-qa', undefined, qa)
-  need(reviewed !== -1, `${goal} has no review hand-off to QA (${qa}) since its last send-back`)
+  return h => !authors.has(h.payload.from?.agent) && h.payload.from?.agent !== owner
+}
+
+function reviewAt(since, qa, independent) {
+  return since.findIndex(h => h.payload.kind === 'review-to-qa'
+    && h.payload.to?.team === qa && independent(h))
+}
+
+function securityClear(since, handed, security, independent) {
+  const latest = since.slice(handed + 1)
+    .filter(h => h.payload.kind === 'security-signoff').at(-1)
+  return latest?.payload.result === 'clear' && latest.payload.from?.team === security
+    && independent(latest)
+}
+
+const allocationDetail = goal => `${goal} has no QA and Security team in the allocation`
+const reviewDetail = (goal, qa) =>
+  `${goal} has no review hand-off to QA (${qa}) since its last send-back`
+const qaDetail = (goal, qa, security) =>
+  `${goal} has no QA hand-off from ${qa} to Security (${security}) after its review`
+const securityDetail = (goal, security) =>
+  `${goal}'s latest Security sign-off after QA's hand-off must be clear, from ${security}`
+
+/** Review, QA and Security hand-offs still missing for a goal that has both teams. */
+function handoffGaps(next, sprint, goal, teams) {
+  const { qa, security } = teams
+  const since = handoffsSince(next, goal)
+  const independent = seatIndependent(next, sprint, goal)
+  const reviewed = reviewAt(since, qa, independent)
   const handed = lastAt(since, 'qa-to-security', h => h.payload.from?.team === qa
     && h.payload.to?.team === security && independent(h), reviewed)
-  need(handed !== -1,
-    `${goal} has no QA hand-off from ${qa} to Security (${security}) after its review`)
-  const latest = since.slice(handed + 1).filter(h => h.payload.kind === 'security-signoff').at(-1)
-  const clear = latest?.payload.result === 'clear' && latest.payload.from?.team === security
-    && independent(latest)
-  need(clear,
-    `${goal}'s latest Security sign-off after QA's hand-off must be clear, from ${security}`)
+  const gaps = []
+  if (reviewed === -1) gaps.push({ check: 'review', detail: reviewDetail(goal, qa) })
+  if (handed === -1) gaps.push({ check: 'qa', detail: qaDetail(goal, qa, security) })
+  const clear = handed !== -1 && securityClear(since, handed, security, independent)
+  if (!clear) gaps.push({ check: 'security', detail: securityDetail(goal, security) })
+  return gaps
+}
+
+/** Review, QA and Security checks still missing, in the order a refusal names them. */
+function verdictGaps(next, sprint, goal) {
+  const teams = allocatedTeams(next, sprint)
+  const named = job => teams.find(t => (t[`${job}_goals`] ?? []).includes(goal))?.team
+  const qa = named('qa')
+  const security = named('security')
+  if (qa === undefined || security === undefined) {
+    return [{ check: 'allocation', detail: allocationDetail(goal) }]
+  }
+  return handoffGaps(next, sprint, goal, { qa, security })
+}
+
+/** True when a client risk record already names every check in `skipped`. */
+function riskCovers(row, skipped) {
+  if (row?.who !== 'client' || !filled(row.reason)) return false
+  const have = new Set(row.skipped.map(item => item.check))
+  return skipped.every(item => have.has(item.check))
+}
+
+/**
+ * The client's risk record for checks or a dependency it skipped.
+ * Verdict is `skipped`, never a pass. The record is on the goal, on the
+ * merge report when `report` is set, and in a chain.signature envelope.
+ */
+function writeRisk(next, goal, { at, reason, skipped, report }) {
+  const risk = {
+    who: 'client',
+    at,
+    reason: String(reason).trim(),
+    skipped: skipped.map(({ check, detail }) => ({ check, detail })),
+  }
+  const target = next.goals[goal]
+  target.risks = [...(target.risks ?? []), risk]
+  target.history.push({
+    at, event: 'risk', by: 'client', reason: risk.reason, skipped: risk.skipped,
+  })
+  if (report !== undefined) {
+    next.reports[report].risks = [...(next.reports[report].risks ?? []), risk]
+  }
+  recordSignature(next, goal, {
+    step: 'client', by: 'client', verdict: 'skipped', at, reason: risk.reason, risk,
+    ...(report === undefined ? {} : { report }),
+  })
+  return risk
+}
+
+/**
+ * Refuses the lead's sign-off unless Review, QA and Security handed the goal
+ * on, in order, since its last send-back. A client risk (`who: 'client'`)
+ * records the missing checks and lets the sign-off proceed; those checks are
+ * not stored as passes. No verdict counts from an author or the team lead.
+ * Returns the risk the sign-off relied on, or undefined when nothing was missing.
+ */
+function checkVerdicts(next, sprint, goal, client) {
+  const skipped = verdictGaps(next, sprint, goal)
+  if (skipped.length === 0) return undefined
+  const prior = (next.goals[goal].risks ?? []).find(row => riskCovers(row, skipped))
+  if (prior !== undefined) return prior
+  const allowed = client?.who === 'client' && filled(client.reason)
+  need(allowed, skipped[0].detail)
+  return writeRisk(next, goal, { at: client.at, reason: client.reason, skipped })
 }
 
 /**
@@ -910,9 +988,11 @@ export function leadSignOff(board, { sprint, goal, lead, team, members, at, mint
   need(next.goals[goal]?.sprint === sprint, `${goal} is not in this sprint`)
   const acting = { by: lead, team: team ?? buildingTeam(next, sprint, goal).team, members }
   const { row } = checkSigner(next, goal, 'lead', acting)
-  checkVerdicts(next, sprint, goal)
+  const waived = checkVerdicts(next, sprint, goal)
   checkPeer(next, goal)
-  return fileDone(next, { sprint, goal, team: row.team, lead: row.lead, by: lead, at, mint })
+  return fileDone(next, {
+    sprint, goal, team: row.team, lead: row.lead, by: lead, at, mint, risk: waived,
+  })
 }
 
 /** The allocated team that builds `goal` in an open `sprint`, the goal being in it. */
@@ -925,16 +1005,18 @@ function buildingTeam(next, sprint, goal) {
 }
 
 /** Moves a goal to done on the lead step and files its done report for the BA. */
-function fileDone(next, { sprint, goal, team, lead, by, at, mint }) {
+function fileDone(next, { sprint, goal, team, lead, by, at, mint, risk }) {
   const target = next.goals[goal]
   const from = target.state
-  sign(next, goal, { step: 'lead', by, at, from, to: 'done' })
+  const carried = risk === undefined ? {} : { risk }
+  sign(next, goal, { step: 'lead', by, at, from, to: 'done', ...carried })
   Object.assign(target, { state: 'done', done_by: by, done_at: at })
   delete target.blocked_from
   const id = mintId('report', next.reports, mint)
   next.reports[id] = {
     sprint, goal, team, lead, signed_at: at, state: 'awaiting_ba',
     ...(by === lead ? {} : { signed_by: by }),
+    ...(risk === undefined ? {} : { risks: [risk] }),
   }
   return { id, board: next }
 }
@@ -1217,37 +1299,96 @@ export function forwardReports(board, { sprint, ids, summary, merge, at }) {
   return next
 }
 
+/** The refusal when a merge report's dependency is not yet approved. */
+function waitsOn(next, id) {
+  const blocker = blockingDependency(next, next.reports[id].goal)
+  return `report ${id} waits on ${blocker}`
+}
+
+/** True when `id` depends on another report still in this approval. */
+function dependsOnWaiting(next, id, waiting) {
+  const deps = new Set(next.goals[next.reports[id].goal].depends_on ?? [])
+  return waiting.some(other => other !== id && deps.has(next.reports[other].goal))
+}
+
+/** Records a skipped dependency on the report and returns it for the signatures. */
+function dependencyRisk(next, goal, at, client, blocker, report) {
+  need(client !== undefined, 'a risk override needs a reason')
+  return {
+    risk: writeRisk(next, goal, {
+      at, reason: client.reason, report,
+      skipped: [{ check: 'dependency', detail: blocker }],
+    }),
+  }
+}
+
+/** Approves one report. A skipped dependency is a risk, not an approval of that goal. */
+function approveOne(next, id, at, client) {
+  const row = next.reports[id]
+  const blocker = blockingDependency(next, row.goal)
+  const carried = blocker === undefined
+    ? {} : dependencyRisk(next, row.goal, at, client, blocker, id)
+  recordVerdict(next, row.goal, { step: 'client', by: 'client', verdict: 'ok', at, ...carried })
+  sign(next, row.goal, { step: 'client', by: 'client', at, report: id, ...carried })
+  Object.assign(row, { state: 'approved', decided_at: at })
+  return blocker === undefined ? 0 : 1
+}
+
 /**
- * The client's signature, the last step: its push-ok naming merge reports
- * is its merge-ok and its done on each. Each named report becomes
- * `approved`. An item is judged on its own: other reports do not matter,
- * except a goal it depends on (`depends_on`), which must be approved (in
- * this call or before) and not denied. It comes after the BA's two
- * signatures and never replaces them. Returns { board, approved }.
+ * Approves every named report. A dependency still in this call is approved
+ * first. Anything else blocking needs the client's risk reason.
  */
-export function clientSignOff(board, { ids, at }) {
-  const next = normalizeBoard(structuredClone(board))
-  need(nonEmpty(ids), 'push-ok names the merge reports it approves')
+function approveReports(next, ids, at, client) {
   for (const id of ids) {
     need(next.reports[id]?.state === 'to_person', `report ${id} is not waiting for the client`)
   }
   let waiting = [...ids]
+  let wrote = 0
   while (waiting.length > 0) {
-    const blocker = id => blockingDependency(next, next.reports[id].goal)
-    const ready = waiting.filter(id => blocker(id) === undefined)
+    let ready = waiting.filter(id => blockingDependency(next, next.reports[id].goal) === undefined)
     if (ready.length === 0) {
-      const id = waiting[0]
-      need(false, `report ${id} waits on ${blocker(id)}`)
+      need(client !== undefined, waitsOn(next, waiting[0]))
+      const outside = waiting.filter(id => !dependsOnWaiting(next, id, waiting))
+      ready = [outside[0] ?? waiting[0]]
     }
-    for (const id of ready) {
-      const row = next.reports[id]
-      recordVerdict(next, row.goal, { step: 'client', by: 'client', verdict: 'ok', at })
-      sign(next, row.goal, { step: 'client', by: 'client', at, report: id })
-      Object.assign(row, { state: 'approved', decided_at: at })
-    }
+    for (const id of ready) wrote += approveOne(next, id, at, client)
     waiting = waiting.filter(id => !ready.includes(id))
   }
-  return { board: next, approved: ids }
+  return wrote
+}
+
+/** Records the client's risk for missing Review, QA or Security checks on `goals`. */
+function waiveVerdicts(next, goals, client) {
+  let wrote = 0
+  for (const goal of goals) {
+    const row = next.goals[goal]
+    need(row !== undefined, `goal is not on the board: ${goal}`)
+    need(filled(row.sprint), `${goal} is not in a sprint`)
+    need(client !== undefined, 'a risk override needs a reason')
+    const before = row.risks?.length ?? 0
+    checkVerdicts(next, row.sprint, goal, client)
+    if ((row.risks?.length ?? 0) > before) wrote += 1
+  }
+  return wrote
+}
+
+/**
+ * The client's last signature: push-ok approves the named merge reports.
+ * `risk` (a reason) records a skipped dependency instead of refusing, and
+ * does not mark that goal approved. `goals` records missing Review, QA or
+ * Security checks the same way, so the lead can sign; those checks are not
+ * passes. Returns { board, approved, risks }.
+ */
+export function clientSignOff(board, { ids = [], goals = [], at, risk }) {
+  const next = normalizeBoard(structuredClone(board))
+  if (risk !== undefined && !filled(risk)) need(false, 'a risk override needs a reason')
+  const client = filled(risk) ? { who: 'client', at, reason: String(risk).trim() } : undefined
+  const fromGoals = waiveVerdicts(next, goals, client)
+  if (ids.length === 0) {
+    need(goals.length > 0, 'push-ok names the merge reports it approves')
+    return { board: next, approved: [], risks: fromGoals }
+  }
+  return { board: next, approved: ids, risks: fromGoals + approveReports(next, ids, at, client) }
 }
 
 /**

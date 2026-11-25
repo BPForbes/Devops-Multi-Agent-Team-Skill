@@ -679,6 +679,45 @@ test('a bare push-ok is refused while merge reports wait for the person', async 
   expect(state.get('pushAuthorized')).toBe(undefined)
 })
 
+test('the person\'s push-ok --risk is sent to the chain; a goal-only risk grants no push', async ($, on) => {
+  const runs: string[][] = []
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const reason = 'ship the demo'
+  const named = await $.command.run({
+    ...PERSON, args: `push-ok ${REPORT} --risk "${reason}" --goal goal-111111`,
+  })
+  expect(named.text).toContain('One push is allowed')
+  expect(state.get('pushAuthorized')).toBe(TREE)
+  const goalOnly = await $.command.run({
+    ...PERSON, args: 'push-ok --risk "missing security" --goal goal-111111',
+  })
+  expect(goalOnly.text).toContain('No push is granted')
+  expect(chainRuns(runs)).toEqual([
+    ['approve', REPORT, '--goal', 'goal-111111', '--risk', reason],
+    ['approve', '--goal', 'goal-111111', '--risk', 'missing security'],
+  ])
+  state.set('pushAuthorized', false)
+  const bare = await $.command.run({ ...PERSON, args: 'push-ok --risk' })
+  expect(bare.text).toContain('a risk override needs a reason')
+  expect(state.get('pushAuthorized')).toBe(false)
+})
+
+test('a seat cannot type the risk override; it is the same gate as push-ok', async ($, on) => {
+  const runs: string[][] = []
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const seat = { command: 'devops', origin: { kind: 'agent' } }
+  const push = await $.command.run({ ...seat, args: 'push-ok --risk "ship it"' })
+  expect(push.text).toContain('only the person can run it')
+  const done = await $.command.run({ ...seat, args: 'done goal-111111 --risk "ship it"' })
+  expect(done.text).toContain('no push is granted')
+  expect(state.get('pushAuthorized')).toBe(undefined)
+  expect(chainRuns(runs)).toEqual([
+    ['done', 'goal-111111', '--risk', 'ship it'],
+  ])
+})
+
 test('a refused approval (a dependency not signed off) grants no push', async ($, on) => {
   const refusal = `report ${REPORT} waits on goal-222222, which is not signed off yet`
   const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, chainRefuses: refusal })

@@ -36,7 +36,12 @@ Aliases (`push`, `go`, `publish`) and chat `push` / `push it` count
 the same. Default path still wants QA PASS and Security CLEAR; the
 person's push-ok alone is final and records an override when those are
 missing. After PASS: one compressed push that keeps approved Coder
-commits.
+commits. The same person-only push-ok may add `--risk REASON` and
+`--goal GOAL`. That records a board risk when Review, QA or Security
+has not handed a goal on, or when a merge report depends on a goal the
+client has not approved. The record names who, when, what was skipped
+and why. It is not a pass. A seat's `merge-ok`, `done` or `raise`
+cannot pass `--risk`; a seat's words never grant a push.
 
 **Client over skill.** The human is the Agile client and supreme
 authority. If their order conflicts with role contingencies or seat

@@ -20,7 +20,9 @@ Coder. Thoughts stay **gitignored**.
 
 **Client over skill.** The human is the Agile **client** and supreme
 authority over every AI seat, including Orchestration. If they order
-work without Security CLEAR, obey, state the risk once, and do not stall
+work without Security CLEAR, obey, state the risk once, and do not stall.
+A board `--risk` means the Security hand-off was skipped, not that it
+was CLEAR.
 ([client-and-agile.md](../skills/devops-multi-agent-team/references/client-and-agile.md)).
 
 ## Tools

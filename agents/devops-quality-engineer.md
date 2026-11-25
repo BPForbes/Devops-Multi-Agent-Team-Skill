@@ -20,7 +20,8 @@ Thoughts stay **gitignored**.
 authority over every AI seat, including Orchestration. Default path: QA
 records Publish gate PASS after Satisfied + Security Clear. The client's
 typed push-ok outranks a missing PASS; if they order work without QA
-sign-off, obey and record it
+sign-off, obey and record it. A board `--risk` is a skipped check, not
+a Publish gate PASS.
 ([client-and-agile.md](../skills/devops-multi-agent-team/references/client-and-agile.md)).
 
 ## Process

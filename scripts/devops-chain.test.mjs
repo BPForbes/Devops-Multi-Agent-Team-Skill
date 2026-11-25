@@ -40,6 +40,33 @@ test('without a board the CLI changes nothing; an unknown command prints the usa
   assert.throws(() => run(['maybe']), usage)
 })
 
+test('a seat cannot record a risk override; the client can, on a goal or a dependency', () => {
+  const seat = { seat: 'agent-0a0a0a', team: 'team-a1a1a1' }
+  const reason = 'Ship the demo'
+  assert.throws(() => decide(waiting(), {
+    command: 'done', goal: GOAL, who: seat, risk: reason, at: AT,
+  }), /only the client records a risk override/)
+  assert.throws(() => decide(waiting(), {
+    command: 'approve', ids: ['report-aaaaa0'], who: 'agent-0a0a0a', risk: reason, at: AT,
+  }), /a seat's words never grant a push/)
+  const board = waiting([GOAL, OTHER])
+  board.goals[GOAL].depends_on = [OTHER]
+  const over = decide(board, {
+    command: 'approve', ids: ['report-aaaaa0'], risk: reason, at: AT,
+  })
+  assert.equal(over.board.reports['report-aaaaa0'].state, 'approved')
+  assert.notEqual(over.board.goals[OTHER].signoffs.at(-1)?.step, 'client')
+  assert.equal(over.board.reports['report-aaaaa0'].risks[0].skipped[0].check, 'dependency')
+  assert.match(over.text, /Risk recorded/)
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chain-'))
+  boardAt(root, waiting())
+  assert.throws(() => run(
+    ['approve', '--risk', 'ship', '--goal', GOAL, '--dest', root],
+    { DEVOPS_SEAT: 'agent-0a0a0a' },
+  ), e => /only the client records a risk override/.test(e.stderr))
+  assert.throws(() => run(['approve', '--risk', '--dest', root]), e => /needs a reason/.test(e.stderr))
+})
+
 test('the client approves named reports, dependencies first, and records who pushed', () => {
   const board = waiting([GOAL, OTHER])
   board.goals[GOAL].depends_on = [OTHER]

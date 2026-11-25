@@ -126,6 +126,9 @@ One Sprint Review per sprint. All teams attend. The Business Analyst
    Every AI seat that can demo does so. The roster lists **every** Done
    goal of the sprint; a bug fix is listed with kind `bug` so it skips
    the demo. The board refuses a roster that leaves a Done goal out.
+   A goal the client marked Done past missing Review, QA or Security
+   checks is listed as Done. The roster does not show those checks as
+   passed; the risk record on the goal says they were skipped.
 
 **Team schedule.** Meetings look at a team as a whole by its team hash.
 The board keeps a joint table for the sprint (`teamSchedule`, read at
@@ -261,7 +264,16 @@ client's push-ok is not held by a scan.
    reports, denied or unsigned, never block it. Only a goal it depends on
    (`depends_on`, set from `dependsOn` at Refinement or Sprint Review) can:
    a dependency that is denied or not yet approved refuses the approval
-   and grants no push. A bare push-ok (or chat `push`) naming no report
+   and grants no push. The person may add `--risk REASON` (quote it when
+   it has spaces), and `--goal GOAL` for a goal the lead cannot mark Done
+   because Review, QA or Security has not handed it on. That writes a risk
+   record — who (the client), when, which checks or which dependency were
+   skipped, and the reason — on the goal, on the merge report, and in a
+   `chain.signature` envelope (`verdict: skipped`, via `recordSignature`).
+   A skipped check is never stored as a pass in verdicts, the report, the
+   demo roster or the merge report. `--goal` alone records the risk and
+   grants no push; the lead may then sign. A seat (`DEVOPS_SEAT`, including
+   `merge-ok` and `done`) cannot pass `--risk`. A bare push-ok (or chat `push`) naming no report
    is refused while merge reports wait for the client: it must name the
    ones it approves. With no report waiting, the bare word still grants
    the push (the client override) and approves nothing.
