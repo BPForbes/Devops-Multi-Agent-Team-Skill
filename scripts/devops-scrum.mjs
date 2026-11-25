@@ -267,7 +267,7 @@ function parseRoster(next, meeting, roster) {
   }
 }
 
-/** Questions and answers captured during the joint Sprint Review. */
+/** Demo follow-ups captured during the joint Sprint Review. */
 function parseQuestions(questions) {
   const rows = Array.isArray(questions) ? questions : []
   for (const q of rows) {
@@ -292,7 +292,7 @@ function addReviewGoals(board, added, at) {
 
 /**
  * Joint Sprint Review (once per sprint): BA roster, feature demos,
- * questions and answers, feedback and new backlog goals.
+ * recorded follow-ups, feedback and new backlog goals.
  */
 function review(next, meeting, record) {
   requireBa(meeting, record, 'Sprint Review')
