@@ -120,7 +120,7 @@ const SPECS: ModeSpec[] = [
       'Allocate goals first; mint team/agent hashes; set initial_job/current_job.',
       'full|loop: research→implement→review→security→qa→docs until Clear + PASS.',
       'When QA PASS and Security Clear: Orchestrator notifies the human for push;',
-      'do not push: after QA PASS and Security CLEAR, ask the person to type /devops push-ok.',
+      'do not push: after QA PASS and Security CLEAR, ask for typed /devops push-ok.',
       'Seats use /devops question|mind-map|reuse|review|repro the same way humans do.',
     ],
     command: 'commands/stage.md',
@@ -252,7 +252,7 @@ const MODE_FLAG = /(?:^|\s)--mode\s+(\S+)/i
 /** Known gate subcommands (not skill modes). */
 export const GATE_WORDS = [
   '', 'status', 'languages', 'setup', 'brief', 'push-ok', 'push-reset',
-  'allow-branch', 'comments', 'config', 'monitor', 'gates',
+  'on', 'off', 'allow-branch', 'comments', 'config', 'monitor', 'gates',
 ] as const
 
 export function skillWords(): string[] {
@@ -330,6 +330,7 @@ export function interpretSkillIntent(args: string): SkillMode | undefined {
 /** Command lines for /devops help --mode gates and the chat fallback (non-skill commands). */
 const COMMAND_HELP: string[] = [
   '/devops              status: languages, gates, QA verdict',
+  '/devops on|off       (you) turn the whole skill on or off; off lifts every check and the card',
   '/devops languages    what was detected and in which layer',
   '/devops setup        how to install the skill and profile in this project',
   '/devops setup claude [--dry-run] [--share-config] (you) set this project up for Claude Code:',
@@ -338,7 +339,7 @@ const COMMAND_HELP: string[] = [
   '/devops push-ok      (you) allow ONE push on this tree after QA PASS and Security CLEAR',
   '/devops push-reset   (you) withdraw that permission',
   '/devops allow-branch NAME   (you) allow creating that git branch',
-  '/devops gates on|off (you) turn the branch gate on or off; the push check is always on',
+  '/devops gates on|off (you) turn the branch gate on or off; the push check stays on',
   '/devops monitor on|off (you) turn the failed-check monitor on or off',
   '/devops comments warn|strict|off (you) lint gate on git commit (comment and code rules): ' +
     'warn (default), refuse a commit with blocking findings, or off',
@@ -347,13 +348,17 @@ const COMMAND_HELP: string[] = [
     '.devops/standards.json; checked before it is written',
 ]
 
-/** Catalog text for /devops help [--mode all|gates|skills|stage]; also the chat fallback (mode all). */
-export function helpCatalog(mode: string): string {
-  const skills = SPECS.flatMap(s => {
+/** Skill-mode lines for the help catalog. */
+function skillHelpLines(): string[] {
+  return SPECS.flatMap(s => {
     const alias = s.aliases.length > 0 ? ` (${s.aliases.join(', ')})` : ''
     const line = `/devops ${s.word}${alias} --mode ${s.modes.join('|')}  [text]`
     return [line, `                     ${s.skill}`]
   })
+}
+
+/** Catalog text for /devops help [--mode all|gates|skills|stage]; also the chat fallback (mode all). */
+export function helpCatalog(mode: string): string {
   const stages = Object.entries(STAGE_ROLES).map(
     ([name, roles]) => `- ${name}: ${roles}`,
   )
@@ -362,7 +367,7 @@ export function helpCatalog(mode: string): string {
     parts.push('### Gates and commands', ...COMMAND_HELP)
   }
   if (mode === 'skills' || mode === 'all') {
-    parts.push('### Skill modes (text after the command is the input)', ...skills)
+    parts.push('### Skill modes (text after the command is the input)', ...skillHelpLines())
   }
   if (mode === 'stage' || mode === 'all') {
     parts.push(
@@ -374,7 +379,8 @@ export function helpCatalog(mode: string): string {
   parts.push(
     'Free-form phrases map onto these skill modes, never onto a gate word. Call the named',
     'tools; keep large file bodies out of chat. Keep development running.',
-    'Only the person\'s typed /devops push-ok authorizes a push.',
+    'Only the person\'s typed /devops push-ok authorizes a push (one-shot; no on|off).',
+    'Human development orders beat skill contingencies. /devops off turns the skill off.',
   )
   return parts.join('\n')
 }

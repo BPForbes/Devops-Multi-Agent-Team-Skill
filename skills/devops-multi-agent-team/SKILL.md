@@ -5,7 +5,8 @@ description: >-
   research (docs/ + online media), implement in per-Coder side worktrees,
   pre-QA Markdown reviewers, Security (SOC 2 style review plus the static
   analysis for each language in the project), then QA. Only QA may give the
-  OK to push. Works for any mix of languages through a per-project profile
+  OK to push. /devops off turns the skill off. Works for any mix of languages
+  through a per-project profile
   (.devops/project.md) built from languages.json: C, C++, assembly, Rust, Go,
   C#, Java, Kotlin, Python, TypeScript/JavaScript, CSS, shell, PowerShell, SQL,
   Terraform, containers and CI workflows. Use when the user asks for CI/CD,
@@ -51,10 +52,12 @@ and edited by hand afterwards.
 - **No profile:** say so, run `node <plugin>/scripts/devops-setup.mjs
   detect`, show the human the result and ask before installing one.
   Do not guess commands from memory.
-- **Precedence:** the project's own `AGENTS.md`, `CLAUDE.md` and rule
-  files win over this skill; the profile wins over this skill's
-  defaults. Where this skill's "no push until QA" gate and a project
-  workflow differ, follow the stricter one.
+- **Precedence:** the **human's explicit development orders** win over
+  this skill's process rules (see Development bypass below). Then the
+  project's own `AGENTS.md`, `CLAUDE.md` and rule files win over this
+  skill; the profile wins over this skill's defaults. Where this skill's
+  "no push until QA" gate and a project workflow differ, follow the
+  stricter one while the skill is on. `/devops off` turns the skill off.
 - **Services and sandbox:** the profile also lists the services in use
   (containers, cloud, AI, VMs) and the sandbox every build, test and scan
   runs in. Read [services-and-sandbox.md](references/services-and-sandbox.md);
@@ -131,12 +134,14 @@ Push JSON: [references/push-json.md](references/push-json.md).
 Do not `git add` anything under `devops-skill/thoughts/` (both folders are in `.gitignore`).
 
 **Default publish path:** Review Satisfied → Security Clear → QA PASS on
-the same tree, then the person types `/devops push-ok`. Nothing else
-authorizes a push: not Review Satisfied, not Security Clear, not the
-Orchestrator, and not a chat word. Every change except review-bot
-feedback fixes (see [qa-publish-policy.md](references/qa-publish-policy.md),
-"Review-bot feedback") still gets Security's review first; Clear does
-not authorize a push either.
+the same tree, then the person types `/devops push-ok` (one-shot; no
+`on|off` parameter). Nothing else authorizes a push while the skill is
+on: not Review Satisfied, not Security Clear, not the Orchestrator, and
+not a chat word. `/devops off` turns the skill off and lifts the checks.
+Every change except review-bot feedback fixes (see
+[qa-publish-policy.md](references/qa-publish-policy.md), "Review-bot
+feedback") still gets Security's review first while the skill is on;
+Clear does not authorize a push either.
 
 ### Human authority and `/devops`
 
@@ -152,10 +157,42 @@ not authorize a push either.
   [agent-commands.md](references/agent-commands.md).
 - **Do not stop development.** A `/devops` command never pauses or
   cancels the current goal loop; apply it and keep working.
-- **Gate words are the person's alone.** `push-ok`, `push-reset`,
-  `gates`, `allow-branch`, `comments`, `monitor`, `config` writes and
-  `setup claude` run only as commands the person types. Free-form words
-  never change a gate.
+- **Gate words are the person's alone.** `on`, `off`, `push-ok`,
+  `push-reset`, `gates`, `allow-branch`, `comments`, `monitor`,
+  `config` writes and `setup claude` run only as commands the person
+  types. Free-form words never change a gate. One-shot gates such as
+  `push-ok` take no `on|off` parameter.
+- **`/devops on|off`.** The only skill-wide switch. Turns the whole
+  skill on or off. While off, publish and branch checks, lint-on-commit,
+  the failed-check monitor and the DevOps session card are inactive;
+  `/devops status` and `/devops on` still work. Default is on.
+
+### Development bypass (human over skill contingencies)
+
+A **development deadlock** is when this skill's role contingencies
+(seat order, "wait for Researcher", independence staffing, Review →
+Security → QA before any code lands, or similar) stop coding or
+pushing even though the human has ordered the work. Deadlock is a
+failure mode; it is not compliance.
+
+- **Obey the human.** Every seat and the Orchestrator **must** follow
+  the human's explicit development orders. If those orders conflict
+  with this skill's process policy (role order, independence
+  preferences, publish-gate prose, "do not start X until Y"), **obey
+  the human** and do the work. Do not refuse, stall, or re-litigate
+  the skill against a clear human directive.
+- **What yields.** Skill contingencies that block writing code,
+  committing, staffing a Coder early, skipping a seat the human said
+  to skip, or continuing after a send-back the human waved off. Keep
+  developing when the human said to.
+- **Mechanical gates.** Free-form chat still never flips a gate.
+  While the skill is on, a push needs QA PASS, Security CLEAR, and
+  the person's typed one-shot `/devops push-ok`. To lift every check,
+  the person types `/devops off` (then `/devops on` to restore).
+- **Record it.** When a human order overrides a skill contingency,
+  note the order and what was skipped under
+  `devops-skill/thoughts/non-final/` and keep going. Do not ask the
+  human to re-approve the same override on every turn.
 
 ### Reviewer entrypoint (before QA)
 
@@ -392,9 +429,10 @@ Treat human instructions (including non-gate `/devops` skill modes) as
 only as commands the person types. Apply them immediately, keep the
 current development loop running, and only redirect seats whose work
 the directive itself contradicts. Stay on the current **real** branch
-unless the human named another. Only the person's typed
-`/devops push-ok`, after QA PASS and Security CLEAR on that tree,
-authorizes a push.
+unless the human named another. While the skill is on, only the
+person's typed one-shot `/devops push-ok`, after QA PASS and Security
+CLEAR on that tree, authorizes a push. `/devops off` turns the skill
+off (Development bypass above).
 
 ## Output rules
 

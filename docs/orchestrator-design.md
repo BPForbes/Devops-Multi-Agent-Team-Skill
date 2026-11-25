@@ -214,7 +214,7 @@ The states, and which seat may make each transition:
 | in_qa | in_progress | the QA seat (triage send-back, with blame) |
 | in_security | ready_for_human | the security seat (`Handoff` sign-off clear) |
 | in_security | in_progress | the security seat (send-back, with blame) |
-| ready_for_human | done | the team lead (manager), who signs it off for the team and reports to Orchestration, which reports to the person; the person's typed push-ok on the exact tree, after QA PASS and Security CLEAR, is the real final sign-off; nothing overrides them |
+| ready_for_human | done | the team lead (manager), who signs it off for the team and reports to Orchestration, which reports to the person; the person's typed one-shot push-ok on the exact tree, after QA PASS and Security CLEAR, is the real final sign-off (`/devops off` turns the skill off) |
 | blocked | in_progress | the assigned seat, after the blocker is cleared (`Unblock`) |
 | failed | queued | manager (retry decision, counted against max attempts) |
 | any | blocked | the manager (escalation) |
@@ -223,8 +223,8 @@ Every transition is an event. A transition not in this table is refused,
 and the refusal is logged. `ready_for_human` is not `done`: the team lead
 signs the item off as done and reports it up; Orchestration reports to the
 person. The person gives the real final sign-off before the push: a typed
-push-ok on the exact tree, after QA PASS and Security CLEAR; nothing
-overrides them.
+one-shot push-ok on the exact tree, after QA PASS and Security CLEAR
+(`/devops off` turns the skill off).
 
 The item state names extend the existing goal states; they do not replace
 them. A goal's state is derived from its items: a goal is `done` when all
@@ -379,10 +379,11 @@ unchanged).
 - **Gates.** Gate commands are accepted only from the human channel
   (`composer` origin, exact typed command). Every gate change is logged.
   Free-form words never change a gate (rule 3).
-- **Push.** A push needs the human's push-ok. It also needs QA PASS (rule 2)
-  and Security CLEAR on the exact tree; nothing overrides them. The manager
-  cannot push, approve, or change
-  gates. The role table says so, and a test checks it.
+- **Push.** A push needs the human's one-shot push-ok. It also needs QA
+  PASS (rule 2) and Security CLEAR on the exact tree while the skill is
+  on. `/devops off` turns the skill off and lifts the checks. The
+  manager cannot push, approve, or change gates. The role table says so,
+  and a test checks it.
 
 ### 10.1 Security requirements (from the security review of this design)
 

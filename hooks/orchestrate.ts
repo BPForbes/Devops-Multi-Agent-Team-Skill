@@ -118,12 +118,11 @@ export function card(state: CardState): string {
     ? 'Project profile: .devops/project.md; read only the section your step needs.'
     : 'This project is not set up yet; the person can run /devops setup claude.'
   const gate = state.gates
-    ? 'Push gate on: a push needs QA PASS and Security CLEAR on this tree, then the person'
-      + ' types /devops push-ok. Agents never run it. Prefer /devops skill modes'
-      + ' (question, mind-map, clean, goal, …) with --mode so'
-      + ' MCP tools run instead of plain-text dumps; do not stop development. New branch:'
+    ? 'Push gate on: QA PASS + Security CLEAR + typed /devops push-ok (one-shot). Agents never'
+      + ' run gate words. Prefer skill modes with --mode; do not stop development. Human orders'
+      + ' beat skill contingencies. /devops off turns the skill off. New branch:'
       + ' /devops allow-branch NAME.'
-    : 'Push gate is off.'
+    : 'Branch gate is off. Human development orders beat skill contingencies.'
   return [
     `The devops-multi-agent-team skill is active.${languages}`,
     `Read it in pieces: call ${BRIEF_TOOL} (no input: the index; topic: one section; role: your`

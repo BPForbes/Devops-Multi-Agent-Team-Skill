@@ -432,6 +432,59 @@ test('gates off still checks every push; it only lifts the branch gate', async (
   expect(branch.deny).toBeUndefined()
 })
 
+test('/devops off lifts every publish and branch check', async ($, on) => {
+  const state = engine(on, undefined)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(refused.deny).toBeTruthy()
+  const turned = await $.command.run({
+    command: 'devops', args: 'off', origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  expect(turned.text).toContain('DevOps skill off')
+  expect(state.get('active')).toBe(false)
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.deny).toBeUndefined()
+  const branch = await $.tool.call({ tool: 'Bash', command: 'git checkout -b topic' })
+  expect(branch.deny).toBeUndefined()
+})
+
+test('/devops on restores the publish check', async ($, on) => {
+  const state = engine(on, undefined)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('active', false)
+  state.set('pushAuthorized', TREE)
+  await $.command.run({
+    command: 'devops', args: 'on', origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  expect(state.get('active')).toBe(true)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(refused.deny).toBeTruthy()
+})
+
+test('an agent cannot turn the skill off', async ($, on) => {
+  const state = engine(on, undefined)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const refused = await $.command.run({
+    command: 'devops', args: 'off', origin: { kind: 'peer' },
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  expect(refused.text).toContain('only the person can run it')
+  expect(state.get('active')).toBeUndefined()
+})
+
+test('status while off says the skill is OFF', async ($, on) => {
+  const state = engine(on, undefined)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  state.set('active', false)
+  const status = await $.command.run({
+    command: 'devops', args: 'status', origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 100 },
+  })
+  expect(status.text).toContain('skill: OFF')
+})
+
 test('the status line says when the grant is for another tree', async ($, on) => {
   const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })

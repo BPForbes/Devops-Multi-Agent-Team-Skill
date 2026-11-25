@@ -4,6 +4,12 @@ declare module 'claude-code' {
   interface PluginState {
     'devops-multi-agent-team': {
       languages: string[]
+      /**
+       * The skill itself; off via `/devops off`, typed by the person.
+       * While off, gates, publish checks, lint-on-commit, the monitor and the
+       * DevOps session card are inactive. Default on when unset.
+       */
+      active: boolean
       /** The branch gate; off via `/devops gates off`, typed by the person. The push check stays on. */
       gates: boolean
       /**

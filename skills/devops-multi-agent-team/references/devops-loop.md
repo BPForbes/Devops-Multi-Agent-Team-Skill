@@ -88,8 +88,10 @@ Push JSON `authors` / `teams` of every cherry-picked SHA, the
 Orchestrator's conflict fixes included; a seat is refused when its
 agent hash, team hash or handle is in that set), then the Orchestrator
 pushes only after QA PASS and Security CLEAR on that tree and the person's typed
-`/devops push-ok`; none of the three can stand in for another.
-(Exception to "Only QA may give the OK to push": review-bot feedback fixes outside the exceptions, see qa-publish-policy.md.)
+one-shot `/devops push-ok`; none of the three can stand in for another.
+(Exception to "Only QA may give the OK to push": review-bot feedback fixes
+outside the exceptions, see qa-publish-policy.md. `/devops off` turns the
+skill off.)
 
 ## 6–11. Later passes
 
@@ -112,11 +114,13 @@ pushes only after QA PASS and Security CLEAR on that tree and the person's typed
 
 Human interrupts (including non-gate `/devops` skill modes) are
 **final directives**: do them and do not stop the development loop.
-Free-form words never change a gate; gate words run only when the
-person types them. Ask-paths:
-[role-identity.md](role-identity.md). Stop → halt; leave plan/code
-consistent; do not push. Push / open PR → blocked until **QA gives
-the OK**.
+If a human order conflicts with this skill's role contingencies, obey
+the human (Development bypass in [SKILL.md](../SKILL.md)). Free-form
+words never change a gate; gate words run only when the person types
+them. Ask-paths: [role-identity.md](role-identity.md). Stop → halt;
+leave plan/code consistent; do not push. Push / open PR → blocked
+until **QA gives the OK** and the person types `/devops push-ok`
+(or `/devops off` has the skill inactive).
 
 ```text
 [Orchestrator] Status

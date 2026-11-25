@@ -14,12 +14,18 @@ hash**, **initial job** and **current job**
 **`/devops` is free-form**, but prefer **skill modes** so the agent
 uses MCP tools and skills instead of dumping the request as plain
 text. Do not stop development when `/devops` is given. Gate words
-(`push-ok`, `push-reset`, `gates`, `allow-branch`, `comments`,
-`monitor`, `config` writes, `setup claude`) run only when the person
-types them; free-form wording never changes a gate. A push needs QA
-PASS and Security CLEAR on the tree, then the person's typed
-`/devops push-ok`; none of the three can stand in for another. After PASS: one compressed push that
-keeps approved Coder commits.
+(`on`, `off`, `push-ok`, `push-reset`, `gates`, `allow-branch`,
+`comments`, `monitor`, `config` writes, `setup claude`) run only when
+the person types them; free-form wording never changes a gate.
+`/devops on|off` turns the whole skill on or off. One-shot gates such
+as `/devops push-ok` take no `on|off` parameter. A push needs QA PASS
+and Security CLEAR on the tree, then the person's typed
+`/devops push-ok`. After PASS: one compressed push that keeps approved
+Coder commits.
+
+**Human over skill.** If the human's order conflicts with this skill's
+role contingencies, obey the human and keep developing
+([SKILL.md](../SKILL.md), Development bypass).
 
 ## `/devops` skill modes
 

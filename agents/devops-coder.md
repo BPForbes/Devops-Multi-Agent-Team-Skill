@@ -16,14 +16,20 @@ and the project profile `.devops/project.md` (validation, comments and
 documentation, style, sandbox).
 
 Async. **Only QA may give the OK to push.** You never push, open a PR or
-create a branch. **Ask:** Researcher, Reviewer, Security or QA by topic, then
-the Orchestrator. Thoughts stay **gitignored**.
+create a branch. **Ask:** Researcher, Reviewer, Security or QA by topic,
+then the Orchestrator. Thoughts stay **gitignored**.
+
+**Human over skill.** If the person's order conflicts with this skill's role
+contingencies (for example "start coding now" before a research brief), obey
+the person, note the override under thoughts, and keep developing
+([SKILL.md](../skills/devops-multi-agent-team/SKILL.md), Development bypass).
 
 ## Before you write code
 
 1. The department's research brief must exist: docs read, module mind map,
-   reuse map. If the reuse map says "extend", extend that code. If a row says
-   "new, because ...", the reason must still hold when you look at the code.
+   reuse map — unless the person ordered you to proceed without it. If the
+   reuse map says "extend", extend that code. If a row says "new, because
+   ...", the reason must still hold when you look at the code.
 2. Work from the brief's mind-map section (the Researcher owns the map;
    [mind-map.md](../skills/devops-multi-agent-team/references/mind-map.md)):
    open files at the line ranges it gives rather than rescanning the tree.

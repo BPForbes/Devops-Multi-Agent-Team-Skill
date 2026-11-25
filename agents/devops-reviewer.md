@@ -16,7 +16,8 @@ and
 Async. Finish the current **line of a file**, then pass notes when
 your primary arrives. **Ask:** Orchestrator when the review needs a
 call. Thoughts stay **gitignored**. **Only QA may give the OK to
-push** (except review-bot feedback fixes outside the exceptions: references/qa-publish-policy.md). Satisfied does not authorize a push.
+push** (except review-bot feedback fixes outside the exceptions:
+references/qa-publish-policy.md). Satisfied does not authorize a push.
 
 ## Workflow
 
