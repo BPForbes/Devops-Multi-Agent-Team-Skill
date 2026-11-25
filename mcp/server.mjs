@@ -1070,8 +1070,8 @@ const TOOLS = [
     name: 'report_forward',
     description: [
       "Orchestration only: pass the team leads' done reports on to the person with a summary.",
-      "The person's typed /devops push-ok, after QA PASS and Security CLEAR, is the",
-      'final sign-off.',
+      "The person's typed /devops push-ok is the final sign-off (default path: after QA",
+      'PASS and Security CLEAR; a client order may skip them, and the skip is recorded).',
     ].join(' '),
     inputSchema: {
       type: 'object',

@@ -82,7 +82,7 @@ const SPECS: ModeSpec[] = [
       'Turn the statement into cleanup_brief; ask about unrecognized parts.',
       'Baseline validation green, then cleanup_scan (save); plan before edits.',
       'run: spawn cleaner seats one step at a time; Reviewers check structure only.',
-      'Nobody pushes before QA PASS and the human go.',
+      'Nobody pushes without the human go; QA PASS first unless the client orders otherwise.',
     ],
     command: 'commands/cleanup.md',
   },
@@ -96,8 +96,8 @@ const SPECS: ModeSpec[] = [
     behavior: [
       'loop: run every stage (research→implement→review→security→qa→docs) until X.',
       'Stop the loop only when Security is Clear and QA records Publish gate: PASS.',
-      'Then the Orchestrator notifies the human and waits. Do not push: after QA PASS and'
-        + ' Security CLEAR, ask the person to type /devops push-ok.',
+      'Then the Orchestrator notifies the human and waits. Do not push: ask the person to'
+        + ' type /devops push-ok. A client order to push sooner wins; record what it skipped.',
       'allocate: mint team/agent hashes, write per-pod and per-agent goals, set current_job.',
       'On send-back or BLOCKED, re-enter the needed stage and continue the loop.',
     ],
@@ -120,7 +120,8 @@ const SPECS: ModeSpec[] = [
       'Allocate goals first; mint team/agent hashes; set initial_job/current_job.',
       'full|loop: research→implement→review→security→qa→docs until Clear + PASS.',
       'When QA PASS and Security Clear: Orchestrator notifies the human for push;',
-      'do not push: after QA PASS and Security CLEAR, ask for typed /devops push-ok.',
+      'do not push yourself: ask for typed /devops push-ok. If the client orders a push or',
+      'skip sooner, obey at once and record the skipped gate; never report it as passed.',
       'Seats use /devops question|mind-map|reuse|review|repro the same way humans do.',
     ],
     command: 'commands/stage.md',
