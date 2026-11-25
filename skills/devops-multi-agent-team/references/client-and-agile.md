@@ -40,8 +40,19 @@ Reviewer, QA, Security, Business Analyst, and every other role).
   the temporary virtual-git branches are deleted once the client merges
   the real PR ([virtual-git.md](virtual-git.md)).
 - Only reported bugs count as bugs: issues in the project's repo, or bugs
-  found in discovery (QA triage). The BA does not sign a bug: it is denied
-  as needing a bug fix, the coders are told, and a real issue may be filed.
+  found in discovery (QA triage, or a bug report you had fixed). The BA
+  does not sign a goal with an unfixed reported bug: it is denied as
+  needing a bug fix, goes back to the backlog, the coders are told, and
+  the team lead may file a real issue. For a big matter the BA may sign
+  over it with a recorded reason. A bug goal itself is signed against
+  your objective, or after its team lead raised it to the BA.
+- You decide on bugs the team raised at the Daily Scrum: the BA sends a
+  bug report through Orchestration (issue, reason, proposed solutions,
+  files, lines, snippets, an easy-to-read explanation, a plan of attack).
+  Type `/devops bug REPORT fine`, `fix N` (proposal N) or `fix` with your
+  own alternative. The team lead then puts the issue on the board and
+  assigns it without overworking anyone; it may wait in the backlog
+  ([scrum-meetings.md](scrum-meetings.md), Bug flow).
 - The client's step on the board comes after the BA's two signatures and
   never replaces them. A client order to ship sooner is still obeyed at
   once: the push gate lets push-ok override a missing QA PASS or Security

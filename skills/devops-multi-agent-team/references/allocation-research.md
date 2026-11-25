@@ -74,7 +74,11 @@ team hash and lead (the team's manager seat) per team, then calls
 2. puts each stream on the backlog as a goal;
 3. records the allocation on the board (`devops://meetings/<sprint>`);
 4. schedules every team's Sprint Planning with its lead, the judging
-   teams' too.
+   teams' too;
+5. returns a `seat.setup` payload per team lead (recommended
+   `DEVOPS_SEAT`/`DEVOPS_TEAM`, system versions, setup steps). It sets
+   nothing; each seat does its own setup
+   ([role-identity.md](role-identity.md), Seat setup payload).
 
 That scheduled Sprint Planning is the hand-off to the team lead. Only an
 unbound server (Orchestration) may spin up the board, and only the lead

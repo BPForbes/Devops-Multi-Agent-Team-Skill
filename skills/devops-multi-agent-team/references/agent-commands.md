@@ -15,14 +15,17 @@ hash**, **initial job** and **current job**
 uses MCP tools and skills instead of dumping the request as plain
 text. Do not stop development when `/devops` is given. Gate words
 (`on`, `off`, `enable`, `disable`, `skill`, `skills`, `push-ok`,
-`push-reset`, `gates`, `allow-branch`, `comments`, `monitor`,
+`push-reset`, `gates`, `allow-branch`, `comments`, `monitor`, `bug`,
 `config` writes, `setup claude`) run only when the person types them;
 free-form wording never changes a gate. `merge-ok`, `done` and `merge-deny REASON`
 typed by the person answer Orchestration's merge report (approve the named
 reports and grant the push, or send them back to the BA). A seat types the
 same words with a goal (`/devops merge-ok GOAL`) to run its own Done-chain
-step as its bound seat; that never grants a push. A `push-ok` naming no
-report is refused while merge reports wait. `/devops on|off` and
+step as its bound seat; that never grants a push (the BA may add
+`--override REASON` for a big matter; a lead types `/devops raise GOAL
+REASON` to raise a bug found in development to the BA). A `push-ok`
+naming no report is refused while merge reports wait. The person answers
+a bug report with `/devops bug REPORT fine|fix N|fix TEXT`. `/devops on|off` and
 `/devops enable|disable` turn the whole skill on or off (session +
 `.claude/settings.json` `enabledPlugins`). `/devops skill on|off NAME`
 and `/devops skills` manage `skillOverrides` (bare skill names).

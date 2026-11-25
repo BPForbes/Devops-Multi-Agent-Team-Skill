@@ -42,3 +42,8 @@ Prefer the issue's existing branch or PR over new branches.
 2. Translate CI/quality/security results into checkbox-style status.
 3. Comment only actionable summaries. Do not create duplicate
    issues or PRs unless the user asks.
+4. Bug issues come from the team lead: after the client answers a bug
+   report, the team lead puts the issue on the board (`bug_issue`, a
+   backlog goal with `issue_draft`) and files that draft in the project's
+   repo. Map it to acceptance criteria when asked; do not file it
+   yourself.

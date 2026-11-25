@@ -576,7 +576,9 @@ masking a real one.
 item at a time. A seat may also hold items in review or waiting on a question.
 Alternative: one primary plus one secondary at once. Why it matters: the team
 lead also codes and reviews, so a lead holding two active items is the most
-likely way for a pod to stall unnoticed.
+likely way for a pod to stall unnoticed. Built on the goal board: a seat
+holding three open pieces of assigned work (`OPEN_WORK_LIMIT`, assigned or
+accepted) is given no more.
 
 **Q7. What "done" means for a goal.** Default: a goal is done when all its
 items are done, and every item's done needs the human push-ok. Question: may a
@@ -750,6 +752,12 @@ each individual seat. It takes over: its initial job, primary job, temp job,
 active task references, and its status. The server signs with the seat's key
 (section 14, Q11): the profile is the identity that signs each commit. Commit
 signing and envelope authentication use the same profile.
+
+Built: at spin-up each team lead gets a `seat.setup` envelope (section
+"SeatSetup"): the recommended `DEVOPS_SEAT`/`DEVOPS_TEAM`, the versions of
+the systems involved and the setup steps. The server applies nothing; the
+receiving seat sets itself up. The BA's bug report to the person is a
+`bug.report` envelope (section "BugReport").
 
 ### 16.9 The team lead codes (Q13, Q14)
 

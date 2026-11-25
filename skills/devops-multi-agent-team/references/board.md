@@ -25,6 +25,11 @@ A goal moves one step at a time along:
 `backlog` → `ready` → `in_progress` → `review` → `qa` → `security` → `done`
 
 A goal may go to `blocked` from any state and return to the state it left.
+A goal the BA denies for an unfixed reported bug goes back to `backlog`
+(out of its sprint) until the bug is fixed. Work assignment is capped: a
+seat holding three open pieces (`OPEN_WORK_LIMIT`, assigned or accepted)
+gets no more; the lead picks a seat with room or leaves the goal in the
+backlog.
 `board_move_goal` refuses a jump that skips a step. The step names match the
 hand-off kinds, so the board tells a reader which hand-off is next.
 

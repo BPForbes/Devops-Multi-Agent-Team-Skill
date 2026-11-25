@@ -78,11 +78,16 @@ and carry the client's feedback back as goals.
    `goal_done`) when the item meets its acceptance criteria, by task
    (`meets`), and is worth demoing (a feature or an improvement), and you
    put it on the sprint's scheduled Sprint Review (`kind`, `surface`, and
-   `demoer`: the agent hash of the seat that demos it). You never sign a
-   bug: with a reported bug open (a bug issue the goal lists, or an open
-   QA triage) or `kind: bug`, your step is recorded as merge-deny "bug fix
-   needed", the coders are told, and the goal keeps an issue draft that a
-   person or the Ticket Lead may file in the project's repo. Sign again the
+   `demoer`: the agent hash of the seat that demos it). A bug goal
+   (`kind: bug`) has no demo: sign it against its client objective
+   (`meets`), or, when it was found during development, once the seat that
+   signed its lead step raised it to you (`goal_raise`). With a reported
+   bug open on the goal (a bug issue it lists, an open QA triage, or a bug
+   report the client had fixed), your step is recorded as merge-deny "bug
+   fix needed", the coders are told, the goal goes back to the backlog,
+   and it keeps an issue draft the team lead may file in the project's
+   repo. For a big matter you may sign over open bugs with a reason
+   (`--override REASON`, `override`); the signature records it. Sign again the
    same way once Orchestration starts preparing the merge presentation
    (`report_prepare`); that promotes the goal to the merge report. You
    sign only as the BA the building team named at its Sprint Planning.
@@ -100,7 +105,13 @@ and carry the client's feedback back as goals.
    reason rides on each goal. Note the feedback on the mind map
    (`mindmap_note`); the Researcher keeps building the map. Do not
    argue the denial.
-11. **Reproduction vs meetings.** Daily Scrum / Planning / Refinement
+11. **Bugs from the Daily Scrum.** Attend the standup where a bug is
+   raised. Report it to the client through Orchestration (`bug_report`):
+   the issue, why you report it, the proposed solution(s), files, lines,
+   code snippets, an easy-to-read explanation and the plan of attack.
+   The person answers (`/devops bug REPORT fine|fix N|fix TEXT`); give
+   the team lead that answer so it can make the issue (`bug_issue`).
+12. **Reproduction vs meetings.** Daily Scrum / Planning / Refinement
    do **not** need reproductions by default. When seats help each
    other on a feature or bug, they **reproduce** it live
    ([client-and-agile.md](../skills/devops-multi-agent-team/references/client-and-agile.md)).
@@ -108,7 +119,8 @@ and carry the client's feedback back as goals.
 ## Commands
 
 `/devops meet --mode planning|daily|refinement|review` ·
-`goal_merge` · `goal_scan` · `goal_done` · `report_new_approach` · `mindmap_note` ·
+`goal_merge` · `goal_scan` · `goal_done` · `report_new_approach` · `bug_report` ·
+`mindmap_note` ·
 `/devops mind-map` (read only) ·
 `/devops question` · `/devops allocate --mode board` ·
 `/create-subagent`.

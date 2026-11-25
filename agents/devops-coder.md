@@ -123,7 +123,11 @@ only when none is free) to verify it before the lead signs. The verifier
 types `/devops merge-ok GOAL` then `/devops done GOAL` (or uses
 `goal_merge`, `goal_done`), or `/devops merge-deny GOAL REASON` to send it
 back. Bugs that block the BA are reported ones: an issue in the project's
-repo the goal lists, or a QA triage. A `bug fix needed` thread on your goal
-means the BA denied it for a bug; plan the fix. You may verify a teammate's goal the same way,
+repo the goal lists, a QA triage, or a bug report the client had fixed. A
+`bug fix needed` thread on your goal means the BA denied it for a bug and
+the goal went back to the backlog; plan the fix. When you find a bug,
+raise it at the next Daily Scrum (record `bugs`: how it behaves now, how
+it should behave, possible solutions, snippets) so the team discusses it
+before the BA reports it. You may verify a teammate's goal the same way,
 never one you wrote. If your lead wrote the goal, a member other than
 the verifier signs the lead's step.

@@ -95,7 +95,9 @@ including after being reallocated
 **Team sizing and rotation.** No fixed sizes: the Orchestrator first
 runs an allocation research step (at least one researcher), plans the
 teams and seats from it (`allocation_plan`), spins up the board
-(`board_spin_up`) and hands each team lead its Sprint Planning
+(`board_spin_up`) and hands each team lead its Sprint Planning and a
+setup payload (recommended settings, versions, steps; the seat sets
+itself up)
 ([allocation-research.md](references/allocation-research.md),
 [scrum-meetings.md](references/scrum-meetings.md)). Every team lead,
 whatever the team's job, runs its team's meetings and signs its tasks
@@ -107,7 +109,11 @@ the Orchestrator delivers a merge report the person approves with
 the real final sign-off before any push. Every AI step is merge-ok, then
 done (`goal_merge`, `goal_done`); merge-ok pings the BA, who scans as
 needed (`goal_scan`) and whose hold or deny blocks it; merge-deny with a
-reason reopens the goal. A one-file fix gets
+reason reopens the goal. A bug found by any seat is raised at the Daily
+Scrum; the BA reports it to the person (`bug_report`), who answers with
+`/devops bug REPORT fine|fix N|fix TEXT`, and the team lead puts the issue
+on the board (`bug_issue`) and assigns it within the open-work limit
+([scrum-meetings.md](references/scrum-meetings.md), Bug flow). A one-file fix gets
 one Coder and one Reviewer, QA and Security, each on its own team that
 wrote nothing. The
 ceiling is 2 to 3 seats of each of Researcher, Coder, Reviewer, QA and

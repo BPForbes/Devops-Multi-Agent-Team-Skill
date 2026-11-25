@@ -49,6 +49,42 @@ addition the lead and Business Analyst record:
 
 Only the team lead decides a reallocation; the BA does not veto it.
 
+## Bug flow: from the Daily Scrum to the board
+
+1. **Raise it at the Daily Scrum.** Whoever finds a bug raises it with
+   the team at the next Daily Scrum. The team discusses it, and the record
+   keeps it under `bugs`: the finder's agent hash, a title, how the code
+   behaves now (`behavior`), how it should behave (`expected`), the
+   possible solutions (one or more) and code snippets, and the goal it
+   touches when there is one.
+2. **The BA reports it to the client.** The BA, attending that standup,
+   contacts the person through Orchestration with a bug report
+   (`bug_report`, a `bug.report` envelope): the issue, the reason for the
+   report, the proposed solution(s), the files, lines and code snippets,
+   an easy-to-read explanation and the plan of attack. Report:
+   `bug_to_person`.
+3. **The client decides.** The person types
+   `/devops bug REPORT fine` (the behavior is fine; nothing more happens),
+   `/devops bug REPORT fix N` (use proposal N) or
+   `/devops bug REPORT fix YOUR ALTERNATIVE`. Only the person may answer.
+   Report: `bug_fine` or `bug_fix`.
+4. **The team lead makes the issue.** From the BA's report and the
+   client's choice, the team lead adds the issue to the board
+   (`bug_issue`): a backlog goal of kind `bug` with the issue draft
+   (`issue_draft`: title and body with the explanation, now/expected, the
+   client's fix, the plan, files, lines and snippets) and the client's
+   choice (`client_feedback`). Filing that draft as an issue in the
+   project's repo is the team lead's job, outside the board and outside
+   this branch; the board never files it. Report: `issue_drafted`.
+5. **The team lead assigns it, without overworking the team.** The lead
+   may give the bug goal to a seat at once (`assign`), or leave it in the
+   backlog for planning. A seat already holding three open pieces of work
+   (assigned or accepted; `OPEN_WORK_LIMIT`) is refused: pick a seat with
+   room, or let the item wait in the backlog.
+
+While the client's fix is open, the bug counts as a reported bug on the
+goal it touches, so the BA does not sign that goal (see the chain below).
+
 ## Demo vs reproduction (live surfaces)
 
 ([client-and-agile.md](client-and-agile.md), Show live):
@@ -167,18 +203,33 @@ client's push-ok is not held by a scan.
    agent hash; optional `surface`). Report: `ba_signed`. The BA is the one
    the building team named at its Sprint Planning.
 
-   **A bug is not signed.** Only reported bugs count: an issue in the
-   project's repo that the goal lists (`bugIssues` at Refinement or Sprint
-   Review, stored as `bug_issues`), or a bug found in discovery (QA's
-   triage hand-off on the goal that is not done; see `/triage`). When a
-   reported bug is open, or the BA's first `done` names `kind: bug`, the
-   BA's merge-ok or done is recorded as **merge-deny** with the reason
-   `bug fix needed` (and the bugs). The goal reopens, and the coders are
-   told through a `bug fix needed` thread on the goal in their inbox. The
-   bug is not fixed at once: the goal records an issue draft
-   (`bug_fix.issue_draft`) that a person or the Ticket Lead may file as a
-   real issue in the project's repo, and the fix is planned like other
-   work. The same holds at the BA's second signature.
+   **Signing a bug goal** (`kind: bug`). A bug has no demo. When fixing
+   it is the client's objective (the goal states its objective and
+   acceptance criteria), the BA signs it against them (`meets`). When it
+   was found during development (no client objective), the seat that
+   signed the lead step first raises it to the BA with a reason
+   (`/devops raise GOAL REASON`, `goal_raise`); the raise is recorded
+   (`raised`) and pings the BA, and the BA's signature carries it.
+
+   **An unfixed reported bug is not signed.** Only reported bugs count: an
+   issue in the project's repo that the goal lists (`bugIssues` at
+   Refinement or Sprint Review, stored as `bug_issues`), a bug found in
+   discovery (QA's triage hand-off on the goal that is not done; see
+   `/triage`), or a bug report on the goal the client had fixed whose bug
+   goal is not done. While one is open, the BA's merge-ok or done is
+   recorded as **merge-deny** with the reason `bug fix needed` (and the
+   bugs). The goal reopens and goes back to the **backlog** (out of the
+   sprint) until the bug is fixed, and the coders are told through a
+   `bug fix needed` thread on the goal in their inbox. The goal records an
+   issue draft (`bug_fix.issue_draft`) the team lead may file in the
+   project's repo, and the fix is planned like other work. The same holds
+   at the BA's second signature. QA signs before the BA, so this is rare.
+
+   **BA override for a big matter.** The BA may sign over open reported
+   bugs when the matter is big enough: merge-ok and done with
+   `--override REASON` (`override` on `goal_merge` and `goal_done`). The
+   reason is required and the signature envelope records it with the bugs
+   it signs over (`override: { reason, bugs }`).
 4. **Orchestration prepares** (`report_prepare`): Orchestration starts the
    merge presentation for the reports the BA signed. Report: `preparing`.
 5. **BA, second signature**: while Orchestration prepares the merge
@@ -225,7 +276,7 @@ refuses until each pushed tree is on the base, records the merge
 **merge-deny and reopening.** QA, Review and Security send work back with
 their existing send-back hand-offs, which carry the reason. On the chain,
 merge-deny by a step's signer reopens the goal: it returns to
-`in_progress`, its verdicts and signatures start over, and its live report
+`in_progress` (to the backlog when denied for an unfixed bug), its verdicts and signatures start over, and its live report
 becomes `reopened`. Any feedback can reopen a goal: the building team's
 BA (for example after Sprint Review feedback) or the client may deny any
 step, even on a Done goal. A Done goal that is reopened is flagged

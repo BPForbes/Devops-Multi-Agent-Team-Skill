@@ -65,10 +65,20 @@ by every agent on that pod:
   so the server can refuse a call under another team, and hand-offs keep
   `from.team` and `to.team`.
 
+#### Seat setup payload
+
+Spin-up does not set `DEVOPS_SEAT` or `DEVOPS_TEAM` for any seat. It
+hands each team lead a `seat.setup` payload (`board_spin_up` returns them
+as `setup`; Orchestration delivers each): the recommended settings for
+the lead (`settings`) and for its members (`member_settings`, each seat
+using its own agent hash), the versions of the systems involved (node,
+plugin, MCP server, envelope schema) and the setup steps. The seat that
+receives it checks the versions and does the setup itself, with the same
+steps as below.
+
 #### Reproduce a seat binding
 
-Spin-up does not set `DEVOPS_SEAT` or `DEVOPS_TEAM` for every seat. To
-reproduce a seat's binding (for example to replay its typed
+To reproduce a seat's binding (for example to replay its typed
 `/devops merge-ok GOAL`), follow these steps and record them in the
 reproduction hand-off ([/repro](../../../commands/repro.md)):
 
