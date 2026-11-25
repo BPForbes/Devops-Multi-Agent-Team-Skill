@@ -76,22 +76,23 @@ Owns [qa-publish-policy.md](qa-publish-policy.md).
 `/code-review`: inspect; **do not edit**. `/repro` when needed.
 Minimum: repo-appropriate fast validation; the Security seat's SOC 2 verdict; workflow / chart / Terraform lint; secret scan if in CI;
 smoke; rollback notes; `git diff --stat <integration-base>...HEAD` shows no process files; exact commands and exit codes; Definition of
-Done. **Only QA may give the OK to push.** Fail → Handoff
-`To: Coder` from a **VM** review. Open `triage-agent-<hex>.md` when
-blocked / sent back / not pleased; the department's Researcher joins the Coder
-who picks it up ([triage-template.md](triage-template.md)). After
-PASS, list thoughts to finalize. Orchestrator cherry-picks the
-approved side-branch SHAs, a QA seat that is not an author of the
-integrated tree and not on an authoring **team hash** re-approves it
-(authors/teams: the union of the Handoff `Authors:` / `Teams:` and the
-Push JSON `authors` / `teams` of every cherry-picked SHA, the
-Orchestrator's conflict fixes included; a seat is refused when its
-agent hash, team hash or handle is in that set), then the Orchestrator
-pushes only after QA PASS and Security CLEAR on that tree and the person's typed
-one-shot `/devops push-ok`; none of the three can stand in for another.
-(Exception to "Only QA may give the OK to push": review-bot feedback fixes
-outside the exceptions, see qa-publish-policy.md. `/devops off` turns the
-skill off.)
+Done. **Default:** QA records PASS; the **client (human)** authorizes
+the push. Fail → Handoff `To: Coder` from a **VM** review. Open
+`triage-agent-<hex>.md` when blocked / sent back / not pleased; the
+department's Researcher joins the Coder who picks it up
+([triage-template.md](triage-template.md)). After PASS, list thoughts
+to finalize. Orchestrator cherry-picks the approved side-branch SHAs,
+a QA seat that is not an author of the integrated tree and not on an
+authoring **team hash** re-approves it (authors/teams: the union of
+the Handoff `Authors:` / `Teams:` and the Push JSON `authors` /
+`teams` of every cherry-picked SHA, the Orchestrator's conflict fixes
+included; a seat is refused when its agent hash, team hash or handle
+is in that set), then the Orchestrator pushes after the client's typed
+one-shot `/devops push-ok` (default path also wants QA PASS and
+Security CLEAR on that tree; the client's go is final without them —
+[client-and-agile.md](client-and-agile.md), qa-publish-policy.md).
+Review-bot feedback fixes: see qa-publish-policy.md. `/devops off`
+turns the skill off.
 
 ## 6–11. Later passes
 

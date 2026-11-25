@@ -41,6 +41,7 @@ Spawn specialized roles. They run **asynchronously in pods**, not a linear queue
 | QA | `devops-quality-engineer.md` |
 | Security | `devops-security-engineer.md` |
 | Ticket Lead | `devops-ticket-lead.md` |
+| Business Analyst | `devops-business-analyst.md` |
 | Verifier | `devops-verifier.md` |
 | Integrator | `devops-integrator.md` |
 | Communicator | `devops-communicator.md` |

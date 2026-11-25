@@ -4,7 +4,8 @@ import { isMain } from './devops-main.mjs'
 
 export const JOBS = Object.freeze([
   'researcher', 'coder', 'reviewer', 'security', 'qa', 'ci', 'verifier',
-  'integrator', 'communicator', 'cleaner', 'ticket-lead', 'idle',
+  'integrator', 'communicator', 'cleaner', 'ticket-lead', 'business-analyst',
+  'idle',
 ])
 
 /** Three random bytes → six hex chars (matches the skill mint width). */

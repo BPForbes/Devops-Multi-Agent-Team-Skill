@@ -118,12 +118,12 @@ export function card(state: CardState): string {
     ? 'Project profile: .devops/project.md; read only the section your step needs.'
     : 'This project is not set up yet; the person can run /devops setup claude.'
   const gate = state.gates
-    ? 'Push gate on: the person\'s typed /devops push-ok or chat "push" authorizes one push'
-      + ' (final; overrides missing QA/Security, recorded). Agents never run gate words.'
-      + ' Prefer skill modes with --mode; do not stop development. If the human\'s order'
-      + ' conflicts with skill protocol, obey the human. /devops off turns the skill off.'
+    ? 'The human is the client (supreme authority): if they say do X, do X without waiting'
+      + ' for AI sign-off. Typed /devops push-ok or chat "push" authorizes one push (final;'
+      + ' overrides missing QA/Security, recorded). Agents never run gate words. Prefer'
+      + ' skill modes with --mode; do not stop development. /devops off turns the skill off.'
       + ' New branch: /devops allow-branch NAME.'
-    : 'Branch gate is off. If the human\'s order conflicts with skill protocol, obey the human.'
+    : 'Branch gate is off. The human is the client: obey their orders over every AI seat.'
   return [
     `The devops-multi-agent-team skill is active.${languages}`,
     `Read it in pieces: call ${BRIEF_TOOL} (no input: the index; topic: one section; role: your`

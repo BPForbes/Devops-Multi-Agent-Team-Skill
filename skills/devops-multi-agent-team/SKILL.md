@@ -4,20 +4,21 @@ description: >-
   Orchestrates a DevOps + Platform Engineering multi-agent loop: plan,
   research (docs/ + online media), implement in per-Coder side worktrees,
   pre-QA Markdown reviewers, Security (SOC 2 style review plus the static
-  analysis for each language in the project), then QA. Only QA may give the
-  OK to push. /devops off (or disable) turns the skill off and writes
-  project enabledPlugins. Works for any mix of languages
-  through a per-project profile
-  (.devops/project.md) built from languages.json: C, C++, assembly, Rust, Go,
-  C#, Java, Kotlin, Python, TypeScript/JavaScript, CSS, shell, PowerShell, SQL,
-  Terraform, containers and CI workflows. Use when the user asks for CI/CD,
-  GitHub Actions, Kubernetes, Docker, Terraform, deploy pipelines,
-  monitoring, runbooks, infra hardening, build-time or cost work, pre-merge
-  quality/security gates, SOC 2 review, multi-agent or multi-team work, or
-  explicitly invokes /devops-multi-agent-team, /goal, /create-subagent,
-  /code-review, /repro, /triage, /story or /cleanup. Also use it to cut a large change into
-  linked stories (OLD and NEW proposals with a catalog, dependency order and
-  guidance), within one project or across two.
+  analysis for each language in the project), then QA. The human is the
+  Agile client and authorizes every push (QA PASS is the default path).
+  /devops off (or disable) turns the skill off and writes project
+  enabledPlugins. Works for any mix of languages through a per-project
+  profile (.devops/project.md) built from languages.json: C, C++,
+  assembly, Rust, Go, C#, Java, Kotlin, Python, TypeScript/JavaScript,
+  CSS, shell, PowerShell, SQL, Terraform, containers and CI workflows.
+  Use when the user asks for CI/CD, GitHub Actions, Kubernetes, Docker,
+  Terraform, deploy pipelines, monitoring, runbooks, infra hardening,
+  build-time or cost work, pre-merge quality/security gates, SOC 2
+  review, multi-agent or multi-team work, or explicitly invokes
+  /devops-multi-agent-team, /goal, /create-subagent, /code-review,
+  /repro, /triage, /story or /cleanup. Also use it to cut a large change
+  into linked stories (OLD and NEW proposals with a catalog, dependency
+  order and guidance), within one project or across two.
 ---
 
 # DevOps multi-agent team
@@ -53,12 +54,12 @@ and edited by hand afterwards.
 - **No profile:** say so, run `node <plugin>/scripts/devops-setup.mjs
   detect`, show the human the result and ask before installing one.
   Do not guess commands from memory.
-- **Precedence:** the **human's explicit development orders** win over
-  this skill's process rules (see Development bypass below). Then the
-  project's own `AGENTS.md`, `CLAUDE.md` and rule files win over this
-  skill; the profile wins over this skill's defaults. Where this skill's
-  "no push until QA" gate and a project workflow differ, follow the
-  stricter one while the skill is on. `/devops off` turns the skill off.
+- **Precedence:** the **human is the client** — supreme authority over
+  every AI seat ([client-and-agile.md](references/client-and-agile.md)).
+  Their explicit orders win over this skill's process rules, QA,
+  Security, and every other seat (see Development bypass below). Then
+  the project's own `AGENTS.md`, `CLAUDE.md` and rule files; then the
+  profile. `/devops off` turns the skill off.
 - **Services and sandbox:** the profile also lists the services in use
   (containers, cloud, AI, VMs) and the sandbox every build, test and scan
   runs in. Read [services-and-sandbox.md](references/services-and-sandbox.md);
@@ -184,37 +185,37 @@ Clear does not authorize a push either.
   applies overrides to project copies under `.claude/skills/`; skills
   loaded only from the plugin are not affected — use disable for those.
 
-### Development bypass (human over skill contingencies)
+### Client authority (human over every AI seat)
 
-A **development deadlock** is when this skill's role contingencies
-(seat order, "wait for Researcher", independence staffing, Review →
-Security → QA before any code lands, or similar) stop coding or
-pushing even though the human has ordered the work. Deadlock is a
-failure mode; it is not compliance.
+The human is the **client** in this Agile system
+([client-and-agile.md](references/client-and-agile.md)). If the client
+is not happy, the whole system does the work. Client orders rank
+**above** QA, Security, Review, Research, and every other AI role.
 
-- **Obey the human.** Every seat and the Orchestrator **must** follow
-  the human's explicit development orders. If those orders conflict
-  with this skill's process policy (role order, independence
-  preferences, publish-gate prose, "do not start X until Y"), **obey
-  the human** and do the work. Do not refuse, stall, or re-litigate
-  the skill against a clear human directive.
-- **What yields.** Skill contingencies that block writing code,
-  committing, staffing a Coder early, skipping a seat the human said
-  to skip, or continuing after a send-back the human waved off. Keep
-  developing when the human said to.
-- **Mechanical gates.** The person's one-shot `/devops push-ok` (aliases
-  `push` / `go` / `publish`, or chat `push` / `push it`) authorizes one
-  push on the current tree and is **final**: it proceeds even when QA
-  PASS or Security CLEAR is missing, and the miss is recorded as an
-  override so development is not deadlocked. Agents still cannot flip
-  gates. To lift every check (branch, lint-on-commit, monitor, session
-  card), the person types `/devops off` or `/devops disable` (then
-  `/devops on` or `/devops enable` to restore).
-- **Record it.** When a human order overrides a skill contingency or a
-  seat gate, note the order and what was skipped under
+A **development deadlock** is when seat contingencies stop coding or
+pushing even though the client ordered the work. Deadlock is a failure
+mode; it is not compliance.
+
+- **Obey the client.** When the client says do **X**, every seat and
+  the Orchestrator **must** do X **even without** Research / Review /
+  Security / QA sign-off. Do not refuse, stall, or re-litigate the
+  skill against a clear client directive.
+- **What yields.** Role order, independence preferences, publish-gate
+  prose, "do not start X until Y", send-backs the client waved off.
+  Keep developing when the client said to.
+- **Mechanical gates.** The client's one-shot `/devops push-ok`
+  (aliases `push` / `go` / `publish`, or chat `push` / `push it`)
+  authorizes one push and is **final** even without QA PASS or
+  Security CLEAR (recorded as an override). Agents cannot flip gates.
+  `/devops off` or `/devops disable` lifts every check.
+- **Record it.** Note the order and what was skipped under
   `devops-skill/thoughts/non-final/` (and the mod's override list for
-  pushes) and keep going. Do not ask the human to re-approve the same
-  override on every turn.
+  pushes). Do not ask the client to re-approve the same override every
+  turn.
+- **Agile loop.** Team leads reallocate under **stress/strain** at
+  Daily Scrum; the Business Analyst tracks objectives and cost and
+  prepares the joint Sprint Review roster
+  ([scrum-meetings.md](references/scrum-meetings.md)).
 
 ### Reviewer entrypoint (before QA)
 
@@ -243,17 +244,19 @@ failure mode; it is not compliance.
    which includes the static analysis the profile names for each
    affected language, plus any security MCP that is installed.
 6. Then **QA**. QA owns
-   [qa-publish-policy.md](references/qa-publish-policy.md) and is the
-   **only** role that may give the OK to push (except review-bot
-   feedback fixes outside the exceptions in that file). QA records
-   `Publish gate: PASS` or `BLOCKED` in `qa-<seat-id>.md`.
-7. After PASS, the Orchestrator cherry-picks the approved SHAs, and a
-   QA seat that is not an author of the integrated tree re-approves
-   it. The authors are the union of the Handoff `Authors:` and the
-   Push JSON `authors` of every cherry-picked SHA, the Orchestrator's
-   conflict fixes included; a seat is refused when its seat id or its
-   handle is in that set. The Orchestrator pushes only after
-   the person types `/devops push-ok` on that tree ([thoughts-layout.md](references/thoughts-layout.md), One
+   [qa-publish-policy.md](references/qa-publish-policy.md) and records
+   `Publish gate: PASS` or `BLOCKED` in `qa-<seat-id>.md` (default path;
+   review-bot feedback fixes have exceptions in that file). The **client
+   (human)** is the only one who authorizes a push; a missing PASS yields
+   to their typed push-ok as an override.
+7. After PASS (or a client override), the Orchestrator cherry-picks the
+   approved SHAs, and a QA seat that is not an author of the integrated
+   tree re-approves it when the default path applies. The authors are the
+   union of the Handoff `Authors:` and the Push JSON `authors` of every
+   cherry-picked SHA, the Orchestrator's conflict fixes included; a seat
+   is refused when its seat id or its handle is in that set. The
+   Orchestrator pushes only after the client types `/devops push-ok` on
+   that tree ([thoughts-layout.md](references/thoughts-layout.md), One
    push). Check `git diff --stat <integration-base>...HEAD` for process
    files after any strip. Do not commit process notes.
 
@@ -262,11 +265,14 @@ failure mode; it is not compliance.
 Work in progress lives in the **virtual PR**: the review thread, Push JSON,
 handoffs, research and QA notes under `devops-skill/thoughts/` (gitignored), and
 each Coder's code in a detached local worktree handed over by commit SHA.
-Nothing reaches the real branch, and no real PR is opened or updated, until
-Security is Clear and QA marks PASS; then the Orchestrator cherry-picks the
-approved SHAs, QA re-approves the integrated tree, and the Orchestrator pushes
-once after the human authorizes it. The full logic, invariants and the
-multi-branch merge rule: [virtual-git.md](references/virtual-git.md).
+Default path: nothing reaches the real branch, and no real PR is opened or
+updated, until Security is Clear and QA marks PASS; then the Orchestrator
+cherry-picks the approved SHAs, QA re-approves the integrated tree, and the
+Orchestrator pushes once after the client authorizes it. A clear client
+order (including push-ok without those seats) outranks that default
+([client-and-agile.md](references/client-and-agile.md)). The full logic,
+invariants and the multi-branch merge rule:
+[virtual-git.md](references/virtual-git.md).
 
 ### More rules every seat reads
 
@@ -343,11 +349,14 @@ background subagents.
 | `devops-quality-engineer.md` | QA / publish gate | profile's validation + bug hunt |
 | `devops-security-engineer.md` | Security | profile's analysis + SCA |
 | `devops-ticket-lead.md` | Tickets | Linear / GitHub issues |
+| `devops-business-analyst.md` | Business Analyst (client objectives, cost, review roster) | board / meetings |
 | `devops-verifier.md` | UI smoke | browser |
 | `devops-integrator.md` | Externals | Composio |
 | `devops-communicator.md` | Recap | video MCP |
 
-**A. Pre-merge** — Ticket Lead → Research brief → Coder → Reviewers → Security → QA (only role that may OK a push).
+**A. Pre-merge (default)** — Ticket Lead → Research brief → Coder →
+Reviewers → Security → QA. The **client** may skip any of these; only
+the client's typed push-ok authorizes a push.
 
 **B. Red CI** — list failed runs → failed jobs → logs → reproduce → fix → retry.
 
@@ -361,8 +370,18 @@ Label every substantive reply with the active job and agent hash,
 e.g. `[Planner]`; a spawned seat adds both, e.g.
 `[Coder agent-0a0a0a]`.
 
-- **Planner** — `/goal` when the human named X. Plans in
+- **Client (human)** — supreme authority; objectives in chat; final
+  push-ok. Every AI seat serves them
+  ([client-and-agile.md](references/client-and-agile.md)).
+- **Planner** — `/goal` when the client named X. Plans in
   `devops-skill/thoughts/non-final/`; durable docs in `docs/`.
+- **Business Analyst** — tracks client objectives vs delivery and cost;
+  present at Planning, Daily Scrum, Refinement and the joint Sprint
+  Review; prepares review attendance and demo roster ahead
+  (`devops-business-analyst.md`).
+- **Team lead** — runs that team's meetings; at Daily Scrum measures
+  **stress/strain** and **reallocates** seats onto higher-priority
+  delayed work ([scrum-meetings.md](references/scrum-meetings.md)).
 - **Researcher** — owns the repository mind map (refresh, query, carry it
   into the brief), reads documentation first (Markdown, LaTeX, code
   comments), maps the modules (Mermaid mind map), double-checks reuse and
@@ -370,28 +389,31 @@ e.g. `[Planner]`; a spawned seat adds both, e.g.
   department** ([research-and-reuse.md](references/research-and-reuse.md)).
 - **Coder** — implement on a **skill side-branch** (the Coder's own
   detached git worktree off the integration SHA, no ref; never
-  pushed; stage by explicit path; no shared-checkout commits until QA
-  PASS). Claim shared files on `team-board.md` before editing. Write
-  Push JSON, Coder→Reviewer `qa` comments, and a Handoff **before the
-  first review** ([side-work.md](references/side-work.md)). Follow
+  pushed; stage by explicit path; no shared-checkout commits until the
+  client authorizes a push). Claim shared files on `team-board.md`
+  before editing. Write Push JSON, Coder→Reviewer `qa` comments, and a
+  Handoff **before the first review** unless the client ordered otherwise
+  ([side-work.md](references/side-work.md)). Follow
   [comment-standards.md](references/comment-standards.md) and extend existing
   code instead of re-implementing it.
 - **Reviewers** — strict on comments and on re-implemented code (both
   blocking); compare Push JSON to the side-branch diff vs
   `<integration-base>`; Handoff on send-back
   ([role-identity.md](references/role-identity.md)). Satisfied does
-  **not** authorize a push.
-- **QA** — after Satisfied + Security Clear. `/code-review`: look; **do
-  not edit**. `/repro` as needed. Fail → clean-environment review,
-  Handoff `To: Coder`. When QA is blocked, sends back, or is not
-  pleased: open `triage-<seat-id>.md`; the department's Researcher
-  joins the coder who picks it up
+  **not** authorize a push; the client may waive review.
+- **QA** — after Satisfied + Security Clear (default path).
+  `/code-review`: look; **do not edit**. `/repro` as needed. Fail →
+  clean-environment review, Handoff `To: Coder`. When QA is blocked,
+  sends back, or is not pleased: open `triage-<seat-id>.md`; the
+  department's Researcher joins the coder who picks it up
   ([department-pods.md](references/department-pods.md),
   [triage-template.md](references/triage-template.md)). PASS only when
-  AC, tests, the Security verdict and the final bug hunt hold.
+  AC, tests, the Security verdict and the final bug hunt hold. The
+  client's push-ok still outranks a missing PASS.
 - **Observability / Optimization / Documentation / Refactoring /
-  Security / Performance** — after Satisfied, Security before QA. Docs
-  match the implementation. No premature complexity.
+  Security / Performance** — after Satisfied, Security before QA
+  (default). Docs match the implementation. No premature complexity.
+  Yield to client orders.
 
 ## Orchestrator loop (async pods)
 
@@ -443,18 +465,18 @@ Checklists: [references/devops-loop.md](references/devops-loop.md).
 
 Ask-paths: [role-identity.md](references/role-identity.md). Questions
 from Coders and Researchers go first to the standing Review, Security
-and QA subagents by topic. Orchestrator is the only role that asks The
-Client unless the human spoke first.
+and QA subagents by topic. Orchestrator is the only role that asks the
+**client** unless the client spoke first.
 
-Treat human instructions (including non-gate `/devops` skill modes) as
-**final directives**, not a pause. Gate words are different: they run
-only as commands the person types. Apply them immediately, keep the
-current development loop running, and only redirect seats whose work
+Treat client instructions (including non-gate `/devops` skill modes) as
+**final directives**, not a pause — even without seat sign-off. Gate
+words run only as commands the client types. Apply them immediately,
+keep the development loop running, and only redirect seats whose work
 the directive itself contradicts. Stay on the current **real** branch
-unless the human named another. While the skill is on, only the
-person's typed one-shot `/devops push-ok`, after QA PASS and Security
-CLEAR on that tree, authorizes a push. `/devops off` turns the skill
-off (Development bypass above).
+unless the client named another. While the skill is on, only the
+client's typed one-shot `/devops push-ok` (or chat `push`) authorizes a
+push; it is final even without QA/Security (Client authority above).
+`/devops off` turns the skill off.
 
 ## Output rules
 

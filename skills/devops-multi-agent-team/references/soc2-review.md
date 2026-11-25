@@ -127,5 +127,6 @@ Verdict: Clear | Findings (blockers: n, high: n)
 
 A blocker or high finding sends the change back through
 `triage-<seat-id>.md` to the Coder; the review is repeated on the rewrite.
-Clear is advice: only QA may OK a push (review-bot feedback fixes:
+Clear is advice: only the client (human) authorizes a push; QA PASS is
+the default path (client-and-agile.md; review-bot feedback fixes:
 see qa-publish-policy.md).

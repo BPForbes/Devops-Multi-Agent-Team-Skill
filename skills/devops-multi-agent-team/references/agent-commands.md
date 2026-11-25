@@ -28,9 +28,11 @@ person's push-ok alone is final and records an override when those are
 missing. After PASS: one compressed push that keeps approved Coder
 commits.
 
-**Human over skill.** If the human's order conflicts with this skill's
-role contingencies or seat gates, obey the human and keep developing
-([SKILL.md](../SKILL.md), Development bypass).
+**Client over skill.** The human is the Agile client and supreme
+authority. If their order conflicts with role contingencies or seat
+gates (including QA/Security), obey them even without sign-off and keep
+developing ([SKILL.md](../SKILL.md), Client authority;
+[client-and-agile.md](client-and-agile.md)).
 
 ## `/devops` skill modes
 

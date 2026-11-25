@@ -41,7 +41,7 @@ In a Claude Code project that uses this plugin:
 |------|------|
 | `skills/project-mindmap/` | Plain-chat skill: answer questions about the project from the mind map, no team needed. |
 | `skills/devops-multi-agent-team/` | The skill: `SKILL.md` and `references/` (team/agent/job/item hashes, pods, side worktrees, Push JSON, QA policy, SOC 2 review, templates). Language-neutral. |
-| `agents/` | Eleven role prompts: researcher, coder, reviewer, CI, quality (QA), security, cleaner, ticket lead, verifier, integrator, communicator. |
+| `agents/` | Role prompts: researcher, coder, reviewer, CI, quality (QA), security, cleaner, ticket lead, business analyst, verifier, integrator, communicator. |
 | `commands/` | `/goal`, `/create-subagent`, `/code-review`, `/repro`, `/triage`. |
 | `languages.json`, `LANGUAGES.md` | The language setup file (40 languages) and its guide. |
 | `standards.json` | Project standards: line length, function size and nesting, parameters, duplicates, comment density, per-language overrides, and linter settings. Copied as `.devops/standards.json`, where a project overrides only the keys it sets. |
@@ -180,8 +180,8 @@ prompts) walks the same steps.
 | `team_board_open`, `team_item_add`, `team_item_move`, `team_item_signoff` | per-team boards: open a team's own board (its lead is the manager), add a work item (members only), move it as the caller's role under the item rules, and record a security member's sign-off; the lead makes the last move to done |
 | `needs_attention` | the team lead's view of what needs a decision: blocked or failed items, and items waiting on security or the person |
 | `allocation_plan`, `board_spin_up` | allocation research (`references/allocation-research.md`): plan the teams and seats from the task's streams, each count with its reason, every team judged by one that authored none of its work; then Orchestration opens the sprint, backlogs each stream, and hands each team lead its Sprint Planning |
-| `meeting_schedule`, `meeting_hold` | Scrum meetings per team and sprint (`references/scrum-meetings.md`): Sprint Planning, Daily Scrum, Backlog Refinement, Sprint Review and Retrospective, in order and within their timeboxes, run by each team's lead, the judging team's too; read at `devops://meetings/<sprint>` |
-| `goal_signoff`, `report_forward` | the team lead signs a goal off as done for the team, once QA has handed it to Security and Security's sign-off is clear (a goal in a sprint's allocation is done no other way), which files a done report to Orchestration (`devops://reports`); Orchestration forwards the reports to you with a summary. Your typed `/devops push-ok`, after QA PASS and Security CLEAR, stays the real final sign-off before the push |
+| `meeting_schedule`, `meeting_hold` | Scrum meetings (`references/scrum-meetings.md`, `client-and-agile.md`): per-team Planning, Daily (stress/strain + lead reallocations), Refinement; one **joint** Sprint Review for the sprint (BA roster, feature demos, AI Q&A); per-team Retro. Business Analyst attends Planning, Daily, Refinement and Review. Read at `devops://meetings/<sprint>` |
+| `goal_signoff`, `report_forward` | the team lead signs a goal Done for the team (default: after QA→Security clear); Orchestration forwards reports to you. You are the **client**: your typed `/devops push-ok` (or chat `push`) is the final sign-off and outranks missing QA/Security |
 
 **How the server is sandboxed.** It works only inside the project folders it
 is allowed (`DEVOPS_MCP_ROOTS`, else the client's MCP roots, else its working

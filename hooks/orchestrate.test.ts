@@ -57,8 +57,8 @@ test('the card is short and names the tool, the gate, the profile and the standa
   const state = { languages: ['rust'], hasProfile: true, gates: true, lintMode: 'warn', standards }
   const text = card(state)
   for (const part of ['devops_brief', 'Languages: rust', '.devops/project.md', 'push-ok',
-    'obey the human', 'code ≤ 100 columns', 'functions ≤ 30 lines', 'Lint on git commit: warn',
-    '/devops off']) {
+    'human is the client', 'code ≤ 100 columns', 'functions ≤ 30 lines',
+    'Lint on git commit: warn', '/devops off']) {
     expect(text).toContain(part)
   }
   expect(text.length).toBeLessThan(1400)

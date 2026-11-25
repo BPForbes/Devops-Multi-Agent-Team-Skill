@@ -1021,7 +1021,9 @@ const TOOLS = [
     name: 'meeting_hold',
     description: [
       'The team lead (`caller`) holds a scheduled meeting: attendees, minutes (within its',
-      'timebox) and the record its kind needs (references/scrum-meetings.md).',
+      'timebox) and the record its kind needs (scrum-meetings.md, client-and-agile.md).',
+      'Daily: stress/strain + reallocations. Review: one joint review per sprint; BA roster,',
+      'feature demos, AI Q&A. BA attends planning, daily, refinement and review.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -1046,9 +1048,9 @@ const TOOLS = [
     name: 'goal_signoff',
     description: [
       "The team lead's sign-off that a goal is done for the team: only the lead (`caller`) of",
-      'the team that builds it, once it has passed security. Files a done report to',
-      "Orchestration, which reports to the person; the person's typed push-ok stays",
-      'the final sign-off.',
+      'the team that builds it, once it has passed security (default path). Files a done',
+      'report to Orchestration, which reports to the client (human); the client\'s typed',
+      'push-ok stays the final sign-off and outranks missing QA/Security.',
     ].join(' '),
     inputSchema: {
       type: 'object',

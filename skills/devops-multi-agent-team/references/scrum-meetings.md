@@ -2,64 +2,79 @@
 
 Read this file. Do not paste it into agent prompts.
 
-Every team holds its own Scrum meetings in each sprint, on the goal
-board, whatever its job: authoring teams and the judging teams (`R1`,
-`Q1`, `S1`) alike.
-The team lead the sprint's allocation names (the team's manager seat)
-schedules each one with `meeting_schedule` and holds it with
-`meeting_hold`, recording who attended, how long it took and what it
-decided. No other seat, and no team outside the allocation, runs a team's
-meetings. In Sprint Planning an authoring team chooses the goals it
-builds; a judging team chooses the goals it judges, from the backlog or
-already in the sprint, and plans only reviewer, QA and Security tasks
-on them. Orchestration schedules
-the first one, Sprint Planning, when it spins up the board
+The **client (human)** is the supreme authority
+([client-and-agile.md](client-and-agile.md)). Meetings organise AI work;
+they never override a clear client order, and they never change a gate.
+
+Every **authoring** and **judging** team holds its own Sprint Planning,
+Daily Scrums, Backlog Refinement and Retrospective. The **Sprint Review
+is joint**: one review for the whole sprint, all teams together, hosted
+by one allocated lead. The team lead the sprint's allocation names
+(the team's manager seat) schedules that team's meetings with
+`meeting_schedule` and holds them with `meeting_hold`, recording who
+attended, how long it took and what it decided. Orchestration schedules
+the first Sprint Planning when it spins up the board
 ([allocation-research.md](allocation-research.md)). A sprint's meetings
 and allocation are read at `devops://meetings/<sprint>`.
 
 | Meeting | When | Timebox | What it records |
 |---------|------|---------|-----------------|
-| Sprint Planning | start of the sprint, first | 2 hours per sprint week | the sprint goal, the backlog goals chosen (only backlog goals; they move into the sprint), and the tasks each goal breaks into (a job and a title each) |
-| Daily Scrum | each day of the sprint | 15 minutes | each developer's update: what was done, what is next today, and blockers (collected for the lead to clear) |
-| Backlog Refinement | mid-sprint | 1 hour per sprint week | upcoming goals (not in this sprint) clarified, sized (1 to 13 points) and ordered (priority 1 first) |
-| Sprint Review | near the end, once | 1 hour per sprint week | the Done goals shown, the feedback, and new goals (not already on the board) added to the backlog |
-| Sprint Retrospective | the very end, once, after the review | 45 minutes per sprint week | what went well, the bottlenecks, and at least one agreed improvement |
+| Sprint Planning | start of the sprint, first (per team) | 2 hours per sprint week | sprint goal, backlog goals chosen, tasks; Business Analyst present |
+| Daily Scrum | each day (per team) | 15 minutes | done / today / blockers; **stress** and **strain**; lead **reallocations** onto higher-priority work; BA present |
+| Backlog Refinement | mid-sprint (per team) | 1 hour per sprint week | upcoming goals clarified, sized (1–13), ordered; BA present (objectives + cost) |
+| Sprint Review | near the end, **once for the whole sprint** (joint) | 1 hour per sprint week | BA's attendance and demo roster (ahead); feature/improvement demos (bugs optional); AI questions and answers; feedback; new backlog goals |
+| Sprint Retrospective | after the joint review, once per team | 45 minutes per sprint week | went well, bottlenecks, at least one agreed improvement |
 
-The board enforces the order: Sprint Planning comes first; Daily Scrums
-and Backlog Refinement run between planning and the review; the review
-comes once; the retrospective comes once, after it. When every team in
-the allocation, the judging teams included, has held its retrospective,
-the sprint closes, and a closed sprint holds no more meetings. Its
-unfinished goals go back to the backlog, in the backlog state, free for
-a later sprint's allocation and planning; they are still done only by a
-lead's sign-off, and are judged again from the start (verdicts from
-before the return do not count, but a seat that wrote the goal in any
-sprint still cannot judge it).
+Order: Planning first; Daily and Refinement before the joint Review; one
+joint Review for the sprint; then each team's Retrospective. When every
+allocated team has held its retrospective, the sprint closes. Unfinished
+goals return to the backlog as today.
 
-## Done: the lead signs off and reports up; the person signs off last
+## Daily Scrum: stress, strain and reallocation
 
-The team lead decides whether the team's task is truly done. A goal in
-a sprint's allocation is done only by its own team lead's sign-off
-(`goal_signoff`), and only once it is in the security step and the board
-holds, since the goal's last send-back and in this order, a review
-hand-off into the QA team the allocation names, QA's hand-off from that
-team to its Security team, and, after QA's last such hand-off, that
-Security team's latest sign-off with result `clear`. A verdict from any
-other team, from a seat that wrote the goal, or from
-the goal's own team lead does not count, and neither does one
-overturned or sent back since. Moving it to done
-any other way is refused, it cannot leave its sprint, and no goal starts
-out done. On a team's own board, the
-lead (manager) likewise makes the last move of an item to done, after
-Security's sign-off.
+Each developer's update still covers done, today and blockers. In
+addition the lead and Business Analyst record:
 
-The lead's sign-off is not the final word. It files a done report to
-Orchestration (`devops://reports`); Orchestration passes the reports on
-to the person with a summary (`report_forward`) and in its DevOps
-report. The person gives the real final sign-off before the real push:
-their typed `/devops push-ok` on the exact tree, after QA PASS and
-Security CLEAR. Nothing a lead or Orchestration does stands in for it.
+- **stress** — open load on high-priority goals (priority 1 first): which
+  goals, points still open, seats still on them.
+- **strain** — higher-priority goals delayed or blocked while
+  lower-priority work still has seats.
+- **reallocations** — the lead's moves: which agent leaves which work and
+  joins which higher-priority goal or job, and why. The BA notes cost
+  (deferred scope, seat-time).
 
-Only the lead holds a meeting, attendees are agent hashes, and a meeting
-that runs past its timebox is refused. Meetings decide the work; they do
-not change a gate.
+Only the team lead decides a reallocation; the BA does not veto it.
+
+## Sprint Review (joint, all teams)
+
+One Sprint Review per sprint. All teams attend. The Business Analyst
+**prepares ahead**:
+
+1. **Attendance** — which agent hashes will attend (every team that has
+   Done feature or improvement work should send a demoer).
+2. **Demo roster** — who demos which Done goal. **Bug fixes are not
+   required** in the demo; **features and improvements should** be
+   demoed. Every AI seat that can demo does so.
+
+During the review:
+
+- Demoing teams show the rostered work.
+- Other AI seats **ask questions**; demoing teams **answer**. Questions
+  and answers are recorded on the meeting (`questions`) and kept for
+  later refinement.
+- Feedback and new backlog goals are recorded as today.
+
+## Done: lead signs off; client signs off last
+
+The team lead signs a goal Done (`goal_signoff`) under the same Security
+and independence rules as before. That is a **team** Done, not the
+client's final word. Orchestration reports to the client; the client's
+typed `/devops push-ok` (or chat `push`) on the exact tree is the real
+final sign-off before a push, and it is final even without QA PASS or
+Security CLEAR ([qa-publish-policy.md](qa-publish-policy.md)). If the
+client ordered the work without seat sign-offs, do the work and record
+the override; do not stall the meeting process against that order.
+
+Only the lead holds a meeting, attendees are agent hashes (the BA's
+hash among them for Planning, Daily, Refinement and Review), and a
+meeting that runs past its timebox is refused.

@@ -19,10 +19,12 @@ Async. **Only QA may give the OK to push.** You never push, open a PR or
 create a branch. **Ask:** Researcher, Reviewer, Security or QA by topic,
 then the Orchestrator. Thoughts stay **gitignored**.
 
-**Human over skill.** If the person's order conflicts with this skill's role
-contingencies (for example "start coding now" before a research brief), obey
-the person, note the override under thoughts, and keep developing
-([SKILL.md](../skills/devops-multi-agent-team/SKILL.md), Development bypass).
+**Client over skill.** The human is the Agile client and supreme authority.
+If they say do X (for example "start coding now" before a research brief, or
+skip a seat), obey them even without sign-off, note the override under
+thoughts, and keep developing
+([SKILL.md](../skills/devops-multi-agent-team/SKILL.md), Client authority;
+[client-and-agile.md](../skills/devops-multi-agent-team/references/client-and-agile.md)).
 
 ## Before you write code
 

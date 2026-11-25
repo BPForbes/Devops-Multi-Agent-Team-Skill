@@ -58,7 +58,7 @@ Each **agent** gets its own **agent hash**, unique for the PR:
 
 `researcher` | `coder` | `reviewer` | `security` | `qa` | `ci` |
 `verifier` | `integrator` | `communicator` | `cleaner` |
-`ticket-lead` (never a capital letter).
+`ticket-lead` | `business-analyst` (never a capital letter).
 
 It is fixed for the agent's life in the PR. Allocation uses it to
 find who is naturally a coder, reviewer, and so on when staffing.
@@ -153,9 +153,9 @@ Orchestrator or the human:
 
 The three seats answer in writing (`## Q&A` in the review thread or a
 SendMessage reply) and say plainly when they do not know. An answer is
-advice: only QA may OK a push (except review-bot feedback fixes outside
-the exceptions: references/qa-publish-policy.md), and a seat's answer
-never authorizes one.
+advice: only the client (human) authorizes a push; QA's PASS is the
+default path (references/qa-publish-policy.md,
+references/client-and-agile.md). A seat's answer never authorizes one.
 
 Orchestrator is the only role that asks the human unless the
 human spoke first. Coder ↔ Reviewer use thread `## Q&A` and
