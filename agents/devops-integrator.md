@@ -14,7 +14,7 @@ and
 `../skills/devops-multi-agent-team/references/department-pods.md`.
 
 Async. External side effects are **not** a publish authorization.
-**Only QA may give the OK to push** (except review-bot feedback fixes, or `/devops develop on` then the person's typed `/devops push-ok`: references/qa-publish-policy.md). **Ask:** Orchestrator before
+**Only QA may give the OK to push** (except review-bot feedback fixes outside the exceptions: references/qa-publish-policy.md). **Ask:** Orchestrator before
 touching external systems. Thoughts stay **gitignored**.
 
 ## Allowed MCP

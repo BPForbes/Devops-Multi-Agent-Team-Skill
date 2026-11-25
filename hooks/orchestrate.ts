@@ -107,8 +107,6 @@ export type CardState = {
   languages: string[]
   hasProfile: boolean
   gates: boolean
-  /** When true, human orders beat skill contingencies; push-ok alone authorizes a push. */
-  develop?: boolean
   lintMode: string
   standards?: string
 }
@@ -119,17 +117,12 @@ export function card(state: CardState): string {
   const profile = state.hasProfile
     ? 'Project profile: .devops/project.md; read only the section your step needs.'
     : 'This project is not set up yet; the person can run /devops setup claude.'
-  const develop = state.develop === true
-  const gate = develop
-    ? 'Development bypass on: obey the human over skill contingencies; push needs only typed'
-      + ' /devops push-ok. Agents never run gate words. Prefer skill modes with --mode; do not'
-      + ' stop development. New branch: /devops allow-branch NAME.'
-    : state.gates
-      ? 'Push gate on: QA PASS + Security CLEAR + typed /devops push-ok. Agents never run it.'
-        + ' Prefer skill modes with --mode; do not stop development. Human orders beat skill'
-        + ' contingencies; /devops develop on makes push-ok enough. New branch:'
-        + ' /devops allow-branch NAME.'
-      : 'Branch gate is off. Human development orders beat skill contingencies.'
+  const gate = state.gates
+    ? 'Push gate on: QA PASS + Security CLEAR + typed /devops push-ok (one-shot). Agents never'
+      + ' run gate words. Prefer skill modes with --mode; do not stop development. Human orders'
+      + ' beat skill contingencies. /devops off turns the skill off. New branch:'
+      + ' /devops allow-branch NAME.'
+    : 'Branch gate is off. Human development orders beat skill contingencies.'
   return [
     `The devops-multi-agent-team skill is active.${languages}`,
     `Read it in pieces: call ${BRIEF_TOOL} (no input: the index; topic: one section; role: your`

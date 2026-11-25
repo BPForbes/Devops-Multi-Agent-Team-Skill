@@ -97,7 +97,7 @@ const SPECS: ModeSpec[] = [
       'loop: run every stage (research→implement→review→security→qa→docs) until X.',
       'Stop the loop only when Security is Clear and QA records Publish gate: PASS.',
       'Then the Orchestrator notifies the human and waits. Do not push: after QA PASS and'
-        + ' Security CLEAR (or /devops develop on), ask for typed /devops push-ok.',
+        + ' Security CLEAR, ask the person to type /devops push-ok.',
       'allocate: mint team/agent hashes, write per-pod and per-agent goals, set current_job.',
       'On send-back or BLOCKED, re-enter the needed stage and continue the loop.',
     ],
@@ -120,7 +120,7 @@ const SPECS: ModeSpec[] = [
       'Allocate goals first; mint team/agent hashes; set initial_job/current_job.',
       'full|loop: research→implement→review→security→qa→docs until Clear + PASS.',
       'When QA PASS and Security Clear: Orchestrator notifies the human for push;',
-      'do not push: after Clear+PASS (or /devops develop on), ask for typed /devops push-ok.',
+      'do not push: after QA PASS and Security CLEAR, ask for typed /devops push-ok.',
       'Seats use /devops question|mind-map|reuse|review|repro the same way humans do.',
     ],
     command: 'commands/stage.md',
@@ -252,7 +252,7 @@ const MODE_FLAG = /(?:^|\s)--mode\s+(\S+)/i
 /** Known gate subcommands (not skill modes). */
 export const GATE_WORDS = [
   '', 'status', 'languages', 'setup', 'brief', 'push-ok', 'push-reset',
-  'on', 'off', 'develop', 'allow-branch', 'comments', 'config', 'monitor', 'gates',
+  'on', 'off', 'allow-branch', 'comments', 'config', 'monitor', 'gates',
 ] as const
 
 export function skillWords(): string[] {
@@ -337,12 +337,9 @@ const COMMAND_HELP: string[] = [
   '                     only .devops/ and the thought folders; the plugin supplies the rest',
   '/devops brief [TOPIC | role NAME]  one section of the skill, or a seat\'s brief',
   '/devops push-ok      (you) allow ONE push on this tree after QA PASS and Security CLEAR',
-  '                     (or push-ok alone while /devops develop on)',
   '/devops push-reset   (you) withdraw that permission',
-  '/devops develop on|off (you) development bypass: human orders beat skill contingencies;',
-  '                     while on, push-ok alone authorizes a push (no QA/Security required)',
   '/devops allow-branch NAME   (you) allow creating that git branch',
-  '/devops gates on|off (you) turn the branch gate on or off; push check is separate (see develop)',
+  '/devops gates on|off (you) turn the branch gate on or off; the push check stays on',
   '/devops monitor on|off (you) turn the failed-check monitor on or off',
   '/devops comments warn|strict|off (you) lint gate on git commit (comment and code rules): ' +
     'warn (default), refuse a commit with blocking findings, or off',
@@ -382,8 +379,8 @@ export function helpCatalog(mode: string): string {
   parts.push(
     'Free-form phrases map onto these skill modes, never onto a gate word. Call the named',
     'tools; keep large file bodies out of chat. Keep development running.',
-    'Only the person\'s typed /devops push-ok authorizes a push. With /devops develop on,',
-    'push-ok alone is enough; agents must obey the human over skill contingencies.',
+    'Only the person\'s typed /devops push-ok authorizes a push (one-shot; no on|off).',
+    'Human development orders beat skill contingencies. /devops off turns the skill off.',
   )
   return parts.join('\n')
 }

@@ -13,7 +13,7 @@ See [thoughts-layout.md](thoughts-layout.md).
 **Authors:** <agent-hash>[, …]   **Teams:** <team-hash>[, …]
 **Reviewers:** <agent-hash>[, …] (must not share an Authors team hash)
 **Status:** In review | Changes requested | Satisfied — ready for security | Closed
-**Push policy:** Only QA may give the OK to push (review-bot feedback fixes, or `/devops develop on` then typed `/devops push-ok`: qa-publish-policy.md).
+**Push policy:** Only QA may give the OK to push (review-bot feedback fixes: qa-publish-policy.md).
 
 ## Research brief
 ### Local docs / Online media / Recommendations

@@ -13,11 +13,6 @@ declare module 'claude-code' {
       /** The branch gate; off via `/devops gates off`, typed by the person. The push check stays on. */
       gates: boolean
       /**
-       * Development bypass; on via `/devops develop on`, typed by the person.
-       * While on, push-ok alone authorizes a push (QA PASS and Security CLEAR not required).
-       */
-      develop: boolean
-      /**
        * Human authorized a push (typed /devops push-ok); consumed by the next allowed push.
        * Holds the tree the push-ok was given for; false when none is given.
        */

@@ -76,8 +76,7 @@ Owns [qa-publish-policy.md](qa-publish-policy.md).
 `/code-review`: inspect; **do not edit**. `/repro` when needed.
 Minimum: repo-appropriate fast validation; the Security seat's SOC 2 verdict; workflow / chart / Terraform lint; secret scan if in CI;
 smoke; rollback notes; `git diff --stat <integration-base>...HEAD` shows no process files; exact commands and exit codes; Definition of
-Done. **Only QA may give the OK to push** (or `/devops develop on`
-then the person's typed `/devops push-ok`). Fail → Handoff
+Done. **Only QA may give the OK to push.** Fail → Handoff
 `To: Coder` from a **VM** review. Open `triage-agent-<hex>.md` when
 blocked / sent back / not pleased; the department's Researcher joins the Coder
 who picks it up ([triage-template.md](triage-template.md)). After
@@ -89,9 +88,10 @@ Push JSON `authors` / `teams` of every cherry-picked SHA, the
 Orchestrator's conflict fixes included; a seat is refused when its
 agent hash, team hash or handle is in that set), then the Orchestrator
 pushes only after QA PASS and Security CLEAR on that tree and the person's typed
-`/devops push-ok`; none of the three can stand in for another by default.
-(Exceptions: review-bot feedback fixes outside the exceptions, and
-`/devops develop on` then typed `/devops push-ok`; see qa-publish-policy.md.)
+one-shot `/devops push-ok`; none of the three can stand in for another.
+(Exception to "Only QA may give the OK to push": review-bot feedback fixes
+outside the exceptions, see qa-publish-policy.md. `/devops off` turns the
+skill off.)
 
 ## 6–11. Later passes
 
@@ -119,8 +119,8 @@ the human (Development bypass in [SKILL.md](../SKILL.md)). Free-form
 words never change a gate; gate words run only when the person types
 them. Ask-paths: [role-identity.md](role-identity.md). Stop → halt;
 leave plan/code consistent; do not push. Push / open PR → blocked
-until **QA gives the OK**, unless the person typed `/devops develop
-on` and then `/devops push-ok` on the tree.
+until **QA gives the OK** and the person types `/devops push-ok`
+(or `/devops off` has the skill inactive).
 
 ```text
 [Orchestrator] Status

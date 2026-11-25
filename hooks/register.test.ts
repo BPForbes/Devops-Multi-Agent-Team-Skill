@@ -485,57 +485,6 @@ test('status while off says the skill is OFF', async ($, on) => {
   expect(status.text).toContain('skill: OFF')
 })
 
-test('develop on lets push-ok alone authorize a push without QA or Security', async ($, on) => {
-  const state = engine(on, undefined)
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  state.set('pushAuthorized', TREE)
-  const stillBlocked = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(stillBlocked.deny).toBeTruthy()
-  const turned = await $.command.run({
-    command: 'devops', args: 'develop on', origin: { kind: 'composer' },
-    presentation: { isFullscreen: false, columns: 100 },
-  })
-  expect(turned.text).toContain('Development bypass on')
-  expect(state.get('develop')).toBe(true)
-  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(allowed.deny).toBeUndefined()
-  expect(state.get('pushAuthorized')).toBe(false)
-})
-
-test('develop on still needs push-ok on this tree', async ($, on) => {
-  const state = engine(on, undefined)
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  state.set('develop', true)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(refused.deny).toBeTruthy()
-  expect(String(refused.deny)).toContain('push-ok')
-})
-
-test('an agent cannot turn develop on', async ($, on) => {
-  const state = engine(on, undefined)
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const refused = await $.command.run({
-    command: 'devops', args: 'develop on', origin: { kind: 'peer' },
-    presentation: { isFullscreen: false, columns: 100 },
-  })
-  expect(refused.text).toContain('only the person can run it')
-  expect(state.get('develop')).toBeUndefined()
-})
-
-test('develop off restores the QA and Security push check', async ($, on) => {
-  const state = engine(on, undefined)
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  state.set('develop', true)
-  state.set('pushAuthorized', TREE)
-  await $.command.run({
-    command: 'devops', args: 'develop off', origin: { kind: 'composer' },
-    presentation: { isFullscreen: false, columns: 100 },
-  })
-  expect(state.get('develop')).toBe(false)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(refused.deny).toBeTruthy()
-})
-
 test('the status line says when the grant is for another tree', async ($, on) => {
   const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })

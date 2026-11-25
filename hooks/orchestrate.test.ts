@@ -57,14 +57,10 @@ test('the card is short and names the tool, the gate, the profile and the standa
   const state = { languages: ['rust'], hasProfile: true, gates: true, lintMode: 'warn', standards }
   const text = card(state)
   for (const part of ['devops_brief', 'Languages: rust', '.devops/project.md', 'push-ok',
-    'code ≤ 100 columns', 'functions ≤ 30 lines', 'Lint on git commit: warn', 'develop on']) {
+    'code ≤ 100 columns', 'functions ≤ 30 lines', 'Lint on git commit: warn', '/devops off']) {
     expect(text).toContain(part)
   }
   expect(text.length).toBeLessThan(1400)
-  const bypass = card({ ...state, develop: true })
-  expect(bypass).toContain('Development bypass on')
-  expect(bypass).toContain('obey the human')
-  expect(bypass.length).toBeLessThan(1400)
   const fresh = card({ languages: [], hasProfile: false, gates: true, lintMode: 'warn' })
   expect(fresh).toContain('/devops setup claude')
 })
@@ -187,7 +183,7 @@ test('/devops help marks gate words as the person\'s and offers no chat push', a
   })
   expect(help.text).toContain('/devops push-ok      (you) allow ONE push on this tree')
   expect(help.text).toContain('/devops on|off       (you)')
-  expect(help.text).toContain('/devops develop on|off (you)')
+  expect(help.text).not.toContain('/devops develop on|off')
   expect(help.text).toContain('/devops gates on|off (you)')
   expect(help.text).toContain('never onto a gate word')
   expect(help.text).not.toContain('in chat')

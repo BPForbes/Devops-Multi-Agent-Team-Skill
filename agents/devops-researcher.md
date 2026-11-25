@@ -19,7 +19,7 @@ department's Coder**. On QA triage,
 **join the Coder who picks the item up** and stay until Reviewers
 take the rewrite. Do not start a Coder whose research is unfinished
 (new work). **Ask:** Answer Coder questions. Thoughts stay
-**gitignored**. **Only QA may give the OK to push** (except review-bot feedback fixes, or `/devops develop on` then the person's typed `/devops push-ok`: references/qa-publish-policy.md).
+**gitignored**. **Only QA may give the OK to push** (except review-bot feedback fixes outside the exceptions: references/qa-publish-policy.md).
 
 ## Stories
 
