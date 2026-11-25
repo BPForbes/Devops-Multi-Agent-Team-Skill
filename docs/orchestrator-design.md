@@ -548,7 +548,7 @@ its retries. Alternative: a digest every N ticks. Why it matters: it sets how
 often you are pulled in. Per-sprint keeps you out of the loop unless needed.
 
 **Q3. Seat identity.** Default: per-seat credentials (phase 2). The current
-alternative, the `DEVOPS_SEAT` environment binding, is not authentication: a
+alternative, the `DEVOPS_SEAT` (and `DEVOPS_TEAM`) environment binding, is not authentication: a
 seat with its own shell can set its own environment. Why it matters: every
 role check (manager-only assignment, server-only ticks, no push) depends on
 knowing who sent a message. Until credentials exist, those checks are advisory.

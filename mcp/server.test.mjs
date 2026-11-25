@@ -659,3 +659,15 @@ test('a bound seat cannot spin up the board or hold a meeting as another seat', 
   assert.equal(foreign.isError, true)
   c.close()
 })
+
+test('a seat bound to a team hash cannot act under another team', async () => {
+  const root = tmp()
+  const env = { DEVOPS_MCP_ROOTS: root, DEVOPS_SEAT: 'agent-0a0a0a', DEVOPS_TEAM: 'team-a1a1a1' }
+  const c = await client({ env })
+  const merge = { dest: root, caller: 'agent-0a0a0a', goal: 'goal-111111', decision: 'ok' }
+  const foreign = await c.call('goal_merge', { ...merge, team: 'team-b2b2b2' })
+  assert.match(foreign.text, /bound to team-a1a1a1; it cannot act for team-b2b2b2/)
+  const own = await c.call('goal_merge', { ...merge, team: 'team-a1a1a1' })
+  assert.match(own.text, /goal is not on the board/)
+  c.close()
+})

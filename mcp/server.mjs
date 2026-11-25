@@ -68,8 +68,10 @@ const INSTRUCTIONS = [
 
 let clientRoots = []
 
-// When DEVOPS_SEAT is set, this server acts only for that seat.
+// When DEVOPS_SEAT is set, this server acts only for that seat; with
+// DEVOPS_TEAM too, only under that team hash.
 const BOUND_SEAT = process.env.DEVOPS_SEAT
+const BOUND_TEAM = process.env.DEVOPS_TEAM
 
 /** Limits on what allocation research and meetings may send: a task, not a document. */
 const MAX_TASK_TEXT = 4000
@@ -113,8 +115,12 @@ function refuseForeignSeat(message) {
   if (message.method !== 'tools/call') return false
   const args = message.params?.arguments ?? {}
   const claimed = args.caller ?? args.agent
-  if (!BOUND_SEAT || claimed === undefined || claimed === BOUND_SEAT) return false
-  const error = `this server is bound to ${BOUND_SEAT}; it cannot act as ${claimed}`
+  const seatOk = !BOUND_SEAT || claimed === undefined || claimed === BOUND_SEAT
+  const teamOk = !BOUND_SEAT || !BOUND_TEAM || args.team === undefined || args.team === BOUND_TEAM
+  if (seatOk && teamOk) return false
+  const error = seatOk
+    ? `this server is bound to ${BOUND_TEAM}; it cannot act for ${args.team}`
+    : `this server is bound to ${BOUND_SEAT}; it cannot act as ${claimed}`
   reply(message.id, { isError: true, content: [{ type: 'text', text: error }] })
   return true
 }

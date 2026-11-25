@@ -126,7 +126,8 @@ itself with merge-ok, merge-deny and done (`goal_merge`, `goal_done`,
 which step ([scrum-meetings.md](scrum-meetings.md), Done). The client's
 `/devops push-ok`, `merge-ok`, `done` or `merge-deny` writes its own step
 through `scripts/devops-client.mjs`, with the same board functions and
-lock.
+lock. A server started with `DEVOPS_SEAT` and `DEVOPS_TEAM` acts only for
+that seat under that team hash.
 
 ## Storage
 

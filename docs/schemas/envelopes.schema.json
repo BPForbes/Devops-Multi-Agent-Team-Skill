@@ -131,7 +131,7 @@
       ]
     },
     "from": {
-      "description": "Set by the server from the connection identity. An envelope whose from differs from the connection is refused.",
+      "description": "Set by the server from the connection identity. An envelope whose from differs from the connection is refused. team is the team hash the seat was bound to (DEVOPS_TEAM), when it has one.",
       "type": "object",
       "required": [
         "agent",
@@ -144,6 +144,9 @@
         },
         "role": {
           "$ref": "#/$defs/role"
+        },
+        "team": {
+          "$ref": "#/$defs/teamHash"
         }
       }
     },
