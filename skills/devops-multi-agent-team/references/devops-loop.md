@@ -76,7 +76,8 @@ Owns [qa-publish-policy.md](qa-publish-policy.md).
 `/code-review`: inspect; **do not edit**. `/repro` when needed.
 Minimum: repo-appropriate fast validation; the Security seat's SOC 2 verdict; workflow / chart / Terraform lint; secret scan if in CI;
 smoke; rollback notes; `git diff --stat <integration-base>...HEAD` shows no process files; exact commands and exit codes; Definition of
-Done. **Only QA may give the OK to push.** Fail → Handoff
+Done. **Only QA may give the OK to push** (or `/devops develop on`
+then the person's typed `/devops push-ok`). Fail → Handoff
 `To: Coder` from a **VM** review. Open `triage-agent-<hex>.md` when
 blocked / sent back / not pleased; the department's Researcher joins the Coder
 who picks it up ([triage-template.md](triage-template.md)). After
@@ -88,8 +89,9 @@ Push JSON `authors` / `teams` of every cherry-picked SHA, the
 Orchestrator's conflict fixes included; a seat is refused when its
 agent hash, team hash or handle is in that set), then the Orchestrator
 pushes only after QA PASS and Security CLEAR on that tree and the person's typed
-`/devops push-ok`; none of the three can stand in for another.
-(Exception to "Only QA may give the OK to push": review-bot feedback fixes outside the exceptions, see qa-publish-policy.md.)
+`/devops push-ok`; none of the three can stand in for another by default.
+(Exceptions: review-bot feedback fixes outside the exceptions, and
+`/devops develop on` then typed `/devops push-ok`; see qa-publish-policy.md.)
 
 ## 6–11. Later passes
 

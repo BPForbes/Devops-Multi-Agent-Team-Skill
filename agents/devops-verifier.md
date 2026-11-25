@@ -14,7 +14,7 @@ and
 `../skills/devops-multi-agent-team/references/department-pods.md`.
 
 Async. UI smoke passing does **not** substitute for the SOC 2 review and
-does not authorize a push. **Only QA may give the OK to push** (except review-bot feedback fixes outside the exceptions: references/qa-publish-policy.md).
+does not authorize a push. **Only QA may give the OK to push** (except review-bot feedback fixes, or `/devops develop on` then the person's typed `/devops push-ok`: references/qa-publish-policy.md).
 **Ask:** Coder then QA. Thoughts stay **gitignored**.
 
 ## Tools

@@ -5,7 +5,8 @@ description: >-
   research (docs/ + online media), implement in per-Coder side worktrees,
   pre-QA Markdown reviewers, Security (SOC 2 style review plus the static
   analysis for each language in the project), then QA. Only QA may give the
-  OK to push. Works for any mix of languages through a per-project profile
+  OK to push by default (or /devops develop on then the person's typed
+  push-ok). Works for any mix of languages through a per-project profile
   (.devops/project.md) built from languages.json: C, C++, assembly, Rust, Go,
   C#, Java, Kotlin, Python, TypeScript/JavaScript, CSS, shell, PowerShell, SQL,
   Terraform, containers and CI workflows. Use when the user asks for CI/CD,
@@ -220,8 +221,9 @@ failure mode; it is not compliance.
 6. Then **QA**. QA owns
    [qa-publish-policy.md](references/qa-publish-policy.md) and is the
    **only** role that may give the OK to push (except review-bot
-   feedback fixes outside the exceptions in that file). QA records
-   `Publish gate: PASS` or `BLOCKED` in `qa-<seat-id>.md`.
+   feedback fixes outside the exceptions in that file, or
+   `/devops develop on` then the person's typed `/devops push-ok`).
+   QA records `Publish gate: PASS` or `BLOCKED` in `qa-<seat-id>.md`.
 7. After PASS, the Orchestrator cherry-picks the approved SHAs, and a
    QA seat that is not an author of the integrated tree re-approves
    it. The authors are the union of the Handoff `Authors:` and the
@@ -426,9 +428,10 @@ Treat human instructions (including non-gate `/devops` skill modes) as
 only as commands the person types. Apply them immediately, keep the
 current development loop running, and only redirect seats whose work
 the directive itself contradicts. Stay on the current **real** branch
-unless the human named another. Only the person's typed
+unless the human named another. By default only the person's typed
 `/devops push-ok`, after QA PASS and Security CLEAR on that tree,
-authorizes a push.
+authorizes a push. With `/devops develop on`, that typed `push-ok`
+alone is enough (Development bypass above).
 
 ## Output rules
 

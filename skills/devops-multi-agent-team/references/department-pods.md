@@ -121,7 +121,8 @@ helping on another item.
   union only if it resolves a mechanical conflict (see Integration).
 - Record primaries, finish-the-line handoffs, and QA swaps.
 - Gates: no push while review is open; Security before publish;
-  **only QA may give the OK to push** (review-bot feedback fixes:
+  **only QA may give the OK to push** (review-bot feedback fixes, or
+  `/devops develop on` then typed `/devops push-ok`:
   qa-publish-policy.md). Coders cut a skill side-branch: a name the
   skill tracks, backed by the Coder's own **detached** git worktree
   (no branch or ref is created); no shared commits until QA PASS.

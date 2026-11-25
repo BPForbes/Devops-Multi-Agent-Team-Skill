@@ -97,7 +97,7 @@ const SPECS: ModeSpec[] = [
       'loop: run every stage (research→implement→review→security→qa→docs) until X.',
       'Stop the loop only when Security is Clear and QA records Publish gate: PASS.',
       'Then the Orchestrator notifies the human and waits. Do not push: after QA PASS and'
-        + ' Security CLEAR, ask the person to type /devops push-ok.',
+        + ' Security CLEAR (or /devops develop on), ask for typed /devops push-ok.',
       'allocate: mint team/agent hashes, write per-pod and per-agent goals, set current_job.',
       'On send-back or BLOCKED, re-enter the needed stage and continue the loop.',
     ],
@@ -120,7 +120,7 @@ const SPECS: ModeSpec[] = [
       'Allocate goals first; mint team/agent hashes; set initial_job/current_job.',
       'full|loop: research→implement→review→security→qa→docs until Clear + PASS.',
       'When QA PASS and Security Clear: Orchestrator notifies the human for push;',
-      'do not push: after QA PASS and Security CLEAR, ask the person to type /devops push-ok.',
+      'do not push: after Clear+PASS (or /devops develop on), ask for typed /devops push-ok.',
       'Seats use /devops question|mind-map|reuse|review|repro the same way humans do.',
     ],
     command: 'commands/stage.md',

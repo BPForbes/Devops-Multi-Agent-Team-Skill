@@ -38,7 +38,7 @@ Primary owner: **QA** (`../agents/devops-quality-engineer.md`). Reviewers may us
    anything else by path rather than removing it. Reviewer process
    output never lands on the committed timeline;
    QA checks `git diff --stat <integration-base>...HEAD` for it.
-6. Do not push. **Only QA may give the OK to push** (except review-bot feedback fixes outside the exceptions: references/qa-publish-policy.md). Review findings
+6. Do not push. **Only QA may give the OK to push** (except review-bot feedback fixes, or `/devops develop on` then the person's typed `/devops push-ok`: references/qa-publish-policy.md). Review findings
    and passing tests do not authorize a push.
 7. Use any installed `/` skill that fits (`/review-bugbot`, `/review-security`, `/sonar-analyze`).
 

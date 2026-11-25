@@ -360,7 +360,8 @@ Limits, stated plainly:
   `HOME=` or `XDG_CONFIG_HOME=` before it, is refused too, since either can
   hide a push.
 - The gate an agent cannot pass alone is `/devops push-ok`, which only a typed
-  command from you sets, and only after QA PASS and Security CLEAR on that tree.
+  command from you sets, and by default only after QA PASS and Security CLEAR
+  on that tree (with `/devops develop on`, push-ok alone is enough).
   The grant is consumed by one push.
 - Any command that names `push` or `send-pack`, with quotes and backslashes
   removed, counts as a push, except the literal message text of `git commit`,

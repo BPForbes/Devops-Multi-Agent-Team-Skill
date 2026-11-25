@@ -223,8 +223,8 @@ Every transition is an event. A transition not in this table is refused,
 and the refusal is logged. `ready_for_human` is not `done`: the team lead
 signs the item off as done and reports it up; Orchestration reports to the
 person. The person gives the real final sign-off before the push: a typed
-push-ok on the exact tree, after QA PASS and Security CLEAR; nothing
-overrides them.
+push-ok on the exact tree (by default after QA PASS and Security CLEAR;
+with `/devops develop on`, push-ok alone).
 
 The item state names extend the existing goal states; they do not replace
 them. A goal's state is derived from its items: a goal is `done` when all
