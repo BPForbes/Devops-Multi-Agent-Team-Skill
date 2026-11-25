@@ -323,7 +323,7 @@ export function parseSkillMode(word: string, rest: string): SkillMode | undefine
   if (spec === undefined) return undefined
   const hadFlag = MODE_FLAG.test(rest)
   const taken = takeModeFlag(rest, spec.modes, spec.defaultMode)
-  // `/devops tags history` (no --mode) treats the first token as the mode when it is allowed.
+  // A leading mode word counts when --mode was not given.
   if (!hadFlag) {
     const words = shellWords(taken.rest)
     const first = words[0]?.toLowerCase()
@@ -458,10 +458,7 @@ export function orchestrationCard(skill: SkillMode): string {
   ].join('\n')
 }
 
-/**
- * CLI argv for a skill mode that can shell out. Modes without a matching script
- * (goal, stage, meet, …) return undefined so only the orchestration card is shown.
- */
+/** CLI argv for a skill mode that can shell out, or undefined. */
 export function scriptArgsFor(skill: SkillMode): string[] | undefined {
   if (skill.word === 'mind-map' || skill.word === 'question') return mindmapArgs(skill)
   if (skill.word === 'clean' && (skill.mode === 'brief' || skill.mode === 'scan')) {
@@ -470,7 +467,7 @@ export function scriptArgsFor(skill: SkillMode): string[] | undefined {
   }
   if (skill.word === 'tags') {
     const extra = shellWords(skill.rest)
-    // create needs --version; without it keep the card so the seat fills the plan first.
+    // Create needs --version; otherwise keep the card.
     if (skill.mode === 'create'
       && !extra.some(w => w === '--version' || w.startsWith('--version='))) {
       return undefined
@@ -497,7 +494,7 @@ function storyArgs(skill: SkillMode): string[] | undefined {
 
 function mindmapArgs(skill: SkillMode): string[] | undefined {
   let mode = skill.word === 'question' ? questionAsMindmap(skill.mode) : skill.mode
-  // A question with no input cannot search; run the overview so the command does work.
+  // No query text: show the project map instead.
   if (skill.word === 'question' && skill.rest.trim() === '' && mode !== 'overview'
     && mode !== 'status' && mode !== 'tree' && mode !== 'build') {
     mode = 'overview'
