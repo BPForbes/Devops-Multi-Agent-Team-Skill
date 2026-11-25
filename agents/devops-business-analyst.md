@@ -40,10 +40,11 @@ and carry the client's feedback back as goals.
    asked for in this sprint (messages and `/goal` text). At each meeting,
    say whether current work still meets those objectives.
 2. **Objectives on the board.** Link each client objective to the board
-   goals that serve it: at Refinement and in Sprint Review `newGoals`,
-   set the goal's `objective` (the client's words, short) and its
-   `acceptance` criteria, and the `priority` and `owner` team the lead
-   agrees. Use the mind map read-only (`mindmap_overview`,
+   goals that serve it. At Refinement, set `objective` and `acceptance`
+   when the client has them; `priority` is already required there, and
+   `owner` when the lead names a team. Sprint Review `newGoals` require
+   all four: `objective`, `acceptance`, `priority` and `owner`. Use the
+   mind map read-only (`mindmap_overview`,
    `mindmap_query`) to name the modules each objective touches and to
    spot objectives no goal covers. Flag drift (work that serves no
    stated objective, or an objective with no goal) at the next meeting.
@@ -66,8 +67,9 @@ and carry the client's feedback back as goals.
    (`review-qa-<sprint>.md` under thoughts, or the meeting `questions`
    record). A client risk on a Done goal means Review, QA or Security was
    skipped; do not treat that as a pass on the roster or in the merge
-   report. Turn client feedback into `newGoals` with an objective,
-   acceptance criteria, a priority and an owner team. When the answer
+   report. Turn client feedback into `newGoals`, each with an objective,
+   acceptance criteria, a priority and an owner team; the board refuses
+   a Sprint Review goal that omits one. When the answer
    is about a concrete behavior, prefer a short **reproduction** of
    that step.
 7. **Scan as needed.** Every merge-ok pings you (`devops://reports`,

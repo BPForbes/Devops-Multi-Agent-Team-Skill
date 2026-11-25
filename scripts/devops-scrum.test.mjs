@@ -221,14 +221,25 @@ test('backlog goals carry the client objective, acceptance criteria, priority an
   assert.throws(() => meet(planned, 'refinement', { record: bad }), /acceptance must be/)
   const added = {
     goal: 'goal-444444', title: 'Warn on unknown keys', priority: 1, owner: TEAM,
+    objective: 'Unknown keys warn once',
     acceptance: ['warns with the key name'],
   }
   const review = goals => ({ record: { ...EMPTY_REVIEW, newGoals: goals } })
   const reviewed = meet(planned, 'review', review([added]))
+  assert.equal(reviewed.board.goals['goal-444444'].objective, 'Unknown keys warn once')
   assert.deepEqual(
     [reviewed.board.goals['goal-444444'].priority, reviewed.board.goals['goal-444444'].owner],
     [1, TEAM],
   )
+  for (const drop of ['objective', 'acceptance', 'priority', 'owner']) {
+    const missing = { ...added, goal: 'goal-454545' }
+    delete missing[drop]
+    assert.throws(() => meet(planned, 'review', review([missing])), /Sprint Review goal/)
+  }
+  const refinedBare = meet(planned, 'refinement', {
+    record: { businessAnalyst: BA, items: [{ goal: NEXT, points: 2, priority: 1 }] },
+  })
+  assert.equal(refinedBare.board.goals[NEXT].objective, undefined)
   assert.throws(() => meet(planned, 'review', review([{ ...added, owner: 'A1' }])),
     /owner is a team hash/)
   const dependent = meet(planned, 'refinement', {
@@ -258,7 +269,10 @@ test('the joint Sprint Review demos Done features, records Q&A, and adds backlog
   const signoff = { sprint: state.sprint, goal: GOAL, lead: LEAD, at: AT }
   board = leadSignOff(passedSecurity(board), signoff).board
   state = { ...state, board }
-  const newGoals = [{ goal: 'goal-333333', title: 'Warn on unknown keys' }]
+  const newGoals = [{
+    goal: 'goal-333333', title: 'Warn on unknown keys', priority: 2, owner: TEAM,
+    objective: 'Unknown keys warn once', acceptance: ['the key name is in the warning'],
+  }]
   const record = {
     businessAnalyst: BA,
     attendance: [LEAD, DEV, BA],
@@ -605,6 +619,13 @@ test('a client denial goes back to the BA, whose new approach keeps the client f
   assert.throws(() => rework(denied, [{ ...goal, acceptance: undefined }]), /objective it answers/)
   assert.throws(() => rework(denied, [goal], DEV), /only team-a1a1a1's Business Analyst/)
   const reworked = rework(denied, [goal])
+  const optional = {
+    goal: 'goal-666666', title: 'Name the key', objective: 'Warn, do not accept',
+    acceptance: ['empty config warns once'],
+  }
+  const withoutRank = rework(denied, [optional])
+  assert.equal(withoutRank.goals['goal-666666'].priority, undefined)
+  assert.equal(withoutRank.goals['goal-666666'].owner, undefined)
   assert.equal(reworked.reports[report].state, 'reworked')
   assert.equal(reworked.goals['goal-555555'].from_report, report)
   assert.equal(reworked.goals['goal-555555'].client_feedback, 'Warn, do not silently accept')

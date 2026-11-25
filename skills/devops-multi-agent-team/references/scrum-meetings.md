@@ -146,7 +146,13 @@ During the review:
   answer is about a concrete behavior, **reproduce** that step live
   instead of only explaining in prose. Questions and answers are
   recorded on the meeting (`questions`) and kept for later refinement.
-- Feedback and new backlog goals are recorded as today.
+- Feedback and new backlog goals are recorded. A goal added here
+  states its client `objective`, its `acceptance` criteria, its
+  `priority` (1 is first) and its `owner` team. The board refuses one
+  that omits any of those. Refinement still accepts objective,
+  acceptance and owner when they are supplied; priority is required
+  there already. A new approach after a denial still requires only
+  objective and acceptance; priority and owner stay optional on that path.
 
 ## Sprint Retrospective (per team)
 

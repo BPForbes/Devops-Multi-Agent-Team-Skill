@@ -284,13 +284,23 @@ function checkItem(next, meeting, item) {
   return { row, fields: clientFields(item) }
 }
 
+/** Sprint Review goals must name objective, acceptance, priority and owner. */
+function requireReviewFields(item) {
+  need(filled(item.objective), 'a Sprint Review goal states the client objective')
+  need(nonEmpty(item.acceptance), 'a Sprint Review goal states its acceptance criteria')
+  need(item.priority !== undefined, 'a Sprint Review goal states its priority (1 is first)')
+  need(item.owner !== undefined, 'a Sprint Review goal names its owner team')
+}
+
 /**
  * The client-facing fields a backlog goal may carry, checked: the client
  * `objective` it serves (the BA's link from chat to board), its
  * `acceptance` criteria, its `priority` (1 is first), an `owner` team, the
  * goals it depends on (`dependsOn`) and its open bug issues (`bugIssues`).
+ * `required` demands the four Sprint Review fields; other callers leave it off.
  */
-function clientFields(item) {
+function clientFields(item, { required = false } = {}) {
+  if (required) requireReviewFields(item)
   const out = {}
   if (filled(item.objective)) out.objective = String(item.objective).trim()
   if (item.acceptance !== undefined) out.acceptance = texts(item.acceptance, 'acceptance')
@@ -391,11 +401,16 @@ function parseQuestions(questions) {
   }))
 }
 
-/** Adds new backlog goals named during the Sprint Review. */
-function addReviewGoals(board, added, at) {
+/**
+ * Adds backlog goals. Pass `required` from the Sprint Review so objective,
+ * acceptance, priority and owner are mandatory. The new-approach path does
+ * not: it already requires objective and acceptance, and priority and owner
+ * stay optional there.
+ */
+function addReviewGoals(board, added, at, { required = false } = {}) {
   const fields = added.map(g => {
     need(isGoalId(g.goal) && board.goals[g.goal] === undefined, `${g.goal} is not a new goal`)
-    return clientFields(g)
+    return clientFields(g, { required })
   })
   let next = board
   added.forEach((g, i) => {
@@ -417,7 +432,7 @@ function review(next, meeting, record) {
   need(record.demo === undefined, 'the demos come from the roster; drop record.demo')
   const { roster, demo } = parseRoster(next, meeting, record.roster ?? [])
   const added = record.newGoals ?? []
-  const board = addReviewGoals(next, added, meeting.held_at)
+  const board = addReviewGoals(next, added, meeting.held_at, { required: true })
   return {
     board,
     record: {
