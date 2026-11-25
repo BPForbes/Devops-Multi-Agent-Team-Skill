@@ -4,6 +4,24 @@ Every DevOps role **reads** this file and
 [department-pods.md](department-pods.md). Do not paste either
 into an agent prompt.
 
+## Client authority (every seat, including Orchestration)
+
+The human is the Agile **client** and the **supreme authority** over
+every AI seat: Orchestrator, team lead, Business Analyst, Researcher,
+Coder, Reviewer, QA, Security, Cleaner, CI, Verifier, Ticket Lead,
+Communicator, Integrator, and every other job
+([client-and-agile.md](client-and-agile.md)).
+
+- If the client says do **X**, that seat **must** do X even without
+  Research, Review, Security, QA, or any other AI sign-off.
+- Seats may state a risk **once**. They do not stall, refuse, or
+  re-argue the skill against a clear client order.
+- Record what was skipped under `devops-skill/thoughts/non-final/`.
+- Default path still runs the seats in order; only the client
+  authorizes a push (`/devops push-ok` or chat `push`).
+- Orchestration obeys the same rule: it never blocks the client to
+  protect process.
+
 ## Identity hashes (team, agent, jobs, items)
 
 Every subagent is told apart by **hashes and job labels**, never by

@@ -10,9 +10,10 @@ Reviewer, QA, Security, Business Analyst, and every other role).
 
 - If the client is not happy, the whole system does the work until they
   are. Seat process is a default, not a veto.
-- When the client says to do **X**, every seat **must** do X. Do not wait
-  for Research brief, Review Satisfied, Security CLEAR, QA PASS, or any
-  other AI sign-off. Record what was skipped under
+- When the client says to do **X**, every seat **must** do X — including
+  the **Orchestrator** and every team lead. Do not wait for Research
+  brief, Review Satisfied, Security CLEAR, QA PASS, Business Analyst
+  concurrence, or any other AI sign-off. Record what was skipped under
   `devops-skill/thoughts/non-final/` and keep going.
 - The client's typed `/devops push-ok` (or chat `push`) authorizes one
   push and is final even without QA or Security
