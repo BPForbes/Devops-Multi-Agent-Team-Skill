@@ -193,7 +193,7 @@ test('/devops help marks gate words as the person\'s and names chat push', async
   expect(help.text).toContain('/devops gates on|off (you)')
   expect(help.text).toContain('Chat "push"')
   expect(help.text).toContain('human word is')
-  expect(help.text).toContain('final (overrides missing QA PASS')
+  expect(help.text).toContain('final (overrides missing QA/Security')
   expect(help.text).toContain('| withdraw')
 })
 

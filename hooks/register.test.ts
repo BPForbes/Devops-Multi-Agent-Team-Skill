@@ -316,7 +316,7 @@ test('push-ok given for another tree does not allow this push', async ($, on) =>
   expect(refused.isError ?? refused.deny).toBeTruthy()
 })
 
-test('a push with no security note is allowed with push-ok, and records the override', async ($, on) => {
+test('push-ok without a security note still pushes and records override', async ($, on) => {
   const state = engine(on, PASS_NOTE)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', TREE)
@@ -337,7 +337,7 @@ test('a BLOCKED security note yields to push-ok and records the override', async
   expect(overrides.some(row => row.rule === 'security-clear' && row.qa === 'BLOCKED')).toBe(true)
 })
 
-test('push-ok with a QA PASS for another tree still pushes and records the override', async ($, on) => {
+test('push-ok with QA PASS for another tree still pushes and records override', async ($, on) => {
   const otherTree = `Publish gate: PASS\ntree: ${'b'.repeat(40)}\n`
   const state = engine(on, otherTree, { security: CLEAR_NOTE })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
@@ -461,7 +461,7 @@ test('a GitHub server under another name is gated the same way', async ($, on) =
   expect(state.get('pushAuthorized')).toBe(false)
 })
 
-test('gates off lifts the branch gate; push still needs push-ok, which alone is enough', async ($, on) => {
+test('gates off lifts branch gate; push-ok alone still authorizes a push', async ($, on) => {
   const state = engine(on, undefined)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('gates', false)

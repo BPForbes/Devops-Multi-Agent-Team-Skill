@@ -514,7 +514,7 @@ export const register: Register = on => {
       ? split
       : (interpretDevopsIntent(e.args) ?? split)
     const { word, rest } = mapped
-    // Aliases such as "push" map onto person-only gates; re-check after mapping.
+    // Aliases such as "push" map onto person-only gates.
     if (isPersonOnly(word, rest) && !isHuman(e)) return { text: personOnlyText(word) }
 
     if (word === '' || word === 'status') {
@@ -535,7 +535,7 @@ export const register: Register = on => {
         text: [
           `skill: on`,
           `languages: ${languages.length === 0 ? '(none detected)' : languages.join(', ')}`,
-          `branch gate: ${gates ? 'on' : 'OFF'}; push check: push-ok (human final; QA+Security default)`,
+          `branch gate: ${gates ? 'on' : 'OFF'}; push check: push-ok (human final)`,
           `check monitor: ${((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) ? 'on' : 'OFF'}; failing checks now: ${Object.entries((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const)).value ?? {}).map(([k, n]) => `${k} x${n}`).join(', ') || 'none'}`,
           `latest QA note: ${qa.verdict ?? 'none'}${qa.file ? ` (${qa.file.split('/').pop()})` : ''}`,
           `latest security note: ${security.verdict ?? 'none'}`,

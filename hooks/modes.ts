@@ -341,7 +341,7 @@ const COMMAND_HELP: string[] = [
   '                     only .devops/ and the thought folders; the plugin supplies the rest',
   '/devops brief [TOPIC | role NAME]  one section of the skill, or a seat\'s brief',
   '/devops push-ok | push | go | publish   (you) allow ONE push on this tree; human word is',
-  '                     final (overrides missing QA PASS / Security CLEAR; recorded). Chat "push" too',
+  '                     final (overrides missing QA/Security; recorded). Chat "push" too',
   '/devops push-reset | withdraw   (you) withdraw that permission',
   '/devops allow-branch NAME   (you) allow creating that git branch',
   '/devops gates on|off (you) turn the branch gate on or off; the push check stays on',
