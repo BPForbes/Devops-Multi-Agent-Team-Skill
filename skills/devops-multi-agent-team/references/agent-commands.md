@@ -22,12 +22,14 @@ free-form wording never changes a gate. `/devops on|off` and
 `.claude/settings.json` `enabledPlugins`). `/devops skill on|off NAME`
 and `/devops skills` manage `skillOverrides` (bare skill names).
 One-shot gates such as `/devops push-ok` take no `on|off` parameter.
-A push needs QA PASS and Security CLEAR on the tree, then the
-person's typed `/devops push-ok`. After PASS: one compressed push
-that keeps approved Coder commits.
+Aliases (`push`, `go`, `publish`) and chat `push` / `push it` count
+the same. Default path still wants QA PASS and Security CLEAR; the
+person's push-ok alone is final and records an override when those are
+missing. After PASS: one compressed push that keeps approved Coder
+commits.
 
 **Human over skill.** If the human's order conflicts with this skill's
-role contingencies, obey the human and keep developing
+role contingencies or seat gates, obey the human and keep developing
 ([SKILL.md](../SKILL.md), Development bypass).
 
 ## `/devops` skill modes

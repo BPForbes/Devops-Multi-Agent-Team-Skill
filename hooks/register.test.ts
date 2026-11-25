@@ -286,13 +286,15 @@ test('a project\'s own wording replaces the default sentence', async ($, on) => 
   assert.ok(!String(section?.text).includes('DEFAULT PROMPT'))
 })
 
-test('a BLOCKED QA note refuses even with push-ok', async ($, on) => {
+test('a BLOCKED QA note yields to push-ok and records the override', async ($, on) => {
   const state = engine(on, BLOCKED_NOTE, { security: CLEAR_NOTE })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', TREE)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(refused.isError ?? refused.deny).toBeTruthy()
-  expect(state.get('pushAuthorized')).toBe(TREE)
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.isError).not.toBe(true)
+  expect(state.get('pushAuthorized')).toBe(false)
+  const overrides = state.get('overrides') as { rule: string; qa: string }[]
+  expect(overrides.some(row => row.rule === 'qa-pass' && row.qa === 'BLOCKED')).toBe(true)
 })
 
 test('a GitHub write tool needs push-ok and the QA check; the grant is consumed', async ($, on) => {
@@ -314,46 +316,57 @@ test('push-ok given for another tree does not allow this push', async ($, on) =>
   expect(refused.isError ?? refused.deny).toBeTruthy()
 })
 
-test('a push with no security note is refused, even with a PASS and push-ok', async ($, on) => {
+test('a push with no security note is allowed with push-ok, and records the override', async ($, on) => {
   const state = engine(on, PASS_NOTE)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', TREE)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(refused.isError ?? refused.deny).toBeTruthy()
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.isError).not.toBe(true)
+  expect(state.get('pushAuthorized')).toBe(false)
+  const overrides = state.get('overrides') as { rule: string }[]
+  expect(overrides.some(row => row.rule === 'security-clear')).toBe(true)
 })
 
-test('a BLOCKED security note refuses the push', async ($, on) => {
+test('a BLOCKED security note yields to push-ok and records the override', async ($, on) => {
   const state = engine(on, PASS_NOTE, { security: `Security: BLOCKED\ntree: ${TREE}\n` })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', TREE)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(refused.isError ?? refused.deny).toBeTruthy()
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.isError).not.toBe(true)
+  const overrides = state.get('overrides') as { rule: string; qa: string }[]
+  expect(overrides.some(row => row.rule === 'security-clear' && row.qa === 'BLOCKED')).toBe(true)
 })
 
-test('push-ok with a QA PASS for another tree is refused, and the grant is kept', async ($, on) => {
+test('push-ok with a QA PASS for another tree still pushes and records the override', async ($, on) => {
   const otherTree = `Publish gate: PASS\ntree: ${'b'.repeat(40)}\n`
   const state = engine(on, otherTree, { security: CLEAR_NOTE })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', TREE)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(refused.isError ?? refused.deny).toBeTruthy()
-  expect(state.get('pushAuthorized')).toBe(TREE)
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.isError).not.toBe(true)
+  expect(state.get('pushAuthorized')).toBe(false)
+  const overrides = state.get('overrides') as { rule: string }[]
+  expect(overrides.some(row => row.rule === 'qa-pass')).toBe(true)
 })
 
-test('push-ok with no QA note is refused', async ($, on) => {
+test('push-ok with no QA note authorizes the push and records the override', async ($, on) => {
   const state = engine(on, undefined, { security: CLEAR_NOTE })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', TREE)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(refused.isError ?? refused.deny).toBeTruthy()
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.isError).not.toBe(true)
+  expect(state.get('pushAuthorized')).toBe(false)
+  const overrides = state.get('overrides') as { rule: string; qa: string }[]
+  expect(overrides.some(row => row.rule === 'qa-pass' && row.qa === 'none')).toBe(true)
 })
 
-test('a GitHub write tool with push-ok but no QA PASS is refused', async ($, on) => {
+test('a GitHub write tool with push-ok but no QA PASS is allowed and recorded', async ($, on) => {
   const state = engine(on, undefined, { security: CLEAR_NOTE })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('pushAuthorized', TREE)
   const call = { tool: 'mcp__github__create_pull_request', owner: 'o', repo: 'r' }
-  expect((await $.tool.call(call)).deny).toBeTruthy()
+  expect((await $.tool.call(call)).deny).toBeUndefined()
+  expect(state.get('pushAuthorized')).toBe(false)
 })
 
 test('a push chained after a step that can move HEAD is refused', async ($, on) => {
@@ -448,13 +461,15 @@ test('a GitHub server under another name is gated the same way', async ($, on) =
   expect(state.get('pushAuthorized')).toBe(false)
 })
 
-test('gates off still checks every push; it only lifts the branch gate', async ($, on) => {
+test('gates off lifts the branch gate; push still needs push-ok, which alone is enough', async ($, on) => {
   const state = engine(on, undefined)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('gates', false)
+  const without = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(without.deny).toBeTruthy()
   state.set('pushAuthorized', TREE)
-  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
-  expect(refused.deny).toBeTruthy()
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.deny).toBeUndefined()
   const branch = await $.tool.call({ tool: 'Bash', command: 'git checkout -b topic' })
   expect(branch.deny).toBeUndefined()
 })
@@ -492,9 +507,11 @@ test('/devops disable and enable persist via settings and restore gates', async 
   })
   expect(onAgain.text).toContain('enabled')
   expect(state.get('active')).toBe(true)
-  state.set('pushAuthorized', TREE)
   const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
   expect(refused.deny).toBeTruthy()
+  state.set('pushAuthorized', TREE)
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.deny).toBeUndefined()
 })
 
 test('/devops skill off and skills are person-only', async ($, on) => {
@@ -521,7 +538,6 @@ test('/devops on restores the publish check', async ($, on) => {
   const state = engine(on, undefined)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   state.set('active', false)
-  state.set('pushAuthorized', TREE)
   await $.command.run({
     command: 'devops', args: 'on', origin: { kind: 'composer' },
     presentation: { isFullscreen: false, columns: 100 },
@@ -529,6 +545,9 @@ test('/devops on restores the publish check', async ($, on) => {
   expect(state.get('active')).toBe(true)
   const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
   expect(refused.deny).toBeTruthy()
+  state.set('pushAuthorized', TREE)
+  const allowed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(allowed.deny).toBeUndefined()
 })
 
 test('an agent cannot turn the skill off', async ($, on) => {

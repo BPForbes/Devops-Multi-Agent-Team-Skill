@@ -14,10 +14,16 @@ declare module 'claude-code' {
       /** The branch gate; off via `/devops gates off`, typed by the person. The push check stays on. */
       gates: boolean
       /**
-       * Human authorized a push (typed /devops push-ok); consumed by the next allowed push.
-       * Holds the tree the push-ok was given for; false when none is given.
+       * Human authorized a push (typed /devops push-ok or chat "push"); consumed by
+       * the next allowed push. Holds the tree the grant was given for; false when none.
+       * The person's grant is final: it authorizes one push even without QA PASS or
+       * Security CLEAR (those misses are recorded under overrides).
        */
       pushAuthorized: string | false
+      /** The last human push that overrode a seat gate: tree, rule, subject, what, time. */
+      lastOverride?: { tree: string; rule: string; qa: string; what: string; at: string }
+      /** Every human override, kept for audit. */
+      overrides?: Array<{ tree: string; rule: string; qa: string; what: string; at: string }>
       allowedBranches: string[]
       monitor: boolean
       commentAudit: 'warn' | 'strict' | 'off'

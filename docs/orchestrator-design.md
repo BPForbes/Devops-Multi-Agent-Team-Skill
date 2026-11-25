@@ -214,7 +214,7 @@ The states, and which seat may make each transition:
 | in_qa | in_progress | the QA seat (triage send-back, with blame) |
 | in_security | ready_for_human | the security seat (`Handoff` sign-off clear) |
 | in_security | in_progress | the security seat (send-back, with blame) |
-| ready_for_human | done | the team lead (manager), who signs it off for the team and reports to Orchestration, which reports to the person; the person's typed one-shot push-ok on the exact tree, after QA PASS and Security CLEAR, is the real final sign-off (`/devops off` turns the skill off) |
+| ready_for_human | done | the team lead (manager), who signs it off for the team and reports to Orchestration, which reports to the person; the person's typed one-shot push-ok on the exact tree is the real final sign-off (final even without QA PASS / Security CLEAR, which are recorded as overrides; `/devops off` turns the skill off) |
 | blocked | in_progress | the assigned seat, after the blocker is cleared (`Unblock`) |
 | failed | queued | manager (retry decision, counted against max attempts) |
 | any | blocked | the manager (escalation) |
@@ -223,8 +223,9 @@ Every transition is an event. A transition not in this table is refused,
 and the refusal is logged. `ready_for_human` is not `done`: the team lead
 signs the item off as done and reports it up; Orchestration reports to the
 person. The person gives the real final sign-off before the push: a typed
-one-shot push-ok on the exact tree, after QA PASS and Security CLEAR
-(`/devops off` turns the skill off).
+one-shot push-ok on the exact tree (final; a missing QA PASS or Security
+CLEAR is recorded as an override so development is not deadlocked;
+`/devops off` turns the skill off).
 
 The item state names extend the existing goal states; they do not replace
 them. A goal's state is derived from its items: a goal is `done` when all
@@ -377,13 +378,14 @@ unchanged).
   versions are refused. Ids must match their pattern, so no id can carry
   a path separator or `..` (path traversal).
 - **Gates.** Gate commands are accepted only from the human channel
-  (`composer` origin, exact typed command). Every gate change is logged.
-  Free-form words never change a gate (rule 3).
-- **Push.** A push needs the human's one-shot push-ok. It also needs QA
-  PASS (rule 2) and Security CLEAR on the exact tree while the skill is
-  on. `/devops off` turns the skill off and lifts the checks. The
-  manager cannot push, approve, or change gates. The role table says so,
-  and a test checks it.
+  (`composer` origin). Every gate change is logged. Person-typed aliases
+  such as `push` map onto gate words; agents cannot flip gates.
+- **Push.** A push needs the human's one-shot push-ok (or chat `push`)
+  on the exact tree while the skill is on. The human's grant is final and
+  overrides a missing QA PASS or Security CLEAR (recorded) so the mod
+  does not deadlock development. `/devops off` turns the skill off and
+  lifts the checks. The manager cannot push, approve, or change gates.
+  The role table says so, and a test checks it.
 
 ### 10.1 Security requirements (from the security review of this design)
 
@@ -846,11 +848,15 @@ evidence (a test, a lint, a build). It is a gate, but not the push gate.
 
 ### 16.16 Human in the loop: a typed push-ok
 
-The person authorizes a push only by typing /devops push-ok, after QA PASS and
-Security CLEAR on that tree. Free-form words never change a gate (rule 3); the
-orchestrator may turn them into a question or a skill mode, never into a push.
+The person authorizes a push by typing /devops push-ok (aliases push / go /
+publish, or chat "push" / "push it") on the current tree. That grant is
+final: it authorizes one push even when QA PASS or Security CLEAR is
+missing, and the miss is recorded as an override so development is not
+deadlocked. Agents cannot flip gates. If the human's order conflicts with
+skill protocol, seats and the mod obey the human.
 
 ### 16.17 Tree binding: what is built
 
-- Built (mod, PR 7): push-ok is bound to HEAD^{tree}, any later commit voids
-  it, a push may send only HEAD, and there is no override.
+- Built (mod): push-ok is bound to HEAD^{tree}, any later commit voids it,
+  a push may send only HEAD, and a human grant overrides a missing seat
+  verdict (recorded).

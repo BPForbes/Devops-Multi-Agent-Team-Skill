@@ -2,8 +2,8 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Found } from '../types'
 import {
-  branchNameOf, classify, classifySegments, commitInfo, interpretDevopsIntent, isSingleCommand,
-  namesPush, securityVerdictOf, shellWords, splitArgs, treeOf, verdictOf,
+  branchNameOf, chatAuthorizesPush, classify, classifySegments, commitInfo, interpretDevopsIntent,
+  isSingleCommand, namesPush, securityVerdictOf, shellWords, splitArgs, treeOf, verdictOf,
 } from './guard'
 import {
   helpCatalog, interpretSkillIntent, isGateWord, isSkillWord, orchestrationCard, parseSkillMode,
@@ -116,32 +116,45 @@ async function detect($: EngineInterface): Promise<Found[]> {
 }
 
 const PUSH_KEY = { plugin: 'devops-multi-agent-team', key: 'pushAuthorized' } as const
+const OVERRIDES_KEY = { plugin: 'devops-multi-agent-team', key: 'overrides' } as const
 
 /**
  * The publish check shared by every path that publishes (git push, GitHub
- * write tools). QA PASS, Security CLEAR, and the person's /devops push-ok
- * must all hold on this exact tree. Returns the refusal, or undefined.
- * (Skipped entirely while `/devops off` has the skill inactive.)
+ * write tools). The person's push-ok (or chat "push") on this exact tree is
+ * required and is final: it authorizes one push even when QA PASS or Security
+ * CLEAR is missing, so human orders do not deadlock development. A missing or
+ * mismatched seat verdict is recorded as an override. Returns the refusal, or
+ * undefined. (Skipped entirely while `/devops off` has the skill inactive.)
  */
 async function publishDenial($: EngineInterface, what: string): Promise<string | undefined> {
   const tree = await headTree($)
   if (tree === undefined) return `${PLUGIN}: ${what} is refused: the tree cannot be read.`
-  const qa = await latestQaVerdict($)
-  if (qa.verdict !== 'PASS' || qa.tree !== tree) {
-    const other = qa.tree !== undefined && qa.tree !== tree ? ', for another tree' : ''
-    return `${PLUGIN}: ${what} is refused. Only QA may give the OK to push: the latest QA `
-      + `note must say "Publish gate: PASS" for tree ${tree.slice(0, 12)} `
-      + `(latest: ${qa.verdict ?? 'none'}${other}).`
-  }
-  const security = await latestSecurityVerdict($)
-  if (security.verdict !== 'CLEAR' || security.tree !== tree) {
-    return `${PLUGIN}: ${what} is refused: Security must be CLEAR on this tree. `
-      + 'Write the security note with "Security: CLEAR" and the tree.'
-  }
   const granted = (await $.state.get(PUSH_KEY)).value
   if (granted !== tree) {
-    return `${PLUGIN}: ${what} is refused: QA PASS and Security CLEAR are recorded, but the `
-      + 'person has not authorized this push. Ask them to type /devops push-ok on the current tree.'
+    return `${PLUGIN}: ${what} is refused until the person authorizes it `
+      + '(/devops push-ok, or "push" in chat) on the current tree. '
+      + 'Their word is final and overrides seat gates for that one push.'
+  }
+  const qa = await latestQaVerdict($)
+  const security = await latestSecurityVerdict($)
+  const rules: { rule: string; subject: string }[] = []
+  if (qa.verdict !== 'PASS' || qa.tree !== tree) {
+    rules.push({ rule: 'qa-pass', subject: qa.verdict ?? 'none' })
+  }
+  if (security.verdict !== 'CLEAR' || security.tree !== tree) {
+    rules.push({ rule: 'security-clear', subject: security.verdict ?? 'none' })
+  }
+  if (rules.length > 0) {
+    const past = (await $.state.get(OVERRIDES_KEY)).value ?? []
+    const stamped = new Date().toISOString()
+    const recorded = rules.map(({ rule, subject }) => ({
+      tree, rule, qa: subject, what, at: stamped,
+    }))
+    await $.state.set(OVERRIDES_KEY, [...past, ...recorded])
+    await $.state.set(
+      { plugin: 'devops-multi-agent-team', key: 'lastOverride' } as const,
+      recorded[recorded.length - 1],
+    )
   }
   return undefined
 }
@@ -501,6 +514,8 @@ export const register: Register = on => {
       ? split
       : (interpretDevopsIntent(e.args) ?? split)
     const { word, rest } = mapped
+    // Aliases such as "push" map onto person-only gates; re-check after mapping.
+    if (isPersonOnly(word, rest) && !isHuman(e)) return { text: personOnlyText(word) }
 
     if (word === '' || word === 'status') {
       if (!active) {
@@ -520,11 +535,11 @@ export const register: Register = on => {
         text: [
           `skill: on`,
           `languages: ${languages.length === 0 ? '(none detected)' : languages.join(', ')}`,
-          `branch gate: ${gates ? 'on' : 'OFF'}; push check: QA+Security+push-ok`,
+          `branch gate: ${gates ? 'on' : 'OFF'}; push check: push-ok (human final; QA+Security default)`,
           `check monitor: ${((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) ? 'on' : 'OFF'}; failing checks now: ${Object.entries((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const)).value ?? {}).map(([k, n]) => `${k} x${n}`).join(', ') || 'none'}`,
           `latest QA note: ${qa.verdict ?? 'none'}${qa.file ? ` (${qa.file.split('/').pop()})` : ''}`,
           `latest security note: ${security.verdict ?? 'none'}`,
-          `push authorized (you typed /devops push-ok, this tree): ${grantText(authorized, tree)}`,
+          `push authorized (push-ok or chat "push", this tree): ${grantText(authorized, tree)}`,
           `branches allowed: ${branches.length === 0 ? 'none' : branches.join(', ')}`,
         ].join('\n'),
       }
@@ -578,7 +593,9 @@ export const register: Register = on => {
       if (tree === undefined) return { text: 'The tree cannot be read; no push is allowed.' }
       await $.state.set(PUSH_KEY, tree)
       return {
-        text: `One push is allowed on tree ${tree.slice(0, 12)}. A new commit voids it. `
+        text: `One push is allowed on tree ${tree.slice(0, 12)} (human word is final; `
+          + 'same as saying "push" in chat). A missing QA PASS or Security CLEAR is '
+          + 'recorded as an override, not a refusal. A new commit voids the grant. '
           + 'It is consumed by that push. Keep development running.',
       }
     }

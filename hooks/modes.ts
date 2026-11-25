@@ -340,8 +340,9 @@ const COMMAND_HELP: string[] = [
   '/devops setup claude [--dry-run] [--share-config] (you) set this project up for Claude Code:',
   '                     only .devops/ and the thought folders; the plugin supplies the rest',
   '/devops brief [TOPIC | role NAME]  one section of the skill, or a seat\'s brief',
-  '/devops push-ok      (you) allow ONE push on this tree after QA PASS and Security CLEAR',
-  '/devops push-reset   (you) withdraw that permission',
+  '/devops push-ok | push | go | publish   (you) allow ONE push on this tree; human word is',
+  '                     final (overrides missing QA PASS / Security CLEAR; recorded). Chat "push" too',
+  '/devops push-reset | withdraw   (you) withdraw that permission',
   '/devops allow-branch NAME   (you) allow creating that git branch',
   '/devops gates on|off (you) turn the branch gate on or off; the push check stays on',
   '/devops monitor on|off (you) turn the failed-check monitor on or off',
@@ -381,10 +382,11 @@ export function helpCatalog(mode: string): string {
     )
   }
   parts.push(
-    'Free-form phrases map onto these skill modes, never onto a gate word. Call the named',
-    'tools; keep large file bodies out of chat. Keep development running.',
-    'Only the person\'s typed /devops push-ok authorizes a push (one-shot; no on|off).',
-    'Human development orders beat skill contingencies. /devops off turns the skill off.',
+    'Free-form phrases map onto skill modes, or onto gate aliases the person typed',
+    '(push → push-ok). Call the named tools; keep large file bodies out of chat.',
+    'Keep development running. The person\'s push-ok (or chat "push") is one-shot and final:',
+    'it authorizes even when QA/Security would otherwise block. Human orders beat skill',
+    'contingencies. /devops off turns the skill off.',
   )
   return parts.join('\n')
 }

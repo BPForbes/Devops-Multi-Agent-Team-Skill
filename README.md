@@ -12,12 +12,13 @@ commands, plus:
    adds a free-form `/devops` command with skill modes (`question`, `mind-map`,
    `clean`, `goal`, …) that drive MCP tools instead of plain-text dumps, and refuses
    `git push`, `gh pr create|merge` and git-branch creation until *you* authorize
-   by typing `/devops push-ok` on the current tree, after QA PASS and Security CLEAR
-   on that tree. `/devops on|off` (aliases `enable|disable`) turns the whole
-   skill on or off and writes project `.claude/settings.json`
-   `enabledPlugins`. `/devops skill on|off NAME` and `/devops skills` manage
-   `skillOverrides`. `/devops` does not stop development. Human development
-   orders beat this skill's process contingencies.
+   by typing `/devops push-ok` (or saying `push` in chat) on the current tree.
+   Your authorization is final: it overrides a missing QA PASS or Security CLEAR
+   (recorded) so the mod does not deadlock development. `/devops on|off` (aliases
+   `enable|disable`) turns the whole skill on or off and writes project
+   `.claude/settings.json` `enabledPlugins`. `/devops skill on|off NAME` and
+   `/devops skills` manage `skillOverrides`. `/devops` does not stop development.
+   If your order conflicts with skill protocol, the mod and seats obey you.
 
 ## Turn the plugin off and on
 
@@ -350,8 +351,8 @@ skill, agents, commands and MCP server. The shell form is
 | `prompt.compose` (mind map) | When `.devops/mindmap/OVERVIEW.md` exists, adds it to the session prompt, so plain chat knows the project at a glance with no tool call, with or without a DevOps profile. |
 | `session.start` | Runs `devops-setup detect --json`, shows `devops: rust+typescript` in the status line, registers `/devops` and the `devops_brief` tool, and reads the project's standards into one line. |
 | `tool.run` `devops_brief` | The model reads the skill in pieces: no input gives the index (about 8 KB instead of 250 KB), `topic` the one best section (usually 1 to 4 KB), `role` a seat's brief. Role files rank below the references for a topic, since `role` serves them. |
-| `command.run` `/devops` | Gates (`status`, `on`/`off`/`enable`/`disable`, `skill`, `skills`, `push-ok`, `allow-branch`, …) plus **skill modes** (`help`, `question`, `mind-map`, `clean`, `stage`/`ci`, `allocate`, `goal`, `story`, …) with `--mode` orchestration cards that name MCP tools. Trigger one CI/CD pod (`stage --mode research`) or allocate pod/agent goals. Seats use the same modes. Free-form wording maps to skill modes ("run research" → `stage`), never to a gate. Gate words (`on`, `off`, `enable`, `disable`, `skill`, `skills`, `push-ok`, `push-reset`, `gates`, `allow-branch`, `comments`, `monitor`, `config` writes, `setup claude`) run only when you type them. `/devops on|off` (and `enable|disable`) turns the whole skill on or off and writes `.claude/settings.json`; `/devops skill on|off NAME` writes `skillOverrides`. One-shot gates such as `/devops push-ok` take no `on|off` parameter. Does not stop development. Human development orders beat skill contingencies. |
-| `tool.call` Bash | Refuses `git push` and every `gh` write (anything but a read such as `view`, `list`, `status`, `diff`, `checks`, or a `gh api` GET) unless the latest QA note says `Publish gate: PASS`, the latest security note says `Security: CLEAR`, and you typed `/devops push-ok`, all for the current tree (consumed by that push; `/devops gates off` does not lift it; `/devops off` turns the skill off and lifts the checks). A push must be typed exactly as `git push <remote> HEAD[:<branch>]` (`-u`, `-q`, `-v`, `--force-with-lease[=<branch>:<sha>]` allowed), from the session's checkout; any other command that names `push` or `send-pack` is refused. A `gh` write that names a repository (`-R`, `repos/<owner>/<repo>` in `gh api`) must name this checkout's `origin`; `gh pr merge`, gh aliases and extensions are refused. Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>` (`/devops gates off` lifts this branch gate only). Detached worktrees and reads pass. If the check itself fails, it refuses. |
+| `command.run` `/devops` | Gates (`status`, `on`/`off`/`enable`/`disable`, `skill`, `skills`, `push-ok`, `allow-branch`, …) plus **skill modes** (`help`, `question`, `mind-map`, `clean`, `stage`/`ci`, `allocate`, `goal`, `story`, …) with `--mode` orchestration cards that name MCP tools. Trigger one CI/CD pod (`stage --mode research`) or allocate pod/agent goals. Seats use the same modes. Free-form wording maps to skill modes ("run research" → `stage`) or to gate aliases you typed (`push` → `push-ok`). Gate words run only when you type them. `/devops on|off` (and `enable|disable`) turns the whole skill on or off and writes `.claude/settings.json`; `/devops skill on|off NAME` writes `skillOverrides`. One-shot `/devops push-ok` (or chat `push`) takes no `on|off` and is final. Does not stop development. If your order conflicts with skill protocol, obey you. |
+| `tool.call` Bash | Refuses `git push` and every `gh` write (anything but a read such as `view`, `list`, `status`, `diff`, `checks`, or a `gh api` GET) until you typed `/devops push-ok` (or said `push` in chat) for the current tree (consumed by that push). Default path still expects QA PASS and Security CLEAR; your grant alone overrides a miss and records it so progress is not deadlocked (`/devops gates off` does not lift the push check; `/devops off` turns the skill off and lifts the checks). A push must be typed exactly as `git push <remote> HEAD[:<branch>]` (`-u`, `-q`, `-v`, `--force-with-lease[=<branch>:<sha>]` allowed), from the session's checkout; any other command that names `push` or `send-pack` is refused. A `gh` write that names a repository (`-R`, `repos/<owner>/<repo>` in `gh api`) must name this checkout's `origin`; `gh pr merge`, gh aliases and extensions are refused. Refuses `git checkout -b`, `git switch -c`, `git worktree add -b`, `git branch <name>` unless you ran `/devops allow-branch <name>` (`/devops gates off` lifts this branch gate only). Detached worktrees and reads pass. If the check itself fails, it refuses. |
 | `prompt.compose` | Adds one short section (under 1,200 characters): the languages, `devops_brief` instead of reading the skill whole, the profile, the lint gate and config tools, the standards in effect (line lengths, function limits, allowed numbers), the push gate and the lint mode. An agent starts with what it needs and fetches the rest by piece. |
 
 Limits, stated plainly:
@@ -376,9 +377,10 @@ Limits, stated plainly:
   `$…` or backtick expansion outside literal text, or with `GIT_*=`,
   `HOME=` or `XDG_CONFIG_HOME=` before it, is refused too, since either can
   hide a push.
-- The gate an agent cannot pass alone is `/devops push-ok`, a one-shot typed
-  command from you (no `on|off` parameter), and only after QA PASS and
-  Security CLEAR on that tree while the skill is on. `/devops off` (or
+- The gate an agent cannot pass alone is `/devops push-ok` (or chat `push`),
+  a one-shot typed command from you (no `on|off` parameter). While the skill
+  is on, your grant alone authorizes one push; a missing QA PASS or Security
+  CLEAR is recorded as an override rather than a refusal. `/devops off` (or
   `disable`) turns the skill off and writes project `enabledPlugins`. The
   grant is consumed by one push.
 - Any command that names `push` or `send-pack`, with quotes and backslashes

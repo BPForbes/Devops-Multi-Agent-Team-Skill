@@ -57,7 +57,8 @@ test('the card is short and names the tool, the gate, the profile and the standa
   const state = { languages: ['rust'], hasProfile: true, gates: true, lintMode: 'warn', standards }
   const text = card(state)
   for (const part of ['devops_brief', 'Languages: rust', '.devops/project.md', 'push-ok',
-    'code ≤ 100 columns', 'functions ≤ 30 lines', 'Lint on git commit: warn', '/devops off']) {
+    'obey the human', 'code ≤ 100 columns', 'functions ≤ 30 lines', 'Lint on git commit: warn',
+    '/devops off']) {
     expect(text).toContain(part)
   }
   expect(text.length).toBeLessThan(1400)
@@ -137,9 +138,14 @@ test('/devops brief runs from any origin; push aliases need the person', async (
   const refused = await run('push-ok', 'peer')
   expect(refused.text).toContain('only the person can run it')
   expect(state.get('pushAuthorized')).toBeUndefined()
-  const word = await run('push')
-  expect(word.text).not.toContain('One push is allowed')
+  const aliasRefused = await run('push', 'peer')
+  expect(aliasRefused.text).toContain('only the person can run it')
   expect(state.get('pushAuthorized')).toBeUndefined()
+  const word = await run('push')
+  expect(word.text).toContain('One push is allowed')
+  expect(word.text).toContain('human word is final')
+  expect(state.get('pushAuthorized')).toBe('a'.repeat(40))
+  state.set('pushAuthorized', false)
   const push = await run('push-ok')
   expect(push.text).toContain('One push is allowed')
   expect(state.get('pushAuthorized')).toBe('a'.repeat(40))
@@ -174,20 +180,21 @@ test('/devops skill modes return orchestration cards with tools', async ($, on) 
   expect(help.text).toContain('research:')
 })
 
-test('/devops help marks gate words as the person\'s and offers no chat push', async ($, on) => {
+test('/devops help marks gate words as the person\'s and names chat push', async ($, on) => {
   engine(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const help = await $.command.run({
     command: 'devops', args: 'help --mode gates', origin: { kind: 'composer' },
     presentation: { isFullscreen: false, columns: 100 },
   })
-  expect(help.text).toContain('/devops push-ok      (you) allow ONE push on this tree')
+  expect(help.text).toContain('/devops push-ok | push | go | publish')
   expect(help.text).toContain('/devops on|off | enable|disable  (you)')
   expect(help.text).not.toContain('/devops develop on|off')
   expect(help.text).toContain('/devops gates on|off (you)')
-  expect(help.text).toContain('never onto a gate word')
-  expect(help.text).not.toContain('in chat')
-  expect(help.text).not.toContain('| withdraw')
+  expect(help.text).toContain('Chat "push"')
+  expect(help.text).toContain('human word is')
+  expect(help.text).toContain('final (overrides missing QA PASS')
+  expect(help.text).toContain('| withdraw')
 })
 
 test('only the composer origin may run a gate word', async ($, on) => {

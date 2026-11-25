@@ -15,11 +15,17 @@ feedback fix outside the exceptions in "Review-bot feedback" below is
 gated instead by an independent Reviewer's Satisfied, the
 repository's CI and the human's go.
 
-**What authorizes a push.** Three things, all on the exact tree being
-pushed: QA's `Publish gate: PASS`, Security's `Security: CLEAR`, and the
-person's typed one-shot `/devops push-ok` (no `on|off` parameter). None
-of the three can stand in for another. Chat words never authorize a
-push, and free-form `/devops` wording never changes a gate.
+**What authorizes a push (default).** Three things on the exact tree:
+QA's `Publish gate: PASS`, Security's `Security: CLEAR`, and the
+person's typed one-shot `/devops push-ok` (no `on|off` parameter;
+aliases `push` / `go` / `publish`, or chat `push` / `push it`).
+
+**Human override.** The person's push authorization is final and
+overrides a missing or mismatched QA PASS or Security CLEAR so the
+mod does not deadlock development. Each override is recorded (tree,
+rule, what was published, time) and applies to that tree and one push
+only. Agents cannot grant a push. Saying `push` in chat is the same as
+`/devops push-ok` when it comes from the person.
 
 **Skill off.** `/devops off` or `/devops disable` turns the whole skill
 off: session checks stop, and `.claude/settings.json` sets
@@ -32,10 +38,11 @@ key back to `true` by hand or run `claude plugin enable …`. Free-form
 words never flip on|off.
 
 The Claude mod enforces the mechanical part at the tool layer:
-`git push`, `gh` writes, the GitHub write tools and branch creation are
-refused until all three hold for the current tree (while the skill is
-on), a push may send only `HEAD`, and merges are refused outright: the
-person merges on GitHub (see the README, "The mod").
+`git push`, `gh` writes and the GitHub write tools need the person's
+push-ok on the current tree (while the skill is on); seat verdicts are
+the default path, not a hard stop against the human. A push may send
+only `HEAD`, and merges are refused outright: the person merges on
+GitHub (see the README, "The mod").
 
 ## Fast validation
 

@@ -136,10 +136,12 @@ Do not `git add` anything under `devops-skill/thoughts/` (both folders are in `.
 
 **Default publish path:** Review Satisfied → Security Clear → QA PASS on
 the same tree, then the person types `/devops push-ok` (one-shot; no
-`on|off` parameter). Nothing else authorizes a push while the skill is
-on: not Review Satisfied, not Security Clear, not the Orchestrator, and
-not a chat word. `/devops off` turns the skill off and lifts the checks.
-Every change except review-bot feedback fixes (see
+`on|off` parameter; aliases `push` / chat `push`). The person's grant
+alone is what the mod requires; a missing seat verdict is recorded as
+an override so the human is not deadlocked. Not Review Satisfied, not
+Security Clear, and not the Orchestrator authorize a push without the
+person. `/devops off` turns the skill off and lifts the checks. Every
+change except review-bot feedback fixes (see
 [qa-publish-policy.md](references/qa-publish-policy.md), "Review-bot
 feedback") still gets Security's review first while the skill is on;
 Clear does not authorize a push either.
@@ -161,9 +163,10 @@ Clear does not authorize a push either.
 - **Gate words are the person's alone.** `on`, `off`, `enable`,
   `disable`, `skill`, `skills`, `push-ok`, `push-reset`, `gates`,
   `allow-branch`, `comments`, `monitor`, `config` writes and
-  `setup claude` run only as commands the person types. Free-form
-  words never change a gate. One-shot gates such as `push-ok` take no
-  `on|off` parameter.
+  `setup claude` run only as commands the person types. Person-typed
+  aliases (`push`, `go`, `publish`, chat `push` / `push it`) map onto
+  `push-ok`. Agents cannot flip gates. One-shot `push-ok` takes no
+  `on|off` parameter and is final (see Development bypass).
 - **`/devops on|off` and `/devops enable|disable`.** The skill-wide
   switch. Turns the whole skill on or off in this session **and**
   writes `.claude/settings.json` `enabledPlugins` for
@@ -199,15 +202,19 @@ failure mode; it is not compliance.
   committing, staffing a Coder early, skipping a seat the human said
   to skip, or continuing after a send-back the human waved off. Keep
   developing when the human said to.
-- **Mechanical gates.** Free-form chat still never flips a gate.
-  While the skill is on, a push needs QA PASS, Security CLEAR, and
-  the person's typed one-shot `/devops push-ok`. To lift every check,
-  the person types `/devops off` or `/devops disable` (then `/devops on`
-  or `/devops enable` to restore).
-- **Record it.** When a human order overrides a skill contingency,
-  note the order and what was skipped under
-  `devops-skill/thoughts/non-final/` and keep going. Do not ask the
-  human to re-approve the same override on every turn.
+- **Mechanical gates.** The person's one-shot `/devops push-ok` (aliases
+  `push` / `go` / `publish`, or chat `push` / `push it`) authorizes one
+  push on the current tree and is **final**: it proceeds even when QA
+  PASS or Security CLEAR is missing, and the miss is recorded as an
+  override so development is not deadlocked. Agents still cannot flip
+  gates. To lift every check (branch, lint-on-commit, monitor, session
+  card), the person types `/devops off` or `/devops disable` (then
+  `/devops on` or `/devops enable` to restore).
+- **Record it.** When a human order overrides a skill contingency or a
+  seat gate, note the order and what was skipped under
+  `devops-skill/thoughts/non-final/` (and the mod's override list for
+  pushes) and keep going. Do not ask the human to re-approve the same
+  override on every turn.
 
 ### Reviewer entrypoint (before QA)
 
