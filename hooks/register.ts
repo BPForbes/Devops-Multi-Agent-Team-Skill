@@ -109,7 +109,8 @@ async function publishDenial($: EngineInterface, what: string): Promise<string |
   if (developOn) {
     if (granted !== tree) {
       return `${PLUGIN}: ${what} is refused: development bypass is on, but the `
-        + 'person has not authorized this push. Ask them to type /devops push-ok on the current tree.'
+        + 'person has not authorized this push. Ask them to type '
+        + '/devops push-ok on the current tree.'
     }
     return undefined
   }
@@ -468,7 +469,8 @@ export const register: Register = on => {
       return {
         text: [
           `languages: ${languages.length === 0 ? '(none detected)' : languages.join(', ')}`,
-          `branch gate: ${gates ? 'on' : 'OFF'}; develop bypass: ${develop ? 'ON (push-ok alone)' : 'off'}; `
+          `branch gate: ${gates ? 'on' : 'OFF'}; `
+            + `develop bypass: ${develop ? 'ON (push-ok alone)' : 'off'}; `
             + `push check: ${develop ? 'push-ok only' : 'QA+Security+push-ok'}`,
           `check monitor: ${((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'monitor' } as const)).value ?? true) ? 'on' : 'OFF'}; failing checks now: ${Object.entries((await $.state.get({ plugin: 'devops-multi-agent-team', key: 'checkFailures' } as const)).value ?? {}).map(([k, n]) => `${k} x${n}`).join(', ') || 'none'}`,
           `latest QA note: ${qa.verdict ?? 'none'}${qa.file ? ` (${qa.file.split('/').pop()})` : ''}`,
@@ -559,7 +561,8 @@ export const register: Register = on => {
           ? 'Development bypass on. Human orders beat skill contingencies; '
             + 'a typed /devops push-ok alone authorizes one push on this tree '
             + '(QA PASS and Security CLEAR are not required while develop is on).'
-          : 'Development bypass off. Push again needs QA PASS, Security CLEAR, and /devops push-ok.',
+          : 'Development bypass off. Push again needs QA PASS, Security CLEAR, '
+            + 'and /devops push-ok.',
       }
     }
     if (word === 'gates') {

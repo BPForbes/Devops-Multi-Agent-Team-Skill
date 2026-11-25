@@ -350,13 +350,17 @@ const COMMAND_HELP: string[] = [
     '.devops/standards.json; checked before it is written',
 ]
 
-/** Catalog text for /devops help [--mode all|gates|skills|stage]; also the chat fallback (mode all). */
-export function helpCatalog(mode: string): string {
-  const skills = SPECS.flatMap(s => {
+/** Skill-mode lines for the help catalog. */
+function skillHelpLines(): string[] {
+  return SPECS.flatMap(s => {
     const alias = s.aliases.length > 0 ? ` (${s.aliases.join(', ')})` : ''
     const line = `/devops ${s.word}${alias} --mode ${s.modes.join('|')}  [text]`
     return [line, `                     ${s.skill}`]
   })
+}
+
+/** Catalog text for /devops help [--mode all|gates|skills|stage]; also the chat fallback (mode all). */
+export function helpCatalog(mode: string): string {
   const stages = Object.entries(STAGE_ROLES).map(
     ([name, roles]) => `- ${name}: ${roles}`,
   )
@@ -365,7 +369,7 @@ export function helpCatalog(mode: string): string {
     parts.push('### Gates and commands', ...COMMAND_HELP)
   }
   if (mode === 'skills' || mode === 'all') {
-    parts.push('### Skill modes (text after the command is the input)', ...skills)
+    parts.push('### Skill modes (text after the command is the input)', ...skillHelpLines())
   }
   if (mode === 'stage' || mode === 'all') {
     parts.push(
