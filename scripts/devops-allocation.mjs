@@ -240,14 +240,51 @@ function allocationRecord(plan, { goals, teams }) {
 }
 
 /**
+ * The steps a seat runs on its own setup payload: spin-up recommends the
+ * settings and never applies them (role-identity.md, Reproduce a seat binding).
+ */
+const SETUP_STEPS = Object.freeze([
+  'Check the versions below against your environment (node --version, the plugin version).',
+  'Read your agent hash and team hash from this payload or the team board '
+    + '(.devops/teams/<team>.json, members).',
+  'Start the session or the MCP server with DEVOPS_SEAT=agent-<hex> DEVOPS_TEAM=team-<hex>.',
+  'Confirm the binding: echo "$DEVOPS_SEAT $DEVOPS_TEAM" prints your hashes; '
+    + 'your chain words (merge-ok, done) now act as you.',
+  'Unset both when the seat retires; an unbound session acts for no seat.',
+])
+
+/**
+ * One team's `seat.setup` payload, addressed to its lead: the recommended
+ * settings for the lead and for each member, the versions of the systems
+ * involved, and the setup steps. The receiving seat does the setup.
+ */
+export function setupPayload({ team, lead }, versions = {}) {
+  return {
+    v: 1,
+    kind: 'seat.setup',
+    id: `setup-${team.slice('team-'.length)}`,
+    to: lead,
+    body: {
+      team,
+      lead,
+      settings: { DEVOPS_SEAT: lead, DEVOPS_TEAM: team },
+      member_settings: { DEVOPS_SEAT: '<your agent hash>', DEVOPS_TEAM: team },
+      versions: { ...versions },
+      instructions: [...SETUP_STEPS],
+    },
+  }
+}
+
+/**
  * Spins up the board from a plan: opens the sprint, puts each stream on the
  * backlog as a goal, records the allocation, and hands every team's lead, the
  * judging team's too, its Sprint Planning (scheduled, for the lead to hold). `goals` maps a
  * stream to its goal hash; `teams` maps a plan team (A1, Q1, ...) to { team, lead }.
- * Returns { sprint, meetings, board }.
+ * Each team's lead also gets a setup payload (setupPayload) with `versions`.
+ * Returns { sprint, meetings, setup, board }.
  */
 export function spinUp(board, plan, options) {
-  const { name, weeks, goals, teams, at, mint } = options
+  const { name, weeks, goals, teams, at, mint, versions } = options
   checkSpinUp(plan, { goals, teams })
   const opened = createSprint(normalizeBoard(board), { name, weeks, at, mint })
   let next = opened.board
@@ -265,7 +302,8 @@ export function spinUp(board, plan, options) {
     next = made.board
     meetings.push({ id: made.id, team, lead })
   }
-  return { sprint: opened.id, meetings, board: next }
+  const setup = plan.teams.map(t => setupPayload(teams[t.name], versions))
+  return { sprint: opened.id, meetings, setup, board: next }
 }
 
 function main(argv) {

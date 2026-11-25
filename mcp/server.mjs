@@ -34,8 +34,9 @@ import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 import { isTeamId } from '../scripts/devops-ids.mjs'
 import { RISKS, planAllocation, spinUp } from '../scripts/devops-allocation.mjs'
 import {
-  MEETING_KINDS, baScan, forwardReports, goalDone, goalVerdict, holdMeeting, leadSignOff,
-  meetingsFor, newApproach, pingsFor, prepareMerge, reportsFor, scheduleMeeting, teamSchedule,
+  MEETING_KINDS, baScan, bugIssue, fileBugReport, forwardReports, goalDone, goalVerdict,
+  holdMeeting, leadSignOff, meetingsFor, newApproach, pingsFor, prepareMerge, raiseToAnalyst,
+  reportsFor, scheduleMeeting, teamSchedule,
 } from '../scripts/devops-scrum.mjs'
 import {
   TEAM_DIR, needsAttention, openBoard, readMembers, recordRefusal, teamIntake, teamMove,
@@ -76,6 +77,11 @@ const BOUND_TEAM = process.env.DEVOPS_TEAM
 
 /** Limits on what allocation research and meetings may send: a task, not a document. */
 const MAX_TASK_TEXT = 4000
+/** The BA's reason for signing over an open reported bug (a big matter). */
+const OVERRIDE = {
+  type: 'string', maxLength: MAX_TASK_TEXT,
+  description: 'BA only: sign over an open reported bug for a big matter; the reason.',
+}
 const MAX_STREAMS = 64
 const MAX_STREAM_NAME = 80
 const MAX_ATTENDEES = 64
@@ -975,6 +981,8 @@ const TOOLS = [
       'Orchestration only: from allocation research, plan the teams, open the sprint, put',
       'each stream on the backlog as a goal, record the allocation, and hand each authoring',
       'team lead its Sprint Planning (scheduled for the lead to hold with meeting_hold).',
+      'Each lead also gets a seat.setup payload (recommended DEVOPS_SEAT/DEVOPS_TEAM, system',
+      'versions, setup steps); spin-up applies nothing, the seat sets itself up.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -993,8 +1001,12 @@ const TOOLS = [
     run: args => {
       if (BOUND_SEAT) throw new Error('only Orchestration may spin up the board')
       const plan = planAllocation(args.research)
+      const versions = {
+        node: process.versions.node, plugin: PKG.version, mcp_server: PKG.version, schema: '1',
+      }
       return boardChange(args, board => spinUp(board, plan, {
         name: args.name, weeks: args.weeks ?? 1, goals: args.goals, teams: args.teams, at: now(),
+        versions,
       }))
     },
   },
@@ -1024,7 +1036,8 @@ const TOOLS = [
       'Daily: stress/strain + reallocations (no repro by default). Review: joint demos',
       'of features/improvements; the roster lists every Done goal. AI↔AI on a',
       'feature/bug: reproduce live. record.businessAnalyst (an attendee) is required at',
-      'planning, refinement and review, and optional at daily.',
+      'planning, refinement and review, and optional at daily. Daily record.bugs: each bug',
+      'its finder raised { agent, title, behavior, expected, solutions, snippets, goal? }.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -1061,6 +1074,7 @@ const TOOLS = [
       properties: {
         dest, caller: { type: 'string' }, team: { type: 'string' }, goal: { type: 'string' },
         decision: { enum: ['ok', 'deny'] }, reason: { type: 'string', maxLength: MAX_TASK_TEXT },
+        override: OVERRIDE,
       },
       required: ['caller', 'goal', 'decision'],
       additionalProperties: false,
@@ -1069,7 +1083,7 @@ const TOOLS = [
     run: args => boardChange(args, board => ({
       board: goalVerdict(board, {
         goal: args.goal, by: args.caller, team: args.team, members: teamMembers(args),
-        decision: args.decision, reason: args.reason, at: now(),
+        decision: args.decision, reason: args.reason, override: args.override, at: now(),
       }),
     })),
   },
@@ -1105,8 +1119,11 @@ const TOOLS = [
       '(goal_merge): the peer verifies, the lead signs (filing the done report), the',
       'Business Analyst signs when the goal meets its acceptance criteria (`meets`) and goes',
       'on the scheduled Sprint Review\'s demo list (`kind`, `surface`, `demoer`), and again',
-      'once Orchestration prepares the merge presentation. A bug (kind bug, an open bug issue',
-      'or triage) is not signed: it is denied as "bug fix needed" and the coders are told.',
+      'once Orchestration prepares the merge presentation. A goal with an open reported bug',
+      '(bug issue, triage, a bug report the client had fixed) is denied as "bug fix needed",',
+      'goes to the backlog and the coders are told, unless the BA signs over it for a big',
+      'matter (`override`, its reason). A bug goal (kind bug) is signed against its client',
+      'objective, or once its lead raised it (goal_raise), without a demo.',
       'Each step is a chain.signature envelope. The client\'s push-ok signs last.',
     ].join(' '),
     inputSchema: {
@@ -1120,6 +1137,7 @@ const TOOLS = [
           type: 'boolean',
           description: 'BA first signature: the goal meets its acceptance criteria.',
         },
+        override: OVERRIDE,
       },
       required: ['caller', 'goal'],
       additionalProperties: false,
@@ -1127,7 +1145,31 @@ const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => boardChange(args, board => goalDone(board, {
       goal: args.goal, by: args.caller, team: args.team, members: teamMembers(args),
-      kind: args.kind, surface: args.surface, demoer: args.demoer, meets: args.meets, at: now(),
+      kind: args.kind, surface: args.surface, demoer: args.demoer, meets: args.meets,
+      override: args.override, at: now(),
+    })),
+  },
+  {
+    name: 'goal_raise',
+    description: [
+      'A bug goal found during development (no client objective): the seat that signed its',
+      'lead step (`caller`) raises it to the Business Analyst with a reason, so the BA may',
+      'sign it. Pings the BA.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, goal: { type: 'string' },
+        reason: { type: 'string', maxLength: MAX_TASK_TEXT },
+      },
+      required: ['caller', 'goal', 'reason'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: raiseToAnalyst(board, {
+        goal: args.goal, lead: args.caller, reason: args.reason, at: now(),
+      }),
     })),
   },
   {
@@ -1197,6 +1239,52 @@ const TOOLS = [
       board: newApproach(board, {
         report: args.report, ba: args.caller, goals: args.goals, at: now(),
       }),
+    })),
+  },
+  {
+    name: 'bug_report',
+    description: [
+      'The Business Analyst (`caller`) reports a bug the team raised at a held Daily Scrum',
+      '(record.bugs[index]) to the client through Orchestration: a bug.report with the',
+      'issue, the reason, proposals, files, lines, code snippets, an easy-to-read',
+      'explanation and the plan of attack. The person answers with /devops bug REPORT',
+      'fine|fix N|fix ALTERNATIVE.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, meeting: { type: 'string' },
+        index: { type: 'integer', minimum: 0 }, report: { type: 'object' },
+      },
+      required: ['caller', 'meeting', 'index', 'report'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => fileBugReport(board, {
+      meeting: args.meeting, index: args.index, ba: args.caller, report: args.report, at: now(),
+    })),
+  },
+  {
+    name: 'bug_issue',
+    description: [
+      'The team lead (`caller`) makes the issue from a bug report the client had fixed: a',
+      'backlog goal of kind bug with the issue draft the lead files in the project repo.',
+      '`assign` ({ agent, job, description }) gives it to a seat with room; a seat holding',
+      'the open-work limit is refused, and the goal may wait in the backlog.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, report: { type: 'string' }, goal: { type: 'string' },
+        title: { type: 'string', maxLength: MAX_TASK_TEXT }, assign: { type: 'object' },
+      },
+      required: ['caller', 'report', 'goal'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => bugIssue(board, {
+      id: args.report, lead: args.caller, goal: args.goal, title: args.title,
+      assign: args.assign, at: now(),
     })),
   },
   {

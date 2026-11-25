@@ -227,7 +227,29 @@ function applyReallocations(board, meeting, moves) {
   return { board: next, reallocations: applied }
 }
 
-/** Daily Scrum: updates, blockers, stress/strain, and lead reallocations. */
+/**
+ * Bugs raised at the Daily Scrum by the seat that found them, as the team
+ * discussed them: how the code behaves now, how it should behave, the
+ * possible solutions and code snippets.
+ */
+function parseBugs(bugs, attendees) {
+  const rows = Array.isArray(bugs) ? bugs : []
+  for (const b of rows) {
+    need(attendees.includes(b.agent), 'a bug is raised by the attending seat that found it')
+    need(filled(b.title) && filled(b.behavior) && filled(b.expected),
+      'a bug names itself, how the code behaves now and how it should behave')
+    need(nonEmpty(b.solutions), 'the team discusses one possible solution or more')
+    need(b.goal === undefined || isGoalId(b.goal), 'a bug names a goal hash')
+  }
+  return rows.map(b => ({
+    agent: b.agent, title: b.title.trim(), behavior: b.behavior.trim(),
+    expected: b.expected.trim(), solutions: texts(b.solutions, 'solutions'),
+    snippets: texts(b.snippets ?? [], 'snippets'),
+    ...(b.goal === undefined ? {} : { goal: b.goal }),
+  }))
+}
+
+/** Daily Scrum: updates, blockers, stress/strain, raised bugs and lead reallocations. */
 function daily(next, meeting, record) {
   requireBa(meeting, record, 'Daily Scrum', { required: false })
   const { notes, blockers } = dailyUpdates(record.updates, meeting.attendees)
@@ -241,6 +263,7 @@ function daily(next, meeting, record) {
       stress: parseStress(record.stress),
       strain: parseStrain(record.strain),
       reallocations,
+      bugs: parseBugs(record.bugs, meeting.attendees),
       schedule: teamSchedule(board, meeting).find(row => row.team === meeting.team),
       ...baField(record),
     },
@@ -424,16 +447,21 @@ function allRetrosHeld(next, meeting) {
 function closeSprint(next, sprint, at) {
   const row = next.sprints[sprint]
   const unfinished = row.goals.filter(g => next.goals[g]?.state !== 'done')
-  for (const g of unfinished) {
-    const was = next.goals[g].state
-    // A return starts the review over: verdicts before it no longer count.
-    const judgedFrom = Object.keys(next.handoffs).length
-    Object.assign(next.goals[g], { sprint: '', state: 'backlog', judged_from: judgedFrom })
-    delete next.goals[g].blocked_from
-    next.goals[g].history.push({ at, event: 'returned', from: sprint, was, sprint: '' })
-  }
-  const kept = row.goals.filter(g => !unfinished.includes(g))
-  Object.assign(row, { status: 'closed', closed: at, goals: kept })
+  for (const g of unfinished) returnToBacklog(next, g, { at, from: sprint })
+  Object.assign(row, { status: 'closed', closed: at })
+}
+
+/** Sends a goal from sprint `from` back to the backlog state, out of the sprint. */
+function returnToBacklog(next, goal, { at, from }) {
+  const target = next.goals[goal]
+  const was = target.state
+  // A return starts the review over: verdicts before it no longer count.
+  const judgedFrom = Object.keys(next.handoffs).length
+  Object.assign(target, { sprint: '', state: 'backlog', judged_from: judgedFrom })
+  delete target.blocked_from
+  target.history.push({ at, event: 'returned', from, was, sprint: '' })
+  const row = next.sprints[from]
+  if (row !== undefined) row.goals = row.goals.filter(g => g !== goal)
 }
 
 /** Sprint Retrospective: what went well, the bottlenecks, and the agreed improvements. */
@@ -621,8 +649,8 @@ function sign(next, goal, { step, by, at, ...extra }) {
 }
 
 /** Records a merge-ok or merge-deny on the goal (`reviews`) and as a signature envelope. */
-function recordVerdict(next, goal, { step, by, verdict, reason, at }) {
-  const sig = recordSignature(next, goal, { step, by, verdict, reason, at })
+function recordVerdict(next, goal, { step, by, verdict, reason, at, ...detail }) {
+  const sig = recordSignature(next, goal, { step, by, verdict, reason, at, ...detail })
   const target = next.goals[goal]
   target.reviews = [...(target.reviews ?? []), { step, by, verdict, at, reason, sig }]
 }
@@ -696,11 +724,12 @@ function checkSigner(next, goal, step, { by, team, members }) {
  * pings the goal's BA (recorded in `pings`) and goes ahead without a scan;
  * only a BA scan on the step that holds or denies it blocks it (baScan). A
  * denial needs a reason and reopens the goal (reopenGoal). The BA's merge-ok
- * on a goal with a reported bug is recorded as a denial (denyForBug). The goal's BA
+ * on a goal with a reported bug is recorded as a denial (denyForBug), unless
+ * the BA signs over it for a big matter (`override`, a reason). The goal's BA
  * and the client may also deny, to reopen a goal on feedback. A client
  * denial of the merge report sends the report back to the BA (`denied`).
  */
-export function goalVerdict(board, { goal, by, team, members, decision, reason, at }) {
+export function goalVerdict(board, { goal, by, team, members, decision, reason, override, at }) {
   const next = normalizeBoard(structuredClone(board))
   need(decision === 'ok' || decision === 'deny', 'the verdict is merge-ok or merge-deny')
   need(decision === 'ok' || filled(reason), 'merge-deny says why')
@@ -713,13 +742,13 @@ export function goalVerdict(board, { goal, by, team, members, decision, reason, 
   } catch (refusal) {
     if (decision === 'ok' || !mayReopen(next, goal, by)) throw refusal
   }
-  if (decision === 'ok' && BA_STEP_NAMES.has(step) && reportedBugs(next, goal).length > 0) {
-    return denyForBug(next, goal, { step, by, at })
-  }
+  const denied = bugDenial(next, goal, { step, by, at, override, decision })
+  if (denied !== undefined) return denied
   const trimmed = filled(reason) ? String(reason).trim() : undefined
   const verdict = decision === 'ok' ? 'ok' : 'deny'
   if (verdict === 'ok') checkScan(target, step)
-  recordVerdict(next, goal, { step, by, verdict, reason: trimmed, at })
+  const signedOver = overrideOf(next, goal, override)
+  recordVerdict(next, goal, { step, by, verdict, reason: trimmed, at, ...signedOver })
   if (verdict === 'ok') return pingAnalyst(next, goal, { step, by, at })
   const [id, report] = liveReport(next, goal) ?? []
   if (step === 'client' && by === 'client') {
@@ -816,6 +845,7 @@ function reopenGoal(next, goal, { by, step, reason, at }) {
     reviews: [], scans: [], pings: [],
   })
   delete target.blocked_from
+  delete target.raised
   target.history.push({ at, event: 'reopened', by, step, reason, was })
   const [, report] = liveReport(next, goal) ?? []
   if (report !== undefined) {
@@ -898,15 +928,15 @@ const BA_STEPS = Object.freeze({
 })
 
 /**
- * The BA steps' "done". A goal with a reported bug, or a bug at the first
- * step, is not signed: it is denied as needing a bug fix (denyForBug). First
- * (`ba`): the goal meets the client's expectations (expectationsMet) and
- * goes on the demo list of the sprint's scheduled Sprint Review, with the
- * hash of the seat that demos it. Second (`ba_final`): once Orchestration
- * prepares the merge presentation (prepareMerge); it promotes the report to
- * Orchestration. Returns the new board.
+ * The BA steps' "done". A goal with an open reported bug is not signed: it
+ * is denied as needing a bug fix (denyForBug), unless the BA signs over it
+ * for a big matter (`override`). First (`ba`): see firstSignature. Second
+ * (`ba_final`): once Orchestration prepares the merge presentation
+ * (prepareMerge); it promotes the report to Orchestration. Returns the board.
  */
-export function baSignOff(board, { goal, ba, kind = 'feature', surface, demoer, meets, at }) {
+export function baSignOff(board, {
+  goal, ba, kind = 'feature', surface, demoer, meets, override, at,
+}) {
   const next = normalizeBoard(structuredClone(board))
   const step = nextStep(next.goals[goal] ?? {})
   need(step === 'ba' || step === 'ba_final', `${goal} is not waiting for the Business Analyst`)
@@ -914,14 +944,11 @@ export function baSignOff(board, { goal, ba, kind = 'feature', surface, demoer, 
   need(BA_STEPS[report.state]?.step === step,
     step === 'ba' ? `${goal}'s report is ${report.state}`
       : `Orchestration prepares the merge presentation before the BA's second signature`)
-  if ((step === 'ba' && kind === 'bug') || reportedBugs(next, goal).length > 0) {
-    return denyForBug(next, goal, { step, by: ba, at })
-  }
-  const first = step === 'ba' ? {
-    ...demoEntry(next, report.sprint, { kind, surface, demoer }),
-    expectations: expectationsMet(next.goals[goal], meets),
-  } : {}
-  sign(next, goal, { step, by: ba, at, ...first })
+  const denied = bugDenial(next, goal, { step, by: ba, at, override, decision: 'ok' })
+  if (denied !== undefined) return denied
+  const first = step === 'ba'
+    ? firstSignature(next, goal, report, { kind, surface, demoer, meets }) : {}
+  sign(next, goal, { step, by: ba, at, ...first, ...overrideOf(next, goal, override) })
   report.state = BA_STEPS[report.state].then
   return next
 }
@@ -929,29 +956,92 @@ export function baSignOff(board, { goal, ba, kind = 'feature', surface, demoer, 
 const BA_STEP_NAMES = new Set(Object.values(BA_STEPS).map(row => row.step))
 
 /**
+ * What the BA's first signature records. A feature or improvement meets the
+ * client's expectations and goes on the scheduled Sprint Review's demo list.
+ * A bug is signed when fixing it is a client objective (expectationsMet), or,
+ * when it was found during development, once the seat that signed the lead
+ * step raised it to the BA (raiseToAnalyst). A bug is listed without a demo.
+ */
+function firstSignature(next, goal, report, { kind, surface, demoer, meets }) {
+  const target = next.goals[goal]
+  if (kind !== 'bug' && target.kind !== 'bug') {
+    const demo = demoEntry(next, report.sprint, { kind, surface, demoer })
+    return { ...demo, expectations: expectationsMet(target, meets) }
+  }
+  if (filled(target.objective)) return { expectations: expectationsMet(target, meets) }
+  need(target.raised !== undefined,
+    `${goal} is a bug found during development: the team lead raises it to the BA first`)
+  return { raised: { ...target.raised } }
+}
+
+/**
+ * The lead step's signer raises a bug found during development (no client
+ * objective) to the goal's BA, who may then sign it. The raise is recorded
+ * and pings the BA. Returns the board.
+ */
+export function raiseToAnalyst(board, { goal, lead, reason, at }) {
+  const next = normalizeBoard(structuredClone(board))
+  const target = next.goals[goal]
+  need(target !== undefined, `goal is not on the board: ${goal}`)
+  need(nextStep(target) === 'ba', `${goal} is not waiting for the BA's first signature`)
+  const signer = target.signoffs.find(sig => sig.step === 'lead')?.by
+  need(lead === signer, `only ${signer}, who signed the lead step, raises ${goal} to the BA`)
+  need(filled(reason), 'raising a bug to the BA says why')
+  target.raised = { by: lead, reason: String(reason).trim(), at }
+  target.history.push({ at, event: 'raised_to_ba', by: lead })
+  return pingAnalyst(next, goal, { step: 'ba', by: lead, at })
+}
+
+/**
+ * The BA's merge-ok or done on a goal with an open reported bug is denied
+ * as needing a bug fix, unless the BA signs over it for a big matter
+ * (`override`, BA steps only). Returns the denied board, or undefined.
+ */
+function bugDenial(next, goal, { step, by, at, override, decision }) {
+  need(!filled(override) || BA_STEP_NAMES.has(step),
+    'only the Business Analyst signs over a reported bug (override)')
+  const open = decision === 'ok' && BA_STEP_NAMES.has(step) && reportedBugs(next, goal).length > 0
+  return open && !filled(override) ? denyForBug(next, goal, { step, by, at }) : undefined
+}
+
+/** The override a BA signature carries: its reason and the bugs it signs over. */
+function overrideOf(next, goal, override) {
+  if (!filled(override)) return {}
+  return { override: { reason: String(override).trim(), bugs: reportedBugs(next, goal) } }
+}
+
+/**
  * The reported bugs open on a goal: issues in the project's repo it lists
  * (`bug_issues`), and bugs found in discovery (QA's triage hand-offs on the
- * goal that are not done).
+ * goal that are not done, and bug reports on the goal the client had fixed
+ * whose bug goal is not done).
  */
 function reportedBugs(next, goal) {
   const issues = (next.goals[goal].bug_issues ?? []).map(n => `issue #${n}`)
   const triage = Object.entries(next.handoffs)
     .filter(([, h]) => h.payload.goal === goal && h.payload.kind === 'triage' && h.state !== 'done')
     .map(([id]) => `triage ${id}`)
-  return [...issues, ...triage]
+  const found = Object.entries(next.reports)
+    .filter(([, r]) => r.kind === 'bug' && r.envelope.body.goal === goal
+      && BUG_TO_FIX.has(r.state) && next.goals[r.bug_goal]?.state !== 'done')
+    .map(([id]) => `bug ${id}`)
+  return [...issues, ...triage, ...found]
 }
 
 /**
  * The BA does not sign a goal that needs a bug fix: its merge-ok or done is
- * recorded as merge-deny ("bug fix needed"), the goal reopens, and the
- * coders are told (bugFixNeeded). Returns the board.
+ * recorded as merge-deny ("bug fix needed"), the goal reopens and goes back
+ * to the backlog until the bug is fixed, and the coders are told
+ * (bugFixNeeded). Returns the board.
  */
 function denyForBug(next, goal, { step, by, at }) {
   const bugs = reportedBugs(next, goal)
   const reason = `bug fix needed${bugs.length > 0 ? `: ${bugs.join(', ')}` : ''}`
   const [, report] = liveReport(next, goal) ?? []
+  const from = next.goals[goal].sprint
   recordVerdict(next, goal, { step, by, verdict: 'deny', reason, at })
   const reopened = reopenGoal(next, goal, { by, step, reason, at })
+  returnToBacklog(reopened, goal, { at, from })
   return bugFixNeeded(reopened, goal, { by, team: report?.team, bugs, reason, at })
 }
 
@@ -1003,7 +1093,7 @@ function demoEntry(next, sprint, { kind, surface, demoer }) {
  * lead step, or `bugFixNeeded` when the BA's step was denied for a bug).
  */
 export function goalDone(board, {
-  goal, by, team, members, kind, surface, demoer, meets, at, mint,
+  goal, by, team, members, kind, surface, demoer, meets, override, at, mint,
 }) {
   const target = normalizeBoard(board).goals[goal]
   need(target !== undefined, `goal is not on the board: ${goal}`)
@@ -1014,7 +1104,7 @@ export function goalDone(board, {
   }
   need(step === 'ba' || step === 'ba_final',
     step === 'client' ? "the client's push-ok signs the merge report" : `${goal} is fully signed`)
-  const after = baSignOff(board, { goal, ba: by, kind, surface, demoer, meets, at })
+  const after = baSignOff(board, { goal, ba: by, kind, surface, demoer, meets, override, at })
   const fix = after.goals[goal].bug_fix
   return { board: after, ...(fix?.at === at && fix.by === by ? { bugFixNeeded: fix } : {}) }
 }
@@ -1208,4 +1298,130 @@ export function newApproach(board, { report: id, ba, goals, at }) {
     state: 'reworked', reworked_at: at, new_goals: goals.map(g => g.goal),
   })
   return added
+}
+
+/** Bug report states once the client had the bug fixed, until its bug goal is done. */
+const BUG_TO_FIX = new Set(['bug_fix', 'issue_drafted'])
+
+/**
+ * The BA files a bug the team raised at a held Daily Scrum (`index` in its
+ * record's `bugs`) as a `bug.report` for the client through Orchestration.
+ * The report row waits in `bug_to_person`. Returns { id, board }.
+ */
+export function fileBugReport(board, { meeting: mid, index, ba, report, at, mint }) {
+  const next = normalizeBoard(structuredClone(board))
+  const meeting = next.meetings[mid]
+  need(meeting?.kind === 'daily' && meeting.state === 'held', `${mid} is not a held Daily Scrum`)
+  const bug = meeting.record.bugs?.[index]
+  need(bug !== undefined, `${mid} raised no bug ${index}`)
+  const analyst = sprintAnalyst(next, meeting.sprint, meeting.team)
+  need(ba === analyst, `only ${meeting.team}'s Business Analyst (${analyst}) reports its bugs`)
+  need(meeting.attendees.includes(ba), `the Business Analyst attends ${mid} to report its bugs`)
+  const filed = Object.values(next.reports).some(r => r.meeting === mid && r.bug_index === index)
+  need(!filed, `bug ${index} of ${mid} is reported already`)
+  const id = mintId('report', next.reports, mint)
+  const raised = { title: bug.title, behavior: bug.behavior, expected: bug.expected }
+  const body = {
+    team: meeting.team, meeting: mid, found_by: bug.agent, ...(bug.goal ? { goal: bug.goal } : {}),
+    ...raised, ...bugReportFields(report), at,
+  }
+  next.reports[id] = {
+    kind: 'bug', sprint: meeting.sprint, team: meeting.team, ba, meeting: mid, bug_index: index,
+    state: 'bug_to_person', filed_at: at,
+    envelope: { v: 1, kind: 'bug.report', id, from: ba, body },
+  }
+  return { id, board: next }
+}
+
+/**
+ * What a bug report tells the client: the issue, why it is reported, the
+ * proposed solutions, the files, lines and code snippets, an easy-to-read
+ * explanation and the plan of attack. Refused when one is missing.
+ */
+function bugReportFields(report) {
+  const row = report ?? {}
+  const words = ['issue', 'reason', 'explanation', 'plan']
+  need(words.every(k => filled(row[k])),
+    'a bug report states the issue, why, an easy-to-read explanation and the plan of attack')
+  const lists = ['proposals', 'files', 'lines', 'snippets']
+  need(lists.every(k => nonEmpty(row[k])),
+    'a bug report lists proposed solutions, files, lines and code snippets')
+  return {
+    ...Object.fromEntries(words.map(k => [k, String(row[k]).trim()])),
+    ...Object.fromEntries(lists.map(k => [k, texts(row[k], k)])),
+  }
+}
+
+/** The client's answers to a bug report, and the report state each leads to. */
+const BUG_DECISIONS = Object.freeze({ fine: 'bug_fine', fix: 'bug_fix' })
+
+/**
+ * The client's answer to a bug report: the behavior is fine, or it is fixed
+ * with one of the proposals (`proposal`, from 1) or the client's own
+ * `alternative`. Returns the new board.
+ */
+export function decideBug(board, { id, decision, proposal, alternative, at }) {
+  const next = normalizeBoard(structuredClone(board))
+  const row = next.reports[id]
+  need(row?.kind === 'bug' && row.state === 'bug_to_person',
+    `report ${id} is not a bug report waiting for the client`)
+  need(Object.hasOwn(BUG_DECISIONS, decision), 'the client finds the behavior fine or has it fixed')
+  const { proposals } = row.envelope.body
+  const fix = decision === 'fix' ? fixChoice(proposals, proposal, alternative) : {}
+  Object.assign(row, { state: BUG_DECISIONS[decision], decided_at: at, ...fix })
+  return next
+}
+
+/** The fix the client chose: a proposal by number, or its own alternative. */
+function fixChoice(proposals, proposal, alternative) {
+  need((proposal === undefined) !== (alternative === undefined),
+    'a fix picks one proposal by number or gives an alternative')
+  if (alternative !== undefined) {
+    need(filled(alternative), 'an alternative says what to do')
+    return { fix: String(alternative).trim(), alternative: true }
+  }
+  need(Number.isInteger(proposal) && proposal >= 1 && proposal <= proposals.length,
+    `pick a proposal from 1 to ${proposals.length}`)
+  return { fix: proposals[proposal - 1], proposal }
+}
+
+/**
+ * The team lead makes the issue from the BA's report and the client's
+ * choice: a backlog goal of kind bug carrying the issue draft, which the
+ * lead files in the project's repo; the board files nothing. The optional
+ * `assign` (the seat hash, its job and a description) goes through assignWork, which
+ * refuses a seat holding OPEN_WORK_LIMIT open pieces. Returns { board, work }.
+ */
+export function bugIssue(board, { id, lead, goal, title, assign, at, mint }) {
+  const next = normalizeBoard(structuredClone(board))
+  const row = next.reports[id]
+  need(row?.kind === 'bug' && row.state === 'bug_fix',
+    `report ${id} has no fix to make an issue of`)
+  const owner = allocatedTeams(next, row.sprint).find(t => t.team === row.team)?.lead
+  need(lead === owner, `only ${row.team}'s team lead (${owner}) makes the issue`)
+  need(isGoalId(goal) && next.goals[goal] === undefined, `${goal} is not a new goal`)
+  const body = row.envelope.body
+  const draft = bugIssueDraft(body, row.fix, title)
+  const added = addGoal(next, { goal, title: draft.title, at })
+  Object.assign(added.goals[goal], {
+    kind: 'bug', from_report: id, client_feedback: row.fix, acceptance: [body.expected],
+    issue_draft: draft, ...(body.goal === undefined ? {} : { bug_of: body.goal }),
+  })
+  Object.assign(added.reports[id], { state: 'issue_drafted', bug_goal: goal, issue_at: at })
+  if (assign === undefined) return { board: added }
+  const { id: work, board: given } = assignWork(added, {
+    ...assign, goal, team: row.team, by: lead, at, mint,
+  })
+  return { board: given, work }
+}
+
+/** The issue text the team lead files: the report and the client's chosen fix. */
+function bugIssueDraft(body, fix, title) {
+  const lines = [
+    body.explanation, '', `Now: ${body.behavior}`, `Expected: ${body.expected}`,
+    `Fix (client's choice): ${fix}`, '', 'Plan:', body.plan, '',
+    'Files:', ...body.files.map(f => `- ${f}`), 'Lines:', ...body.lines.map(l => `- ${l}`),
+    '', 'Snippets:', ...body.snippets.map(c => ['```', c, '```'].join('\n')),
+  ]
+  return { title: filled(title) ? String(title).trim() : body.title, body: lines.join('\n') }
 }

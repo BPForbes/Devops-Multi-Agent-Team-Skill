@@ -114,3 +114,24 @@ test('merged needs the pushed tree on the base, then deletes the side branches',
   ].join('\n'))
   assert.equal(git(['branch', '--list', side]), '')
 })
+
+test('the client answers a bug report: fine, a proposal, or its own alternative', () => {
+  const board = waiting()
+  board.reports['report-b00b00'] = {
+    kind: 'bug', state: 'bug_to_person',
+    envelope: { body: { proposals: ['guard in parse()', 'default object'] } },
+  }
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chain-'))
+  boardAt(root, board)
+  const bug = (...args) => run(['bug', 'report-b00b00', ...args, '--dest', root])
+  assert.throws(() => bug('maybe'), e => /fine or has it fixed/.test(e.stderr))
+  assert.equal(bug('fix', '--proposal', '2'), 'Bug report report-b00b00: fix, default object')
+  assert.throws(() => bug('fine'), e => /not a bug report waiting for the client/.test(e.stderr))
+  const alt = decide(board, {
+    command: 'bug', ids: ['report-b00b00'], words: ['fix'], extra: { alternative: 'Warn' }, at: AT,
+  })
+  assert.equal(alt.board.reports['report-b00b00'].fix, 'Warn')
+  const raise = who => decide(waiting(), { command: 'raise', goal: GOAL, reason: 'x', who, at: AT })
+  assert.throws(() => raise({}), /types merge-ok, merge-deny, done or raise/)
+  assert.throws(() => raise({ seat: 'agent-0a0a0a' }), /not waiting for the BA's first signature/)
+})

@@ -449,7 +449,14 @@ export function allowSameTeam(board, { goal, team, reason, at }) {
 // Judging jobs may not be given to a team that authored the goal.
 const JUDGING_JOBS = new Set(['reviewer', 'qa', 'security'])
 
-/** Gives a seat a piece of work on a goal, with what it has to do. */
+/** Open pieces of work (assigned or accepted) a seat may hold at once. */
+export const OPEN_WORK_LIMIT = 3
+
+/**
+ * Gives a seat a piece of work on a goal, with what it has to do. A seat
+ * already holding OPEN_WORK_LIMIT open pieces is not given more: the lead
+ * picks a seat with room or leaves the goal in the backlog.
+ */
 export function assignWork(board, { goal, job, agent, team, description, by, at, mint }) {
   need(board.goals[goal] !== undefined, `goal is not on the board: ${goal}`)
   need(isJob(job), `not a job: ${job}`)
@@ -460,6 +467,9 @@ export function assignWork(board, { goal, job, agent, team, description, by, at,
     by === 'orchestration' || isAgentId(by),
     `assigned_by must be orchestration or an agent hash: ${by}`,
   )
+  const open = workInbox(board, agent).length
+  need(open < OPEN_WORK_LIMIT,
+    `${agent} holds ${open} open pieces of work (limit ${OPEN_WORK_LIMIT}); do not overwork it`)
   if (JUDGING_JOBS.has(job) && !isExempt(board, goal, { team, agent, job })) {
     const authors = normalizeBoard(board).goals[goal].authors ?? []
     need(!authors.includes(team), `team ${team} authored this goal and cannot judge it`)

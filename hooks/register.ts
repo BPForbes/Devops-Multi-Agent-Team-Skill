@@ -21,7 +21,7 @@ const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
 // person may run them.
 const HUMAN_ONLY_WORDS = new Set([
   'on', 'off', 'enable', 'disable', 'skill', 'skills',
-  'push-ok', 'push-reset', 'gates', 'allow-branch', 'comments', 'monitor',
+  'push-ok', 'push-reset', 'gates', 'allow-branch', 'comments', 'monitor', 'bug',
 ])
 const ACTIVE_REF = { plugin: 'devops-multi-agent-team', key: 'active' } as const
 const SETTINGS_SCRIPT = 'scripts/devops-claude-settings.mjs'
@@ -63,7 +63,7 @@ function personOnlyText(word: string): string {
 // The Done chain's words. A seat types them for its own step: the hook runs
 // them on the board as the seat bound in DEVOPS_SEAT and grants nothing.
 // Typed by the person (composer origin), they answer the merge report.
-const CHAIN_WORDS = new Set(['merge-ok', 'merge-deny', 'done'])
+const CHAIN_WORDS = new Set(['merge-ok', 'merge-deny', 'done', 'raise'])
 const CHAIN_SCRIPT = 'devops-chain.mjs'
 const PUSH_REPORTS = { plugin: 'devops-multi-agent-team', key: 'pushReports' } as const
 
@@ -129,11 +129,30 @@ async function consumeGrant($: EngineInterface): Promise<void> {
 /** A seat's typed chain word: its own step on the board, never a push grant. */
 async function seatChainWord($: EngineInterface, word: string, rest: string): Promise<string> {
   const [goal = '', ...words] = shellWords(rest)
-  const reason = word === 'merge-deny' && !words.includes('--reason')
+  const says = word === 'merge-deny' || word === 'raise'
+  const reason = says && !words.includes('--reason')
     ? ['--reason', words.join(' ')] : words
   const ran = await runPluginScript($, CHAIN_SCRIPT, [word, goal, ...reason])
   return `Seat ${word} (routed to the board as DEVOPS_SEAT; no push is granted): `
     + (ran.out ?? 'the board could not be updated')
+}
+
+const BUG_USAGE = 'Usage: /devops bug REPORT fine | fix N | fix YOUR ALTERNATIVE'
+
+/**
+ * The person's answer to the BA's bug report: the behavior is fine, or fix
+ * it with proposal N or with an alternative in the person's own words.
+ */
+async function bugAnswer($: EngineInterface, rest: string): Promise<string> {
+  const { ids, words } = reportIds(rest)
+  const [decision, ...how] = words
+  if (ids.length !== 1 || (decision !== 'fine' && decision !== 'fix')) return BUG_USAGE
+  if (decision === 'fix' && how.length === 0) return BUG_USAGE
+  const picked = /^[0-9]+$/.test(how.join(' ')) ? ['--proposal', how[0]]
+    : ['--alternative', how.join(' ')]
+  const args = ['bug', ids[0], decision, ...(decision === 'fix' ? picked : [])]
+  const ran = await runPluginScript($, CHAIN_SCRIPT, args)
+  return ran.out ?? 'the board could not be updated'
 }
 
 function isHuman(e: unknown): boolean {
@@ -684,6 +703,7 @@ export const register: Register = on => {
           + 'Business Analyst with your reason.' + (ran.out === undefined ? '' : `\n${ran.out}`),
       }
     }
+    if (word === 'bug') return { text: await bugAnswer($, rest) }
     if (word === 'push-reset') {
       await $.state.set(PUSH_KEY, false)
       await $.state.set(PUSH_REPORTS, [])

@@ -720,7 +720,10 @@ test('a seat typing a chain word runs its own step and grants nothing', async ($
   const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const seat = { command: 'devops', origin: { kind: 'agent' } }
-  const typed = ['merge-ok goal-111111', 'merge-deny goal-111111 no test', 'done goal-111111']
+  const typed = [
+    'merge-ok goal-111111', 'merge-deny goal-111111 no test', 'done goal-111111',
+    'raise goal-111111 found in development',
+  ]
   for (const args of typed) {
     const ran = await $.command.run({ ...seat, args })
     expect(ran.text).toContain('no push is granted')
@@ -728,6 +731,25 @@ test('a seat typing a chain word runs its own step and grants nothing', async ($
   expect(state.get('pushAuthorized')).toBe(undefined)
   expect(chainRuns(runs)).toEqual([
     ['merge-ok', 'goal-111111'], ['merge-deny', 'goal-111111', '--reason', 'no test'],
-    ['done', 'goal-111111'],
+    ['done', 'goal-111111'], ['raise', 'goal-111111', '--reason', 'found in development'],
+  ])
+})
+
+test('the person answers a bug report; a seat may not', async ($, on) => {
+  const runs: string[][] = []
+  engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const seatAsks = { command: 'devops', origin: { kind: 'agent' }, args: `bug ${REPORT} fine` }
+  const seat = await $.command.run(seatAsks)
+  expect(seat.text).toContain('only the person can run it')
+  const bare = await $.command.run({ ...PERSON, args: `bug ${REPORT} fix` })
+  expect(bare.text).toContain('Usage: /devops bug')
+  const answers = [`bug ${REPORT} fine`, `bug ${REPORT} fix 2`, `bug ${REPORT} fix warn instead`]
+  for (const args of answers) {
+    await $.command.run({ ...PERSON, args })
+  }
+  expect(chainRuns(runs)).toEqual([
+    ['bug', REPORT, 'fine'], ['bug', REPORT, 'fix', '--proposal', '2'],
+    ['bug', REPORT, 'fix', '--alternative', 'warn instead'],
   ])
 })

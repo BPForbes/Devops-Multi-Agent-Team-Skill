@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { emptyBoard } from './devops-board.mjs'
+import { validateEnvelope } from './devops-envelopes.mjs'
 import {
   groupStreams, parallelPlan, planAllocation, spinUp, streamPoints,
 } from './devops-allocation.mjs'
@@ -110,6 +111,16 @@ test('spin-up opens the sprint, backlogs each stream, and hands each lead its pl
   assert.deepEqual(by('review_goals'), [[], ['goal-111111'], [], []])
   assert.deepEqual(by('qa_goals'), [[], [], ['goal-111111'], []])
   assert.deepEqual(by('security_goals'), [[], [], [], ['goal-111111']])
+  assert.equal(up.setup.length, 4, 'each team lead gets a setup payload')
+  const [setup] = up.setup
+  assert.deepEqual([setup.kind, setup.to, setup.body.settings],
+    ['seat.setup', 'agent-a1a1a1', { DEVOPS_SEAT: 'agent-a1a1a1', DEVOPS_TEAM: 'team-a1a1a1' }])
+  assert.equal(validateEnvelope(setup).ok, true)
+  const versions = { node: '22.0.0', plugin: '0.1.0' }
+  const pinned = spinUp(emptyBoard(), plan, {
+    name: 'S', goals: { parser: 'goal-111111' }, teams, at: AT, versions,
+  })
+  assert.deepEqual(pinned.setup[0].body.versions, versions)
   const missing = { name: 'S', goals: {}, teams, at: AT }
   assert.throws(() => spinUp(emptyBoard(), plan, missing), /needs a goal hash/)
 })

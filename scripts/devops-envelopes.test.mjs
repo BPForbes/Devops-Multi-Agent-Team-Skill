@@ -73,6 +73,27 @@ const VALID = {
     key_id: 'key-3c9e41',
     active_tasks: [{ goal: 'goal-7f0a12', item: 'item-3c9e41', job: 'coder', role: 'primary' }],
   }),
+  'seat.setup': {
+    v: 1, kind: 'seat.setup', id: 'setup-1a2b3c', to: 'agent-0a0a0a',
+    body: {
+      team: 'team-1a2b3c', lead: 'agent-0a0a0a',
+      settings: { DEVOPS_SEAT: 'agent-0a0a0a', DEVOPS_TEAM: 'team-1a2b3c' },
+      member_settings: { DEVOPS_SEAT: '<your agent hash>', DEVOPS_TEAM: 'team-1a2b3c' },
+      versions: { node: '22.11.0', plugin: '0.1.0', mcp_server: '0.1.0', schema: '1' },
+      instructions: ['Set DEVOPS_SEAT and DEVOPS_TEAM, then start the session'],
+    },
+  },
+  'bug.report': {
+    v: 1, kind: 'bug.report', id: 'report-3c9e41', from: 'agent-0b0b0b',
+    body: {
+      team: 'team-1a2b3c', meeting: 'meeting-3c9e41', found_by: 'agent-0a0a0a',
+      goal: 'goal-7f0a12', title: 'Empty config crashes', behavior: 'parse() throws on {}',
+      expected: 'defaults load', issue: 'parse() throws', reason: 'new projects start empty',
+      proposals: ['guard in parse()'], files: ['src/parse.js'], lines: ['src/parse.js:12'],
+      snippets: ['if (!cfg.keys) throw'], explanation: 'An empty config crashes the app.',
+      plan: 'Guard, then a test', at: '2026-11-20T10:00:00Z',
+    },
+  },
   'handoff.triage': {
     kind: 'triage', item: 'item-3c9e41', goal: 'goal-7f0a12', signed_by: 'agent-0c0c0c',
     from: { job: 'qa', agent: 'agent-0c0c0c', team: 'team-4d5e6f' },
