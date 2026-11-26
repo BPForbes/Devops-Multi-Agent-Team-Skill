@@ -236,3 +236,14 @@ test('no sentence is in the code: the wording and word lists come from mindmap-t
   fs.writeFileSync(path.join(dir, '.devops/mindmap/text.json'), JSON.stringify({ text: { noSuchKey: 'x' }, words: { genericNames: 'run' } }))
   assert.throws(() => loadText(dir), /unknown text key "noSuchKey".*words\.genericNames has the wrong type/)
 })
+
+test('the map skips .claude, so worktrees kept under it are not indexed', () => {
+  const dir = project({
+    'src/app.ts': 'export function appStart() {\n  return 1\n}\n',
+    '.claude/worktrees/seat-1/src/copy.ts': 'export function copyOfStart() {\n  return 2\n}\n',
+  })
+  const map = buildMindMap(dir).map
+  const indexed = [...Object.keys(map.files), ...Object.keys(map.docs)]
+  assert.ok(indexed.some(rel => rel === 'src/app.ts'))
+  assert.equal(indexed.filter(rel => rel.startsWith('.claude/')).length, 0)
+})

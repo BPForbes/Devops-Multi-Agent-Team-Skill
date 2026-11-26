@@ -17,10 +17,18 @@ export function readMembers(file) {
 
 export const LEAD_ROLE = 'manager'
 export const MEMBER_ROLES = Object.freeze([
-  'assignee', 'reviewer', 'qa', 'security', 'manager', 'server', 'human',
+  'assignee', 'reviewer', 'qa', 'security', 'manager', 'server', 'human', 'coder', 'researcher',
 ])
+/** Role names that move items as another role: a coder acts as the assignee. */
+const ROLE_AS = Object.freeze({ coder: 'assignee' })
 
-const roleOf = (board, caller) => board.members.find(m => m.agent === caller)?.role ?? null
+/** The roles one member holds: `roles`, or the single `role` of a board written before roles were lists. */
+const rolesFrom = member => (Array.isArray(member.roles) ? member.roles : [member.role])
+  .filter(Boolean)
+const rolesOf = (board, caller) => {
+  const member = board.members.find(m => m.agent === caller)
+  return member === undefined ? [] : rolesFrom(member)
+}
 const notOn = (board, caller) => ({ ok: false, reason: `${caller} is not on ${board.team}` })
 
 /** A refused action: its reason, and the record the board keeps for audit. */
@@ -28,20 +36,28 @@ function refused(caller, action, reason, detail = {}) {
   return { ok: false, reason, refusal: { action, by: caller, reason, ...detail } }
 }
 
-/** Opens a team's board. The members must name a lead (a manager). */
+/**
+ * Opens a team's board. The members must name a lead (a manager). A member may
+ * hold several roles (`roles: ['manager', 'coder', 'researcher']`), so a lead
+ * can also work as a coder or researcher; `role` alone still works.
+ */
 export function openBoard({ team, members }) {
-  if (!Array.isArray(members) || !members.some(m => m.role === LEAD_ROLE)) {
+  if (!Array.isArray(members) || !members.some(m => rolesFrom(m).includes(LEAD_ROLE))) {
     return { ok: false, reason: 'a team needs a manager member, its lead' }
   }
-  const known = members.every(m => typeof m.agent === 'string' && MEMBER_ROLES.includes(m.role))
-  if (!known) return { ok: false, reason: 'every member needs an agent and a known role' }
+  const known = members.every(m => typeof m.agent === 'string'
+    && rolesFrom(m).length > 0
+    && rolesFrom(m).every(role => MEMBER_ROLES.includes(role)))
+  if (!known) {
+    return { ok: false, reason: 'every member needs an agent and at least one known role' }
+  }
   const agents = members.map(m => m.agent)
   if (new Set(agents).size !== agents.length) {
     return { ok: false, reason: 'a member is listed twice' }
   }
   const board = {
     team,
-    members: members.map(({ agent, role }) => ({ agent, role })),
+    members: members.map(m => ({ agent: m.agent, roles: [...new Set(rolesFrom(m))] })),
     items: [],
     refusals: [],
   }
@@ -55,7 +71,7 @@ export function recordRefusal(board, refusal) {
 
 /** Adds a work item to this team's board. The caller must be a member. */
 export function teamIntake(board, caller, body) {
-  if (roleOf(board, caller) === null) return notOn(board, caller)
+  if (rolesOf(board, caller).length === 0) return notOn(board, caller)
   const admitted = admit(body)
   if (!admitted.ok) return refused(caller, 'intake', admitted.errors.join('; '))
   const { item } = admitted
@@ -66,15 +82,22 @@ export function teamIntake(board, caller, body) {
   return { ok: true, board: { ...board, items: [...board.items, placed] }, item: placed.id }
 }
 
-/** Moves an item as the caller's role. Refusals are returned with their reason. */
+/**
+ * Moves an item as one of the caller's roles: the first held role the move is
+ * allowed for. Refusals are returned with their reason.
+ */
 export function teamMove(board, caller, { item, to }) {
-  const role = roleOf(board, caller)
-  if (role === null) return notOn(board, caller)
+  const roles = rolesOf(board, caller)
+  if (roles.length === 0) return notOn(board, caller)
   const current = board.items.find(i => i.id === item)
   if (current === undefined) {
     return refused(caller, 'unknown-item', `${item} is not on ${board.team}`, { item })
   }
-  const moved = transition(current, to, role)
+  let moved = { ok: false, reason: `${caller} may not move ${item} to ${to}` }
+  for (const role of roles) {
+    moved = transition(current, to, ROLE_AS[role] ?? role)
+    if (moved.ok) break
+  }
   if (!moved.ok) return refused(caller, 'move', moved.reason, { item, to })
   const items = board.items.map(i => (i.id === item ? moved.item : i))
   return { ok: true, board: { ...board, items } }
@@ -82,8 +105,9 @@ export function teamMove(board, caller, { item, to }) {
 
 /** Records security's sign-off on an item in review. Only a security member may. */
 export function teamSignOff(board, caller, { item }) {
-  const role = roleOf(board, caller)
-  if (role === null) return notOn(board, caller)
+  const roles = rolesOf(board, caller)
+  if (roles.length === 0) return notOn(board, caller)
+  const role = roles.includes('security') ? 'security' : roles[0]
   const current = board.items.find(i => i.id === item)
   if (current === undefined) {
     return refused(caller, 'unknown-item', `${item} is not on ${board.team}`, { item })
@@ -106,7 +130,7 @@ const ATTENTION = Object.freeze({
  * lead may read it. Returns { ok, attention } or { ok: false, reason }.
  */
 export function needsAttention(board, caller) {
-  if (roleOf(board, caller) !== LEAD_ROLE) {
+  if (!rolesOf(board, caller).includes(LEAD_ROLE)) {
     return { ok: false, reason: `only the ${board.team} lead may read needs-attention` }
   }
   const attention = []

@@ -114,7 +114,7 @@
     "errTextSection": "\"{section}\" must be an object",
     "errTextUnknownKey": "unknown {section} key \"{key}\"",
     "errTextValue": "{section}.{key} has the wrong type or size",
-    "paramFull": "Also return the whole map as data (large; prefer mindmap_query)."
+    "paramFull": "Return the path of the saved full map file instead of the map itself (the reply stays small; read that file or prefer mindmap_query)."
   },
   "words": {
     "notDocumentationContains": [

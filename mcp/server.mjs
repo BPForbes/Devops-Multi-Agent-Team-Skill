@@ -50,6 +50,14 @@ const ID = /^[a-z][a-z0-9-]*$/
 
 /** Mind map wording lives in mindmap-text.json; tool lists are sent before a project is known, so the package defaults apply here. */
 const MINDMAP_TEXT = loadText()
+/** The longest text a mind-map reply carries inline; the saved files hold the rest. */
+const MAX_REPLY_CHARS = 6000
+/** Cuts long text to the reply limit and says where the rest is. */
+const capReply = (text = '') => {
+  if (text.length <= MAX_REPLY_CHARS) return text
+  const more = text.length - MAX_REPLY_CHARS
+  return `${text.slice(0, MAX_REPLY_CHARS)}\n… (${more} more characters in .devops/mindmap/)`
+}
 
 const SETUP_SCRIPT = fs.readFileSync(path.join(PACKAGE_ROOT, 'mcp', 'setup-script.md'), 'utf8').trim()
 
@@ -444,7 +452,18 @@ const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     run: args => {
       const result = buildMindMap(projectDir(args), { roots: allowedRoots(), save: optionalBool(args, 'save', false) })
-      return { dest: result.dest, counts: result.map.counts, saved: result.saved ?? null, overview: result.overview, summary: result.summary, ...(optionalBool(args, 'full', false) ? { map: result.map } : {}) }
+      const full = optionalBool(args, 'full', false)
+      return {
+        dest: result.dest,
+        counts: result.map.counts,
+        saved: result.saved ?? null,
+        overview: capReply(result.overview),
+        summary: capReply(result.summary),
+        ...(full ? {
+          mapFile: result.saved?.[0] ?? null,
+          note: 'the full map is in the saved file; save=true writes it',
+        } : {}),
+      }
     },
   },
   {
@@ -1474,8 +1493,17 @@ const TOOLS = [
           type: 'array',
           items: {
             type: 'object',
-            properties: { agent: { type: 'string' }, role: { type: 'string' } },
-            required: ['agent', 'role'],
+            properties: {
+              agent: { type: 'string' },
+              role: { type: 'string', description: 'One role, for example manager or assignee.' },
+              roles: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Every role the member holds, for example ["manager", "coder"]. '
+                + 'Use this for a lead who also works as a coder or researcher.',
+              },
+            },
+            required: ['agent'],
             additionalProperties: false,
           },
         },
@@ -1488,7 +1516,7 @@ const TOOLS = [
       if (current !== null) throw new Error(`${args.team} already has a board`)
       const opened = openBoard({ team: args.team, members: args.members })
       if (!opened.ok) throw new Error(opened.reason)
-      const lead = opened.board.members.find(m => m.role === 'manager')
+      const lead = opened.board.members.find(m => m.roles.includes('manager'))
       if (lead.agent !== args.caller) throw new Error('only the lead may open the board')
       return { board: opened.board, team: args.team, members: opened.board.members }
     }),
