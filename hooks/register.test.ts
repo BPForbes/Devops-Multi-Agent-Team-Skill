@@ -807,3 +807,39 @@ test('the person decides held work on a load report; a seat may not', async ($, 
     ['load', REPORT, 'approve'], ['load', REPORT, 'decline', '--reason', 'parser first'],
   ])
 })
+
+/** Git output for a session opened above its repository: /work is not one, /work/repo is. */
+const ABOVE_REPO = {
+  '-C /work rev-parse --show-toplevel': undefined,
+  '-C /work/repo rev-parse --show-toplevel': '/work/repo',
+}
+
+test('a session above its repo grants and pushes from the shell\'s checkout', async ($, on) => {
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, git: ABOVE_REPO, cwd: '/work/repo' })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const granted = await $.command.run({ ...PERSON, args: 'push-ok' })
+  expect(granted.text).not.toContain('cannot be read')
+  expect(state.get('pushAuthorized')).toBe(TREE)
+  const pushed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(pushed.deny).toBeUndefined()
+  expect(state.get('pushAuthorized')).toBe(false)
+})
+
+test('with no checkout under the root, the refusal says to cd into it', async ($, on) => {
+  const git = { ...ABOVE_REPO, '-C /elsewhere rev-parse --show-toplevel': '/elsewhere' }
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, git, cwd: '/elsewhere' })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const granted = await $.command.run({ ...PERSON, args: 'push-ok' })
+  expect(granted.text).toContain('cd into the repository')
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(refused.deny).toContain('cd into the repository')
+})
+
+test('a $ expansion near git is refused for the expansion, not as a push', async ($, on) => {
+  engine(on, PASS_NOTE, { security: CLEAR_NOTE })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git status; echo "exit=$?"' })
+  expect(refused.deny).toContain('expansion')
+  expect(refused.deny).not.toContain('run the push as a command of its own')
+})

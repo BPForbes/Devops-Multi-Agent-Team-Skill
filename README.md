@@ -371,7 +371,11 @@ Limits, stated plainly:
   session's checkout. A chain (`git commit && git push`, `&`, `{ }`), a wrapper
   (`timeout`, `sudo`, `bash -c`), a prefix, quoting, `-C`, `--git-dir`, `-c`, an
   alias, or a shell left in another checkout by an earlier `cd` is refused,
-  because the check reads `HEAD` before the command runs. A git alias whose
+  because the check reads `HEAD` before the command runs. The session's
+  checkout is the repository holding the session root; when the session was
+  opened above its repositories (the root is not in one), it is the repository
+  the shell is in, if that lies under the root. `/devops push-ok` reads the
+  tree there too, so `cd` into the repository before granting. A git alias whose
   body pushes or starts with `!`, directly or through another alias, is
   refused in any command, and so are `push.followTags`,
   `push.recurseSubmodules` and `remote.<name>.mirror`. A git command with a
