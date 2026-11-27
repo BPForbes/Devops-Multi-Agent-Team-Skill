@@ -47,6 +47,7 @@
     "scripts/devops-ghas.mjs",
     "scripts/devops-config.mjs",
     "scripts/devops-claude-settings.mjs",
+    "scripts/devops-catalog.mjs",
     "scripts/devops-formal.mjs",
     "scripts/devops-lint.mjs",
     "scripts/devops-lint-rules.mjs",
