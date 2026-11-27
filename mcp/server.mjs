@@ -22,13 +22,20 @@ import { lintCheck, lintCommands } from '../scripts/devops-lint.mjs'
 import { changeSetting, getSetting } from '../scripts/devops-config.mjs'
 import { ghasPlan } from '../scripts/devops-ghas.mjs'
 import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, parseStory } from '../scripts/devops-stories.mjs'
-import { buildMindMap, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree } from '../scripts/devops-mindmap.mjs'
+import {
+  buildMindMap, loadSaved, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus,
+  mindMapTree,
+} from '../scripts/devops-mindmap.mjs'
+import {
+  CATALOG_FILE, catalogEnvelope, catalogInbox, catalogIndex, decideRequest, emptyLedger,
+  entryFor, grant, moduleByHash, pendingRequests, pull, release, requestModule, sliceFor,
+} from '../scripts/devops-catalog.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
 import {
   acceptWork, allowSameTeam, ackHandoff, addGoal, assignWork, blameFor, closeHandoff,
   completeWork, createSprint, emptyBoard, GOAL_STATES, inboxFor, markThreadRead, moveGoal,
   normalizeBoard, openThread, replyThread, resolveThread, routeHandoff, sendHandoff, sprintView,
-  threadsFor, unreadThreads, workInbox, backlogView, BOARD_FILE, MAX_SPRINT_WEEKS,
+  threadsFor, unreadThreads, workInbox, backlogView, BOARD_FILE, MAX_SPRINT_WEEKS, mintId,
 } from '../scripts/devops-board.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 import { isTeamId } from '../scripts/devops-ids.mjs'
@@ -39,7 +46,7 @@ import {
   raiseToAnalyst, recordIssue, reportsFor, scheduleMeeting, teamSchedule,
 } from '../scripts/devops-scrum.mjs'
 import {
-  TEAM_DIR, needsAttention, openBoard, readMembers, recordRefusal, teamIntake, teamMove,
+  TEAM_DIR, isLead, needsAttention, openBoard, readMembers, recordRefusal, teamIntake, teamMove,
   teamSignOff,
 } from '../scripts/devops-teams.mjs'
 
@@ -256,6 +263,89 @@ function boardChange(args, change) {
     return board
   }, UNFENCED)
   return result
+}
+
+/** The project's mind map: the saved one, or one built now when none is saved. */
+function currentMap(args) {
+  const dir = projectDir(args)
+  return loadSaved(dir) ?? buildMindMap(dir, { roots: allowedRoots() }).map
+}
+
+function readLedger(args) {
+  try {
+    return JSON.parse(fs.readFileSync(boardFile(args, CATALOG_FILE), 'utf8'))
+  } catch (error) {
+    if (error.code === 'ENOENT') return emptyLedger()
+    throw error
+  }
+}
+
+/**
+ * Applies one change to the catalog ledger under its lock. Each change gets
+ * the next tick, which the envelopes it sends carry. `change` returns
+ * { ledger, ...result }.
+ */
+function ledgerChange(args, change) {
+  let result
+  updateJson(boardFile(args, CATALOG_FILE), emptyLedger(), current => {
+    const tick = (current.tick ?? 0) + 1
+    const { ledger, ...rest } = change(current, tick)
+    result = rest
+    return { ...ledger, tick }
+  }, UNFENCED)
+  return result
+}
+
+const mintFresh = prefix => mintId(prefix, {})
+
+/** The goal a catalog is for, as the BA wrote it on the board: the client's vision. */
+function goalOf(board, goal) {
+  return { id: goal, title: board.goals[goal]?.title ?? goal }
+}
+
+/** Puts one catalog envelope in the seat's inbox and records what it holds. */
+function deliver(args, { work, row, slice }) {
+  const goal = goalOf(readBoard(args), row.goal)
+  return ledgerChange(args, (ledger, tick) => {
+    const envelope = catalogEnvelope({
+      id: mintFresh('catalog'), tick, work, agent: row.agent, goal, slice,
+    })
+    return {
+      ledger: grant(ledger, { agent: row.agent, work, envelope, at: now() }),
+      catalog: envelope.id,
+      modules: slice.entries.map(entry => entry.module),
+      unknown: slice.unknown,
+    }
+  })
+}
+
+/** The work row for a work id, or an error naming it. */
+function workRow(args, work) {
+  const row = readBoard(args).assignments[work]
+  if (row === undefined) throw new Error(`unknown work: ${work}`)
+  return row
+}
+
+/** Gives a seat one more module for its work, as a catalog of that module alone. */
+function deliverModule(args, { work, module }) {
+  const row = workRow(args, work)
+  const entry = entryFor(currentMap(args), module, row.job, 0)
+  return deliver(args, { work, row, slice: { job: row.job, unknown: [], entries: [entry] } })
+}
+
+const scopeSchema = {
+  type: 'object',
+  description: 'What the work touches, to build its context catalog from the mind map.',
+  properties: {
+    modules: { type: 'array', items: { type: 'string' } },
+    files: { type: 'array', items: { type: 'string' } },
+    symbols: { type: 'array', items: { type: 'string' } },
+  },
+  additionalProperties: false,
+}
+const MAX_CATALOG_DEPTH = 3
+const seatModuleProps = {
+  dest, agent: { type: 'string' }, work: { type: 'string' }, module: { type: 'string' },
 }
 
 const TOOLS = [
@@ -1439,6 +1529,11 @@ const TOOLS = [
         agent: { type: 'string' },
         team: { type: 'string' },
         description: { type: 'string' },
+        scope: scopeSchema,
+        depth: {
+          type: 'integer', minimum: 0, maximum: MAX_CATALOG_DEPTH,
+          description: 'Dependency steps around the scope to include as references (default 1).',
+        },
       },
       required: ['goal', 'job', 'agent', 'team', 'description'],
       additionalProperties: false,
@@ -1446,10 +1541,16 @@ const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => {
       if (BOUND_SEAT) throw new Error('only Orchestration may assign work')
-      return boardChange(args, board => assignWork(board, {
+      const assigned = boardChange(args, board => assignWork(board, {
         goal: args.goal, job: args.job, agent: args.agent, team: args.team,
         description: args.description, by: 'orchestration', at: now(),
       }))
+      if (args.scope === undefined || assigned.held) return assigned
+      const row = workRow(args, assigned.id)
+      const slice = sliceFor(currentMap(args), {
+        job: row.job, scope: args.scope, depth: args.depth,
+      })
+      return { ...assigned, context: deliver(args, { work: assigned.id, row, slice }) }
     },
   },
   {
@@ -1610,9 +1711,147 @@ const TOOLS = [
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     run: args => {
-      const view = needsAttention(readTeam(args), args.caller)
+      const board = readTeam(args)
+      const view = needsAttention(board, args.caller)
       if (!view.ok) throw new Error(view.reason)
-      return view
+      const members = board.members.map(member => member.agent)
+      return { ...view, catalogRequests: pendingRequests(readLedger(args), members) }
+    },
+  },
+  {
+    name: 'catalog_index',
+    description: [
+      'The mind map\'s catalog index: each module\'s record hash, for quick lookup.',
+      'Give `module` for its hash, or `hash` for its module.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { dest, module: { type: 'string' }, hash: { type: 'string' } },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    run: args => {
+      const map = currentMap(args)
+      if (args.hash !== undefined) {
+        return { hash: args.hash, module: moduleByHash(map, args.hash) ?? null }
+      }
+      const index = catalogIndex(map)
+      if (args.module !== undefined) {
+        return { module: args.module, hash: index[args.module] ?? null }
+      }
+      return { generatedAt: map.generatedAt, index }
+    },
+  },
+  {
+    name: 'catalog_release',
+    description: [
+      'A seat is done with a module of its catalog (its code is satisfying).',
+      'The server rehashes the module, saves the whole mind map, tells every other',
+      'seat holding an older hash that an update is available, and drops the entry.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: seatModuleProps,
+      required: ['agent', 'work', 'module'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      const fresh = buildMindMap(projectDir(args), { roots: allowedRoots(), save: true }).map
+      const newHash = fresh.modules[args.module]?.hash
+      if (newHash === undefined) throw new Error(`${args.module} is not in the mind map`)
+      return ledgerChange(args, (ledger, tick) => {
+        const out = release(ledger, {
+          agent: args.agent, work: args.work, module: args.module, newHash, tick, mint: mintFresh,
+        })
+        const { ledger: next, ...result } = out
+        return { ledger: next, ...result, mapSaved: true }
+      })
+    },
+  },
+  {
+    name: 'catalog_pull',
+    description: 'Take the current entry for a module you hold, after an '
+      + '"update is available" notice.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, agent: { type: 'string' }, module: { type: 'string' } },
+      required: ['agent', 'module'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      const held = readLedger(args).holdings?.[args.agent]?.[args.module]
+      if (held === undefined) throw new Error(`${args.agent} does not hold ${args.module}`)
+      const entry = entryFor(currentMap(args), args.module, held.job, held.distance ?? 0)
+      return ledgerChange(args, ledger => ({
+        ledger: pull(ledger, { agent: args.agent, module: args.module, entry, at: now() }),
+        entry,
+      }))
+    },
+  },
+  {
+    name: 'catalog_request',
+    description: [
+      'Ask for a module your work\'s catalog does not include. Granted at once when the',
+      'work already reaches it; otherwise held for your team lead (catalog_decide).',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: seatModuleProps,
+      required: ['agent', 'work', 'module'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      if (currentMap(args).modules[args.module] === undefined) {
+        throw new Error(`${args.module} is not in the mind map`)
+      }
+      const asked = ledgerChange(args, ledger => {
+        const { ledger: next, ...result } = requestModule(ledger, {
+          agent: args.agent, work: args.work, module: args.module, at: now(), mint: mintFresh,
+        })
+        return { ledger: next, ...result }
+      })
+      if (!asked.granted) return asked
+      if (readLedger(args).holdings?.[args.agent]?.[args.module] !== undefined) {
+        return { ...asked, alreadyHeld: true }
+      }
+      return { ...asked, context: deliverModule(args, { work: args.work, module: args.module }) }
+    },
+  },
+  {
+    name: 'catalog_decide',
+    description: [
+      'The team lead decides a held catalog request, keeping the team on course.',
+      'An approved module is delivered to the seat; a refusal needs a reason.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, team: { type: 'string' }, caller: { type: 'string' }, id: { type: 'string' },
+        approve: { type: 'boolean' }, reason: { type: 'string' },
+      },
+      required: ['team', 'caller', 'id', 'approve'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      const board = readTeam(args)
+      if (!isLead(board, args.caller)) throw new Error(`only the ${args.team} lead may decide`)
+      const request = readLedger(args).requests?.[args.id]
+      if (request === undefined) throw new Error(`unknown request: ${args.id}`)
+      if (!board.members.some(member => member.agent === request.agent)) {
+        throw new Error(`${request.agent} is not on ${args.team}`)
+      }
+      ledgerChange(args, ledger => ({
+        ledger: decideRequest(ledger, {
+          id: args.id, lead: args.caller, approve: args.approve, reason: args.reason, at: now(),
+        }),
+      }))
+      if (!args.approve) return { id: args.id, state: 'refused' }
+      const context = deliverModule(args, { work: request.work, module: request.module })
+      return { id: args.id, state: 'approved', context }
     },
   },
 ]
@@ -1720,6 +1959,7 @@ function inboxOf(agent) {
     handoffs: inboxFor(board, agent),
     work: workInbox(board, agent),
     threads: unreadThreads(board, agent),
+    context: catalogInbox(readLedger({}), agent),
   }
 }
 

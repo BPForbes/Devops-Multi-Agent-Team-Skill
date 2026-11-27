@@ -68,7 +68,9 @@ and a description of what it has to do. Only an unbound server
 `assigned_by: "orchestration"` itself. The seat sees its work with
 `devops://work/<agent>`, accepts it with `work_accept`, and reports it done with
 `work_complete`. Only the assigned seat can accept or complete its work, and
-completing requires accepting first.
+completing requires accepting first. Given a `scope` (modules, files or
+symbols), `work_assign` also delivers the seat a context catalog from the mind
+map ([context-catalogs.md](context-catalogs.md)).
 
 A judging job (reviewer, qa, security) cannot go to a team that authored the
 goal, under the same rule as hand-offs.

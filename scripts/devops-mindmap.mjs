@@ -89,6 +89,15 @@ export function loadText(dest) {
 
 const isDoc = rel => DOC_EXTENSIONS.some(ext => rel.toLowerCase().endsWith(ext))
 const hashOf = text => crypto.createHash('sha1').update(text).digest('hex').slice(0, 12)
+
+/**
+ * A module's record hash in the map: built from its files' content hashes, so
+ * it changes when any file of the module changes and only then.
+ */
+export function moduleHash(map, name) {
+  const files = map.modules[name]?.files ?? []
+  return hashOf(files.map(rel => `${rel}:${map.files[rel]?.hash ?? ''}`).sort().join('\n'))
+}
 const tracked = rel => !SECRET_FILE.test(rel) && !IGNORED_PREFIXES.some(prefix => rel.startsWith(prefix))
 
 /**
@@ -301,7 +310,7 @@ function endOf(lines, start, language, indent) {
       if (ch === '{') { depth += 1; opened = true } else if (ch === '}') depth -= 1
     }
     if (opened && depth <= 0) return i + 1
-    if (i === start && !opened && !/(?:[=(,{[:]|=>)\s*$/.test(code.trimEnd())) return start + 1
+    if (i === start && !opened && !/(?:[=(,\x7b[:]|=>)\s*$/.test(code.trimEnd())) return start + 1
   }
   return opened ? lines.length : start + 1
 }
@@ -633,6 +642,7 @@ export function buildMindMap(destInput, { roots, save = false } = {}) {
     for (const target of [...info.links, ...info.mentions]) if (files[target]) (files[target].documentedBy ??= []).push(rel)
   }
   for (const m of Object.values(modules)) m.libraries = [...m.libraries].sort()
+  for (const name of Object.keys(modules)) modules[name].hash = moduleHash({ modules, files }, name)
 
   const testedBy = {}
   for (const [rel, info] of Object.entries(files)) if (info.test) for (const target of info.imports) if (files[target] && !files[target].test) (testedBy[target] ??= []).push(rel)
@@ -1115,7 +1125,8 @@ export function renderSummary(map, overview, graph, T = loadText()) {
   return out.join('\n')
 }
 
-function loadSaved(dest) {
+/** The saved map of the project, or undefined when none is saved in this format. */
+export function loadSaved(dest) {
   try {
     const map = JSON.parse(fs.readFileSync(path.join(dest, MINDMAP_DIR, MAP_FILE), 'utf8'))
     return map.format === FORMAT ? map : undefined

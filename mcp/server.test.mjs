@@ -68,7 +68,11 @@ test('initialize negotiates, lists 34 tools, prompts and resources', async () =>
     for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_overview', 'mindmap_tree', 'mindmap_note', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
     const added = ['lint_check', 'lint_commands', 'config_get', 'config_set']
     for (const name of added) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 74)
+    assert.equal(tools.length, 79)
+    const catalogTools = [
+      'catalog_index', 'catalog_release', 'catalog_pull', 'catalog_request', 'catalog_decide',
+    ]
+    for (const name of catalogTools) assert.ok(tools.includes(name), name)
     const scrum = [
       'allocation_plan', 'board_spin_up', 'meeting_schedule', 'meeting_hold', 'goal_signoff',
       'report_forward', 'goal_merge', 'goal_done', 'report_prepare', 'report_new_approach',
@@ -678,5 +682,101 @@ test('a seat bound to a team hash cannot act under another team', async () => {
   assert.match(foreign.text, /bound to team-a1a1a1; it cannot act for team-b2b2b2/)
   const own = await c.call('goal_merge', { ...merge, team: 'team-a1a1a1' })
   assert.match(own.text, /goal is not on the board/)
+  c.close()
+})
+
+const CATALOG_PROJECT = {
+  'core/util.ts': 'export function slugify(text: string) {\n  return text.toLowerCase()\n}\n',
+  'core/util.test.ts': "import { slugify } from './util'\nslugify('A')\n",
+  'api/routes.ts': "import { slugify } from '../core/util'\n"
+    + "export function routeFor(name: string) {\n  return '/' + slugify(name)\n}\n",
+  'web/page.ts': 'export function pageTitle() {\n  return 1\n}\n',
+}
+const LEAD = 'agent-0c0c0c'
+const CODER = 'agent-0a0a0a'
+const PEER = 'agent-0b0b0b'
+
+const inboxOfSeat = async (c, agent) => JSON.parse(
+  (await c.rpc('resources/read', { uri: `devops://inbox/${agent}` })).result.contents[0].text,
+)
+
+/** Two seats given work on the core module, each delivered a catalog. */
+async function twoSeatsOnCore(c) {
+  await c.call('board_add_goal', { goal: 'goal-3c9e41', title: 'Slugs for every route' })
+  const work = {}
+  for (const agent of [CODER, PEER]) {
+    const assigned = await c.call('work_assign', {
+      goal: 'goal-3c9e41', job: 'coder', agent, team: 'team-1a2b3c',
+      description: 'Make slugs safe', scope: { files: ['core/util.ts'] }, depth: 0,
+    })
+    assert.notEqual(assigned.isError, true, assigned.text)
+    work[agent] = assigned.json().id
+    assert.deepEqual(assigned.json().context.modules, ['core'])
+  }
+  return work
+}
+
+test('assigned work delivers a catalog of the mind map, not the whole map', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  await twoSeatsOnCore(c)
+  const inbox = await inboxOfSeat(c, CODER)
+  const [catalog] = inbox.context.catalogs
+  assert.equal(catalog.kind, 'context.catalog')
+  assert.equal(catalog.body.goal.title, 'Slugs for every route')
+  assert.deepEqual(catalog.body.entries.map(entry => entry.module), ['core'])
+  assert.match(inbox.context.holding.core.hash, /^[0-9a-f]{12}$/)
+  const index = (await c.call('catalog_index')).json().index
+  assert.equal(index.core, inbox.context.holding.core.hash)
+  c.close()
+})
+
+test('a release rehashes, saves the map, tells the other holder, and drops the entry', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  const work = await twoSeatsOnCore(c)
+  const oldHash = (await inboxOfSeat(c, PEER)).context.holding.core.hash
+  fs.appendFileSync(path.join(root, 'core/util.ts'), 'export const MAX_SLUG = 40\n')
+  const released = await c.call('catalog_release', {
+    agent: CODER, work: work[CODER], module: 'core',
+  })
+  assert.notEqual(released.isError, true, released.text)
+  assert.deepEqual(released.json().notified, [PEER])
+  assert.ok(fs.existsSync(path.join(root, '.devops/mindmap/mindmap.json')))
+  assert.equal((await inboxOfSeat(c, CODER)).context.holding.core, undefined)
+  const notice = (await inboxOfSeat(c, PEER)).context.updates[0]
+  assert.equal(notice.body.old_hash, oldHash)
+  assert.notEqual(notice.body.new_hash, oldHash)
+  const pulled = await c.call('catalog_pull', { agent: PEER, module: 'core' })
+  assert.equal(pulled.json().entry.hash, notice.body.new_hash)
+  const after = await inboxOfSeat(c, PEER)
+  assert.deepEqual(after.context.updates, [])
+  assert.equal(after.context.catalogs[0].body.entries[0].hash, notice.body.new_hash)
+  c.close()
+})
+
+test('a module outside the work waits for the lead, who keeps the team on course', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  const work = await twoSeatsOnCore(c)
+  await c.call('team_board_open', {
+    team: 'team-1a2b3c', caller: LEAD,
+    members: [{ agent: LEAD, roles: ['manager'] }, { agent: CODER, roles: ['coder'] }],
+  })
+  const asked = (await c.call('catalog_request', {
+    agent: CODER, work: work[CODER], module: 'web',
+  })).json()
+  assert.equal(asked.granted, false)
+  const view = (await c.call('needs_attention', { team: 'team-1a2b3c', caller: LEAD })).json()
+  assert.equal(view.catalogRequests[0].module, 'web')
+  const byCoder = await c.call('catalog_decide', {
+    team: 'team-1a2b3c', caller: CODER, id: asked.request, approve: true,
+  })
+  assert.equal(byCoder.isError, true)
+  const approved = await c.call('catalog_decide', {
+    team: 'team-1a2b3c', caller: LEAD, id: asked.request, approve: true,
+  })
+  assert.equal(approved.json().state, 'approved')
+  assert.ok((await inboxOfSeat(c, CODER)).context.holding.web)
   c.close()
 })

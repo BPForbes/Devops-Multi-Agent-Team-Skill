@@ -31,6 +31,9 @@ const rolesOf = (board, caller) => {
 }
 const notOn = (board, caller) => ({ ok: false, reason: `${caller} is not on ${board.team}` })
 
+/** Whether a member holds the manager role, the lead's, on a team board. */
+export const isLead = (board, agent) => rolesOf(board, agent).includes(LEAD_ROLE)
+
 /** A refused action: its reason, and the record the board keeps for audit. */
 function refused(caller, action, reason, detail = {}) {
   return { ok: false, reason, refusal: { action, by: caller, reason, ...detail } }
@@ -130,7 +133,7 @@ const ATTENTION = Object.freeze({
  * lead may read it. Returns { ok, attention } or { ok: false, reason }.
  */
 export function needsAttention(board, caller) {
-  if (!rolesOf(board, caller).includes(LEAD_ROLE)) {
+  if (!isLead(board, caller)) {
     return { ok: false, reason: `only the ${board.team} lead may read needs-attention` }
   }
   const attention = []

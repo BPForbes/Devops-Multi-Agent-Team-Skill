@@ -177,7 +177,9 @@ unless asked to save.
 
 The Researcher is the primary user. The other seats work from the brief and use
 the map only for narrow lookups, so the team does not pay for the same scan
-several times.
+several times. Assigned work can also carry a **context catalog**: the slice of
+the map that work needs, delivered to the seat's inbox and given back when done
+([context-catalogs.md](context-catalogs.md)).
 
 | Seat | Uses the map for |
 |------|------------------|
