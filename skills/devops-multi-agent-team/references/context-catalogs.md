@@ -71,6 +71,42 @@ A notified seat calls `catalog_pull` (`agent`, `module`) to take the new entry.
 Its holding moves to the new hash, the entry in its catalog is replaced, and
 the notice is cleared. Pulling is recommended, not forced.
 
+## Final: the Business Analyst's second signature
+
+An item is **final and updated** once the Business Analyst signs it a second
+time (`ba_final`, after QA and the peer and lead steps). `goal_done` on that
+step finalizes it at once; `catalog_finalize` (Orchestration only) does the
+same if that did not happen, and refuses an item that is not final. The
+server:
+
+1. **Updates the whole mind map** and saves it, reusing the saved map.
+2. **Finds what changed** from the virtual git: the files every hand-off of
+   the item carried in its `artifacts` (the side branch's changes), plus the
+   modules its works held.
+3. **Rehashes** those modules and tells every other seat holding one at an
+   older hash that an update is available (`context.update` with the item's
+   `goal`). The map is saved before any notice goes out.
+4. **Drops** the entries the item's own seats held.
+
+The ledger records the item's final module hashes under `finals`. A seat can
+still release one module early with `catalog_release` when it no longer needs
+it.
+
+## The trail: signatures and file updates
+
+`goal_trail` reads an item's progress from the board, not from a second
+record: each hand-off (`coder-to-review`, `review-to-qa`, `qa-to-security`,
+`security-signoff`, send-backs) with its signer and the side branch's commit,
+tree and files, then each Done-chain signature (`peer`, `lead`, `ba`,
+`ba_final`) with its signer, in time order. It lists every file the item
+changed, whether it is final, and once finalized, the module hashes it was
+finalized with.
+
+The changed-file lists do not let a build skip reading files: a build reads
+and hashes every file anyway, which is a small part of its time, and the map
+stays checked against the files on disk instead of against what a hand-off
+reported.
+
 ## Staying on course: the team lead
 
 A seat that needs a module its catalog does not include calls

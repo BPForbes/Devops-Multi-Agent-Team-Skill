@@ -68,9 +68,10 @@ test('initialize negotiates, lists 34 tools, prompts and resources', async () =>
     for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_overview', 'mindmap_tree', 'mindmap_note', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
     const added = ['lint_check', 'lint_commands', 'config_get', 'config_set']
     for (const name of added) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 79)
+    assert.equal(tools.length, 81)
     const catalogTools = [
       'catalog_index', 'catalog_release', 'catalog_pull', 'catalog_request', 'catalog_decide',
+      'catalog_finalize', 'goal_trail',
     ]
     for (const name of catalogTools) assert.ok(tools.includes(name), name)
     const scrum = [
@@ -788,4 +789,66 @@ test('a module outside the work waits for the lead, who keeps the team on course
   assert.equal(approved.json().state, 'approved')
   assert.ok((await inboxOfSeat(c, CODER)).context.holding.web)
   c.close()
+})
+
+const BOARD = path.join('devops-skill', 'thoughts', 'non-final', 'board.json')
+
+/** Adds the coder's side-branch hand-off and the BA's two signatures to the board on disk. */
+function signTwice(root, goal) {
+  const file = path.join(root, BOARD)
+  const board = JSON.parse(fs.readFileSync(file, 'utf8'))
+  board.handoffs['handoff-0000f1'] = {
+    payload: {
+      kind: 'coder-to-review', item: 'item-3c9e41', goal, signed_by: CODER,
+      from: { job: 'coder', agent: CODER, team: 'team-1a2b3c' },
+      to: { job: 'reviewer', agent: 'agent-0e0e0e', team: 'team-2b3c4d' },
+      reason: 'ready for review', blame: null, created: '2026-11-01T00:00:00Z',
+      artifacts: {
+        branch: 'side/core', commit: 'c'.repeat(40), tree: 'd'.repeat(40), files: ['core/util.ts'],
+      },
+    },
+    state: 'done',
+  }
+  board.goals[goal].signoffs = [
+    { step: 'ba', by: 'agent-0d0d0d', at: '2026-11-04T00:00:00Z' },
+    { step: 'ba_final', by: 'agent-0d0d0d', at: '2026-11-05T00:00:00Z' },
+  ]
+  fs.writeFileSync(file, JSON.stringify(board))
+}
+
+test('the BA\'s second signature finalizes the item: map first, then the notice', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  try {
+    await c.call('board_add_goal', { goal: 'goal-3c9e41', title: 'Slugs for every route' })
+    await c.call('board_add_goal', { goal: 'goal-4d5e6f', title: 'Route titles' })
+    for (const [agent, goal] of [[CODER, 'goal-3c9e41'], [PEER, 'goal-4d5e6f']]) {
+      await c.call('work_assign', {
+        goal, job: 'coder', agent, team: 'team-1a2b3c', description: 'Slugs',
+        scope: { modules: ['core'] }, depth: 0,
+      })
+    }
+    const early = await c.call('catalog_finalize', { goal: 'goal-3c9e41' })
+    assert.equal(early.isError, true)
+    assert.match(early.text, /not final/)
+    signTwice(root, 'goal-3c9e41')
+    fs.appendFileSync(path.join(root, 'core/util.ts'), 'export const MAX_SLUG = 40\n')
+    const final = await c.call('catalog_finalize', { goal: 'goal-3c9e41' })
+    assert.notEqual(final.isError, true, final.text)
+    assert.deepEqual(final.json().files, ['core/util.ts'])
+    assert.deepEqual(final.json().notified, { core: [PEER] })
+    const mapFile = path.join(root, '.devops/mindmap/mindmap.json')
+    const saved = JSON.parse(fs.readFileSync(mapFile, 'utf8'))
+    const notice = (await inboxOfSeat(c, PEER)).context.updates[0]
+    assert.equal(notice.body.goal, 'goal-3c9e41')
+    assert.equal(saved.modules.core.hash, notice.body.new_hash)
+    assert.equal((await inboxOfSeat(c, CODER)).context.holding.core, undefined)
+    const trail = (await c.call('goal_trail', { goal: 'goal-3c9e41' })).json()
+    assert.equal(trail.final, true)
+    assert.equal(trail.finalized.modules.core, saved.modules.core.hash)
+    const again = (await c.call('catalog_finalize', { goal: 'goal-3c9e41' })).json()
+    assert.equal(again.alreadyFinal, true)
+  } finally {
+    c.close()
+  }
 })

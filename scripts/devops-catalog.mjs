@@ -148,9 +148,9 @@ export function sliceFor(map, { job, scope, depth = DEFAULT_DEPTH }) {
   return { job, modules, unknown, entries }
 }
 
-/** The empty ledger: holdings by seat, update notices by seat, scope by work, requests by id. */
+/** The empty ledger: holdings and notices by seat, scope by work, requests, finished items. */
 export const emptyLedger = () => ({
-  holdings: {}, notices: {}, works: {}, requests: {}, catalogs: {},
+  holdings: {}, notices: {}, works: {}, requests: {}, catalogs: {}, finals: {},
 })
 
 const normalize = ledger => ({ ...emptyLedger(), ...(ledger ?? {}) })
@@ -184,10 +184,11 @@ export function staleHolders(ledger, module, hash, except) {
 }
 
 /** A context.update envelope: the module changed, and its new entry can be pulled. */
-export function updateEnvelope({ id, tick, module, oldHash, newHash, by }) {
+export function updateEnvelope({ id, tick, module, oldHash, newHash, by, goal }) {
+  const body = { module, old_hash: oldHash, new_hash: newHash, changed_by: by, recommended: true }
   return {
     v: ENVELOPE_VERSION, kind: 'context.update', id, from: SERVER_FROM, sent_tick: tick,
-    body: { module, old_hash: oldHash, new_hash: newHash, changed_by: by, recommended: true },
+    body: goal === undefined ? body : { ...body, goal },
   }
 }
 
@@ -199,14 +200,26 @@ export function catalogEnvelope({ id, tick, work, agent, goal, slice }) {
   }
 }
 
-function notify(next, { module, oldHash, newHash, by, tick, mint }) {
-  const notified = staleHolders(next, module, newHash, by)
+/** Tells each stale holder of a module, with the hash it holds, that an update is available. */
+function notify(next, { module, newHash, by, except, goal, tick, mint }) {
+  const notified = staleHolders(next, module, newHash, except)
   for (const agent of notified) {
+    const oldHash = next.holdings[agent][module].hash
     const kept = (next.notices[agent] ?? []).filter(notice => notice.body.module !== module)
-    const id = mint('update')
-    next.notices[agent] = [...kept, updateEnvelope({ id, tick, module, oldHash, newHash, by })]
+    const update = updateEnvelope({ id: mint('update'), tick, module, oldHash, newHash, by, goal })
+    next.notices[agent] = [...kept, update]
   }
   return notified
+}
+
+/** Drops a seat's holdings for the given works, and catalogs left with nothing held. */
+function dropWorks(next, agent, works) {
+  const held = next.holdings[agent] ?? {}
+  for (const [module, holding] of Object.entries(held)) {
+    if (works.includes(holding.work)) delete held[module]
+  }
+  next.catalogs[agent] = (next.catalogs[agent] ?? [])
+    .filter(({ body }) => body.entries.some(e => held[e.module]?.work === body.work))
 }
 
 /**
@@ -225,12 +238,10 @@ export function release(ledger, { agent, work, module, newHash, tick, mint }) {
   )
   const changed = held.hash !== newHash
   const notified = changed
-    ? notify(next, { module, oldHash: held.hash, newHash, by: agent, tick, mint })
+    ? notify(next, { module, newHash, by: agent, except: agent, tick, mint })
     : []
   delete next.holdings[agent][module]
-  const still = next.holdings[agent]
-  next.catalogs[agent] = (next.catalogs[agent] ?? [])
-    .filter(({ body }) => body.entries.some(e => still[e.module]?.work === body.work))
+  dropWorks(next, agent, [])
   return { ledger: next, changed, oldHash: held.hash, newHash, notified }
 }
 
@@ -299,4 +310,49 @@ export function pendingRequests(ledger, members) {
   return Object.entries(normalize(ledger).requests)
     .filter(([, request]) => request.state === 'pending' && members.includes(request.agent))
     .map(([id, request]) => ({ id, ...request }))
+}
+
+/**
+ * The item's trail from the virtual git and the Done chain, read from the
+ * board: each hand-off with its signer and the side branch's commit, tree and
+ * files, and each chain signature. `files` is every file the hand-offs
+ * changed; `final` is true once the Business Analyst's second signature is on.
+ */
+export function goalTrail(board, goal) {
+  const handoffs = Object.entries(board.handoffs ?? {})
+    .filter(([, h]) => h.payload.goal === goal)
+    .map(([id, h]) => handoffStep(id, h.payload))
+  const signatures = (board.goals?.[goal]?.signoffs ?? [])
+    .map(({ step, by, at, sig }) => ({ step, by, at, sig }))
+  const byTime = (a, b) => String(a.at).localeCompare(String(b.at))
+  const steps = [...handoffs, ...signatures].sort(byTime)
+  const files = uniq(handoffs.flatMap(step => step.files ?? []))
+  const finalBy = signatures.find(sig => sig.step === 'ba_final')?.by
+  return { goal, steps, files, final: finalBy !== undefined, finalBy }
+}
+
+function handoffStep(id, payload) {
+  const { kind, signed_by: by, created: at, item, artifacts } = payload
+  if (artifacts === undefined) return { id, step: kind, by, at, item }
+  const { commit, tree, files } = artifacts
+  return { id, step: kind, by, at, item, commit, tree, files }
+}
+
+/**
+ * An item is final: its work's seats drop what they held for it, every other
+ * seat holding a module the item changed at an older hash is told an update
+ * is available, and the ledger records the item's final hashes. The caller
+ * saves the updated map first, so a seat that pulls finds the new data.
+ */
+export function finalize(ledger, { goal, works, hashes, files, by, tick, mint, at }) {
+  const next = structuredClone(normalize(ledger))
+  need(next.finals[goal] === undefined, `${goal} is already final`)
+  for (const agent of Object.keys(next.holdings)) dropWorks(next, agent, works)
+  const notified = {}
+  for (const [module, newHash] of Object.entries(hashes)) {
+    const told = notify(next, { module, newHash, by, goal, tick, mint })
+    if (told.length > 0) notified[module] = told
+  }
+  next.finals[goal] = { at, by, files, modules: hashes, works }
+  return { ledger: next, notified }
 }

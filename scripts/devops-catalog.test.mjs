@@ -5,8 +5,8 @@ import path from 'node:path'
 import test from 'node:test'
 
 import {
-  catalogEnvelope, catalogIndex, catalogInbox, decideRequest, emptyLedger, grant,
-  moduleByHash, pendingRequests, pull, release, requestModule, resolveScope, sliceFor,
+  catalogEnvelope, catalogIndex, catalogInbox, decideRequest, emptyLedger, finalize, goalTrail,
+  grant, moduleByHash, pendingRequests, pull, release, requestModule, resolveScope, sliceFor,
   traverse, updateEnvelope,
 } from './devops-catalog.mjs'
 import { validateEnvelope } from './devops-envelopes.mjs'
@@ -161,4 +161,62 @@ test('only the seat that holds the work may ask for more of it', () => {
   const ledger = twoHolders(buildMindMap(project()).map)
   const foreign = { agent: OTHER, work: 'work-00000a', module: 'api', at: 't', mint }
   assert.throws(() => requestModule(ledger, foreign))
+})
+
+const COMMIT = 'c'.repeat(40)
+const TREE = 'd'.repeat(40)
+const BA = 'agent-0d0d0d'
+
+/** A board where the coder handed core/util.ts to review, and the BA signed twice. */
+function signedBoard({ final = true } = {}) {
+  const handoff = (kind, by, at, artifacts) => ({
+    payload: {
+      kind, item: 'item-3c9e41', goal: GOAL.id, signed_by: by, created: at,
+      ...(artifacts ? { artifacts } : {}),
+    },
+  })
+  const signoffs = [
+    { step: 'peer', by: OTHER, at: '2026-11-03' }, { step: 'ba', by: BA, at: '2026-11-04' },
+  ]
+  if (final) signoffs.push({ step: 'ba_final', by: BA, at: '2026-11-05' })
+  return {
+    goals: { [GOAL.id]: { title: GOAL.title, signoffs } },
+    handoffs: {
+      'handoff-000001': handoff('coder-to-review', CODER, '2026-11-01', {
+        branch: 'side/core-slugs', commit: COMMIT, tree: TREE, files: ['core/util.ts'],
+      }),
+      'handoff-000002': handoff('review-to-qa', OTHER, '2026-11-02'),
+    },
+  }
+}
+
+test('an item trail lists hand-offs with their side-branch files, then chain signatures', () => {
+  const trail = goalTrail(signedBoard(), GOAL.id)
+  assert.deepEqual(trail.steps.map(step => step.step),
+    ['coder-to-review', 'review-to-qa', 'peer', 'ba', 'ba_final'])
+  assert.equal(trail.steps[0].commit, COMMIT)
+  assert.deepEqual(trail.files, ['core/util.ts'])
+  assert.equal(trail.final, true)
+  assert.equal(trail.finalBy, BA)
+  assert.equal(goalTrail(signedBoard({ final: false }), GOAL.id).final, false)
+})
+
+test('a final item drops its seats\' entries and tells other holders, with their own hash', () => {
+  const map = buildMindMap(project()).map
+  const ledger = twoHolders(map)
+  const newHash = 'e'.repeat(12)
+  const done = finalize(ledger, {
+    goal: GOAL.id, works: ['work-00000a'], hashes: { core: newHash }, files: ['core/util.ts'],
+    by: BA, tick: 6, mint, at: 't',
+  })
+  assert.equal(done.ledger.holdings[CODER].core, undefined)
+  assert.deepEqual(done.notified, { core: [OTHER] })
+  const notice = catalogInbox(done.ledger, OTHER).updates[0]
+  assert.equal(notice.body.old_hash, map.modules.core.hash)
+  assert.equal(notice.body.goal, GOAL.id)
+  assert.deepEqual(validateEnvelope(notice).errors, [])
+  assert.deepEqual(done.ledger.finals[GOAL.id].modules, { core: newHash })
+  assert.throws(() => finalize(done.ledger, {
+    goal: GOAL.id, works: [], hashes: {}, files: [], by: BA, tick: 7, mint, at: 't',
+  }), /already final/)
 })

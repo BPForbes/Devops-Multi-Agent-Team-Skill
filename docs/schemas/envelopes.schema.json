@@ -2421,6 +2421,10 @@
                 },
                 "recommended": {
                   "const": true
+                },
+                "goal": {
+                  "$ref": "#/$defs/goalHash",
+                  "description": "The item whose final signature made this update, when a finished item sent it."
                 }
               }
             }

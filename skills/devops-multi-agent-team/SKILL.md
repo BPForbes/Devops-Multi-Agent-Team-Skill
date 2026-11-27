@@ -317,7 +317,7 @@ invariants and the multi-branch merge rule:
 | **Single purpose, closed for modification, Liskov substitution** (with the Shape and Bird examples) | [oop-principles.md](references/oop-principles.md) |
 | Documentation first, module mind map, reuse | [research-and-reuse.md](references/research-and-reuse.md) |
 | **Repository mind map** (docs, modules, imports, functions, calls, libraries, possible duplicates; the Researcher owns it in a team run, plain chat uses its overview) | [mind-map.md](references/mind-map.md), `mindmap_*` tools, the `project-mindmap` skill |
-| **Context catalogs** (the slice of the mind map one piece of work needs, delivered to the seat's inbox; release, update notices, lead-held requests) | [context-catalogs.md](references/context-catalogs.md), `catalog_*` tools, `work_assign` with `scope` |
+| **Context catalogs** (the slice of the mind map one piece of work needs, delivered to the seat's inbox; release, update notices, lead-held requests; final on the BA's second signature; the item trail of hand-off and chain signatures) | [context-catalogs.md](references/context-catalogs.md), `catalog_*` tools, `work_assign` with `scope` |
 | Comments and doc comments (Reviewers strict) | [comment-standards.md](references/comment-standards.md) |
 | **Lint gate**: built-in rules and open-source linters; any blocking finding is a hard DENY with the full list and fixes sent back | [lint-rules.md](references/lint-rules.md), `lint_check`, `lint_commands` |
 | Failed checks: monitor, auto-correct, stop | [monitoring.md](references/monitoring.md) |

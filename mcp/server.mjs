@@ -28,7 +28,8 @@ import {
 } from '../scripts/devops-mindmap.mjs'
 import {
   CATALOG_FILE, catalogEnvelope, catalogInbox, catalogIndex, decideRequest, emptyLedger,
-  entryFor, grant, moduleByHash, pendingRequests, pull, release, requestModule, sliceFor,
+  entryFor, finalize, goalTrail, grant, moduleByHash, pendingRequests, pull, release,
+  requestModule, sliceFor,
 } from '../scripts/devops-catalog.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
 import {
@@ -331,6 +332,46 @@ function deliverModule(args, { work, module }) {
   const row = workRow(args, work)
   const entry = entryFor(currentMap(args), module, row.job, 0)
   return deliver(args, { work, row, slice: { job: row.job, unknown: [], entries: [entry] } })
+}
+
+/**
+ * The modules an item touched: those of the files its hand-offs changed (in
+ * the new map, or the saved one for a deleted file) and those its works held.
+ */
+function touchedModules(trail, works, { built, before, ledger }) {
+  const ofFile = rel => built.files[rel]?.module ?? before?.files?.[rel]?.module
+  const fromFiles = trail.files.map(ofFile).filter(Boolean)
+  const fromWorks = works.flatMap(work => ledger.works?.[work]?.modules ?? [])
+  return [...new Set([...fromFiles, ...fromWorks])].filter(name => built.modules[name]).sort()
+}
+
+/**
+ * Finalizes an item once the Business Analyst signed it a second time (after
+ * QA): the map is updated and saved first, then the modules the item changed
+ * are rehashed, the other seats holding them are told an update is
+ * available, and the item's seats drop what they held. Undefined when the
+ * item is not final yet or was finalized before.
+ */
+function finalizeGoal(args, goal) {
+  const board = readBoard(args)
+  const trail = goalTrail(board, goal)
+  if (!trail.final || readLedger(args).finals?.[goal] !== undefined) return undefined
+  const dir = projectDir(args)
+  const before = loadSaved(dir)
+  const built = buildMindMap(dir, { roots: allowedRoots(), save: true, previous: before })
+  const works = Object.entries(board.assignments)
+    .filter(([, row]) => row.goal === goal).map(([id]) => id)
+  const ledgerNow = readLedger(args)
+  const modules = touchedModules(trail, works, { built: built.map, before, ledger: ledgerNow })
+  const hashes = Object.fromEntries(modules.map(name => [name, built.map.modules[name].hash]))
+  return ledgerChange(args, (ledger, tick) => {
+    const { ledger: next, notified } = finalize(ledger, {
+      goal, works, hashes, files: trail.files, by: trail.finalBy, tick, mint: mintFresh, at: now(),
+    })
+    return {
+      ledger: next, goal, files: trail.files, modules: hashes, notified, mapReuse: built.reuse,
+    }
+  })
 }
 
 const scopeSchema = {
@@ -1265,11 +1306,15 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => goalDone(board, {
-      goal: args.goal, by: args.caller, team: args.team, members: teamMembers(args),
-      kind: args.kind, surface: args.surface, demoer: args.demoer, meets: args.meets,
-      override: args.override, at: now(),
-    })),
+    run: args => {
+      const signed = boardChange(args, board => goalDone(board, {
+        goal: args.goal, by: args.caller, team: args.team, members: teamMembers(args),
+        kind: args.kind, surface: args.surface, demoer: args.demoer, meets: args.meets,
+        override: args.override, at: now(),
+      }))
+      const final = finalizeGoal(args, args.goal)
+      return final === undefined ? signed : { ...signed, final }
+    },
   },
   {
     name: 'goal_raise',
@@ -1834,6 +1879,47 @@ const TOOLS = [
         return { ...asked, alreadyHeld: true }
       }
       return { ...asked, context: deliverModule(args, { work: args.work, module: args.module }) }
+    },
+  },
+  {
+    name: 'goal_trail',
+    description: [
+      'An item\'s progress and file updates: each hand-off with its signer and the side',
+      'branch\'s commit, tree and changed files, each Done-chain signature, and, once the',
+      'Business Analyst signed it twice, the module hashes it was finalized with.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { dest, goal: { type: 'string' } },
+      required: ['goal'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    run: args => ({
+      ...goalTrail(readBoard(args), args.goal),
+      finalized: readLedger(args).finals?.[args.goal] ?? null,
+    }),
+  },
+  {
+    name: 'catalog_finalize',
+    description: [
+      'Orchestration only: finalize an item whose Done chain carries the Business Analyst\'s',
+      'second signature, if goal_done did not already. Updates and saves the map first,',
+      'then tells the seats holding a changed module that an update is available.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { dest, goal: { type: 'string' } },
+      required: ['goal'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    run: args => {
+      if (BOUND_SEAT) throw new Error('only Orchestration may finalize an item')
+      if (!goalTrail(readBoard(args), args.goal).final) {
+        throw new Error(`${args.goal} is not final: the Business Analyst has not signed it twice`)
+      }
+      return finalizeGoal(args, args.goal) ?? { goal: args.goal, alreadyFinal: true }
     },
   },
   {
