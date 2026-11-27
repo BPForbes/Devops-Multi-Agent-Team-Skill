@@ -538,14 +538,27 @@ const TOOLS = [
   {
     name: 'mindmap_build',
     description: MINDMAP_TEXT.t('toolBuild'),
-    inputSchema: { type: 'object', properties: { dest, save: { type: 'boolean' }, full: { type: 'boolean', description: MINDMAP_TEXT.t('paramFull') } }, additionalProperties: false },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        save: { type: 'boolean' },
+        full: { type: 'boolean', description: MINDMAP_TEXT.t('paramFull') },
+        fresh: { type: 'boolean', description: MINDMAP_TEXT.t('paramFresh') },
+      },
+      additionalProperties: false,
+    },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     run: args => {
-      const result = buildMindMap(projectDir(args), { roots: allowedRoots(), save: optionalBool(args, 'save', false) })
+      const dir = projectDir(args)
+      const previous = optionalBool(args, 'fresh', false) ? undefined : loadSaved(dir)
+      const save = optionalBool(args, 'save', false)
+      const result = buildMindMap(dir, { roots: allowedRoots(), save, previous })
       const full = optionalBool(args, 'full', false)
       return {
         dest: result.dest,
         counts: result.map.counts,
+        reuse: result.reuse,
         saved: result.saved ?? null,
         overview: capReply(result.overview),
         summary: capReply(result.summary),
@@ -1757,7 +1770,10 @@ const TOOLS = [
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => {
-      const fresh = buildMindMap(projectDir(args), { roots: allowedRoots(), save: true }).map
+      const dir = projectDir(args)
+      const build = { roots: allowedRoots(), save: true, previous: loadSaved(dir) }
+      const built = buildMindMap(dir, build)
+      const fresh = built.map
       const newHash = fresh.modules[args.module]?.hash
       if (newHash === undefined) throw new Error(`${args.module} is not in the mind map`)
       return ledgerChange(args, (ledger, tick) => {
@@ -1765,7 +1781,7 @@ const TOOLS = [
           agent: args.agent, work: args.work, module: args.module, newHash, tick, mint: mintFresh,
         })
         const { ledger: next, ...result } = out
-        return { ledger: next, ...result, mapSaved: true }
+        return { ledger: next, ...result, mapSaved: true, mapReuse: built.reuse }
       })
     },
   },

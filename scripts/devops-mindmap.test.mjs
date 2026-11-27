@@ -247,3 +247,49 @@ test('the map skips .claude, so worktrees kept under it are not indexed', () => 
   assert.ok(indexed.some(rel => rel === 'src/app.ts'))
   assert.equal(indexed.filter(rel => rel.startsWith('.claude/')).length, 0)
 })
+
+/** The saved form of a map, as the next build reads it back. */
+const savedCopy = map => JSON.parse(JSON.stringify(map))
+const withoutDate = map => ({ ...map, generatedAt: null })
+
+/** Builds the sample, applies `edit`, then compares a build from the saved map with a full one. */
+function incrementalAgainstFull(edit) {
+  const dir = project(SAMPLE)
+  const before = savedCopy(buildMindMap(dir).map)
+  edit(dir)
+  const full = buildMindMap(dir)
+  const incremental = buildMindMap(dir, { previous: before })
+  assert.deepEqual(withoutDate(incremental.map), withoutDate(full.map))
+  return incremental.reuse
+}
+
+const write = (dir, rel, text) => fs.writeFileSync(path.join(dir, rel), text)
+
+test('a build from the saved map parses only the changed file, and gives the full map', () => {
+  const reuse = incrementalAgainstFull(dir => write(dir, 'src/util/strings.ts',
+    "export function slugify(text: string) {\n  return text.trim().toLowerCase()\n}\n"))
+  assert.equal(reuse.parsed, 1)
+  assert.ok(reuse.reused > 0)
+})
+
+test('a new definition rescans the calls of unchanged files that name it', () => {
+  const reuse = incrementalAgainstFull(dir => write(dir, 'src/web/other.ts',
+    'export function slugify(text: string) {\n  return text\n}\n'
+    + 'export function routeFor(name: string) {\n  return name\n}\n'))
+  assert.equal(reuse.parsed, 1)
+  assert.ok(reuse.callsRescanned > 1)
+})
+
+test('a removed definition drops the links that pointed at it, as a full build does', () => {
+  incrementalAgainstFull(dir => write(dir, 'src/util/strings.ts',
+    'export function slugifyText(text: string) {\n  return text.toLowerCase()\n}\n'))
+})
+
+test('a new file or a changed manifest falls back to a full build', () => {
+  const added = incrementalAgainstFull(dir => write(dir, 'src/util/extra.ts',
+    'export function extraThing() {\n  return 1\n}\n'))
+  assert.equal(added.reused, 0)
+  const manifest = incrementalAgainstFull(dir => write(dir, 'package.json',
+    JSON.stringify({ name: 'sample', dependencies: { lodash: '^4.17.21' } })))
+  assert.equal(manifest.reused, 0)
+})

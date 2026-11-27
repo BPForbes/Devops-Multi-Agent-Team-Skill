@@ -515,7 +515,83 @@ function enclosing(symbols, line) {
  * links, tests and possible duplicates. Pure reading; `save` writes only
  * `.devops/mindmap/`.
  */
-export function buildMindMap(destInput, { roots, save = false } = {}) {
+const MIN_LINK_NAME = 3
+
+/** The definitions index: each name worth linking to, with where it is defined. */
+function definitionsOf(files, T) {
+  const definitions = new Map()
+  for (const [rel, info] of Object.entries(files)) {
+    for (const s of info.symbols) {
+      if (T.genericNames.has(s.name) || s.name.length < MIN_LINK_NAME) continue
+      const list = definitions.get(s.name) ?? []
+      list.push({ file: rel, line: s.line, kind: s.kind, exported: s.exported })
+      definitions.set(s.name, list)
+    }
+  }
+  return definitions
+}
+
+/** What decides how bare imports are told apart: manifests, local packages, top names. */
+function manifestSignature(declared, local, localTopNames) {
+  const manifests = [...declared].map(([key, entry]) => [key, entry.declaredIn]).sort()
+  return hashOf(JSON.stringify([manifests, local, [...localTopNames].sort()]))
+}
+
+/**
+ * The saved map's code files to reuse, or undefined when reuse would not give
+ * the same map: no saved map, other manifests, or a different set of files.
+ */
+function reusableFiles(previous, signature, candidates) {
+  if (previous?.format !== FORMAT || previous.manifests !== signature) return undefined
+  const known = [...Object.keys(previous.files), ...Object.keys(previous.docs)].sort()
+  const same = known.length === candidates.length && known.every((rel, i) => rel === candidates[i])
+  return same ? previous.files : undefined
+}
+
+/** A saved file entry to reuse, without what the doc pass adds to it again. */
+function reusedEntry(prior) {
+  const entry = structuredClone(prior)
+  delete entry.documentedBy
+  for (const symbol of entry.symbols) delete symbol.documentedIn
+  return entry
+}
+
+/** The names whose definitions differ between two definitions indexes. */
+function changedNames(before, after) {
+  const names = new Set([...before.keys(), ...after.keys()])
+  const differs = name => JSON.stringify(before.get(name)) !== JSON.stringify(after.get(name))
+  return [...names].filter(differs)
+}
+
+/**
+ * The files whose calls are scanned again: the changed ones, and every file
+ * whose text names a definition that changed, since its links may move.
+ */
+function callRescan(texts, changed, names) {
+  const rescan = new Set(changed)
+  for (const [rel, text] of texts) {
+    if (!rescan.has(rel) && names.some(name => text.includes(name))) rescan.add(rel)
+  }
+  return rescan
+}
+
+/** The saved call links grouped by the file they start in. */
+function callsByFile(calls) {
+  const byFile = new Map()
+  for (const call of calls ?? []) {
+    const rel = call.from.slice(0, call.from.lastIndexOf('#'))
+    byFile.set(rel, [...(byFile.get(rel) ?? []), call])
+  }
+  return byFile
+}
+
+/**
+ * Builds the repository mind map. With `previous` (the saved map), a code
+ * file whose content hash is unchanged keeps its saved entry and its saved
+ * call links unless a definition it names changed, so only the changed part
+ * is parsed again; the result is the map a full build would give.
+ */
+export function buildMindMap(destInput, { roots, save = false, previous } = {}) {
   const dest = resolveDest(destInput, roots)
   const T = loadText(dest)
   const found = walk(dest)
@@ -530,6 +606,10 @@ export function buildMindMap(destInput, { roots, save = false } = {}) {
     localTopNames.add(first)
     if (/^(src|lib|pkg|internal)\//.test(rel)) localTopNames.add(rel.split('/')[1]?.replace(/\.\w+$/, '').toLowerCase())
   }
+  const signature = manifestSignature(declared, local, localTopNames)
+  const candidates = all.filter(rel => languageOf(rel, table) || isDoc(rel))
+  const prior = reusableFiles(previous, signature, candidates)
+  const changed = new Set()
 
   const files = {}
   const docs = {}
@@ -553,6 +633,12 @@ export function buildMindMap(destInput, { roots, save = false } = {}) {
       docTexts.set(rel, text)
       continue
     }
+    if (prior?.[rel]?.hash === hashOf(text)) {
+      files[rel] = reusedEntry(prior[rel])
+      texts.set(rel, text)
+      continue
+    }
+    changed.add(rel)
     const { relative, bare } = rawImports(rel, text, language)
     const imports = [...new Set(relative.map(spec => resolveRelative(rel, spec, fileSet, dirSet)).filter(Boolean))].filter(target => target !== rel)
     const libraries = new Set()
@@ -569,18 +655,25 @@ export function buildMindMap(destInput, { roots, save = false } = {}) {
   const importedBy = {}
   for (const [rel, info] of Object.entries(files)) for (const target of info.imports) (importedBy[target] ??= []).push(rel)
 
-  const definitions = new Map()
-  for (const [rel, info] of Object.entries(files)) for (const s of info.symbols) {
-    if (T.genericNames.has(s.name) || s.name.length < 3) continue
-    const list = definitions.get(s.name) ?? []
-    list.push({ file: rel, line: s.line, kind: s.kind, exported: s.exported })
-    definitions.set(s.name, list)
-  }
+  const definitions = definitionsOf(files, T)
+  const rescan = prior
+    ? callRescan(texts, changed, changedNames(definitionsOf(prior, T), definitions))
+    : new Set(texts.keys())
+  const savedCalls = prior ? callsByFile(previous.calls) : new Map()
 
   const calls = new Map()
   let unresolvedCalls = 0
   for (const [rel, text] of texts) {
     const info = files[rel]
+    if (!rescan.has(rel)) {
+      for (const call of savedCalls.get(rel) ?? []) {
+        calls.set(`${call.from}\u0000${call.to}`, call.count)
+      }
+      unresolvedCalls += info.unresolved ?? 0
+      continue
+    }
+    delete info.unresolved
+    const unresolvedBefore = unresolvedCalls
     const reachable = new Set([rel, ...info.imports])
     const lines = text.split('\n')
     for (let i = 0; i < lines.length; i++) {
@@ -605,6 +698,7 @@ export function buildMindMap(destInput, { roots, save = false } = {}) {
         }
       }
     }
+    if (unresolvedCalls > unresolvedBefore) info.unresolved = unresolvedCalls - unresolvedBefore
   }
   const callList = [...calls].map(([key, count]) => { const [from, to] = key.split('\u0000'); return { from, to, count } }).sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to))
 
@@ -664,10 +758,13 @@ export function buildMindMap(destInput, { roots, save = false } = {}) {
     counts: { codeFiles: Object.keys(files).length, docs: Object.keys(docs).length, modules: Object.keys(modules).length, symbols: Object.values(files).reduce((n, f) => n + f.symbols.length, 0), calls: callList.length, libraries: Object.keys(libraries).length, skippedFiles: skipped, unresolvedCalls },
     modules, files, importedBy, testedBy, docs, libraries, calls: callList, duplicates,
   }
+  map.manifests = signature
   const notes = readNotes(dest)
   const overview = renderOverview(map, notes, T)
   const graph = graphOf(map, notes, T)
   const result = { dest, map, graph, overview, summary: renderSummary(map, overview, graph, T) }
+  const reused = Object.keys(files).length - changed.size
+  result.reuse = { reused, parsed: changed.size, callsRescanned: rescan.size }
   if (save) {
     const dir = path.join(dest, MINDMAP_DIR)
     for (const [name, body] of [[MAP_FILE, JSON.stringify(map) + '\n'], [SUMMARY_FILE, result.summary], [OVERVIEW_FILE, overview], [GRAPH_FILE, JSON.stringify(graph) + '\n']]) {
@@ -1139,7 +1236,7 @@ export function mindMapStatus(destInput, { roots } = {}) {
   const saved = loadSaved(dest)
   const T = loadText(dest)
   if (!saved) return { dest, saved: false, stale: true, next: T.t('statusNoMap') }
-  const fresh = buildMindMap(dest).map
+  const fresh = buildMindMap(dest, { previous: saved }).map
   const before = { ...Object.fromEntries(Object.entries(saved.files).map(([k, v]) => [k, v.hash])), ...Object.fromEntries(Object.entries(saved.docs).map(([k, v]) => [k, v.hash])) }
   const after = { ...Object.fromEntries(Object.entries(fresh.files).map(([k, v]) => [k, v.hash])), ...Object.fromEntries(Object.entries(fresh.docs).map(([k, v]) => [k, v.hash])) }
   const changed = Object.keys(after).filter(k => k in before && before[k] !== after[k]).sort()
@@ -1234,7 +1331,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const dest = path.resolve(opt('--dest') ?? process.cwd())
   try {
     if (command === 'build') {
-      const result = buildMindMap(dest, { save: args.includes('--save') })
+      const previous = args.includes('--fresh') ? undefined : loadSaved(dest)
+      const result = buildMindMap(dest, { save: args.includes('--save'), previous })
       if (args.includes('--json')) console.log(JSON.stringify(result.map))
       else console.log(result.saved ? `${loadText(dest).t('cliSaved', { files: result.saved.join(', ') })}\n${JSON.stringify(result.map.counts)}` : result.summary)
     } else if (command === 'tree') {

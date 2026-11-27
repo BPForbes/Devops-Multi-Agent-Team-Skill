@@ -747,11 +747,20 @@ test('a release rehashes, saves the map, tells the other holder, and drops the e
   const notice = (await inboxOfSeat(c, PEER)).context.updates[0]
   assert.equal(notice.body.old_hash, oldHash)
   assert.notEqual(notice.body.new_hash, oldHash)
+  const saved = JSON.parse(fs.readFileSync(path.join(root, '.devops/mindmap/mindmap.json'), 'utf8'))
+  const why = 'the map is updated before the notice'
+  assert.equal(saved.modules.core.hash, notice.body.new_hash, why)
   const pulled = await c.call('catalog_pull', { agent: PEER, module: 'core' })
   assert.equal(pulled.json().entry.hash, notice.body.new_hash)
   const after = await inboxOfSeat(c, PEER)
   assert.deepEqual(after.context.updates, [])
   assert.equal(after.context.catalogs[0].body.entries[0].hash, notice.body.new_hash)
+  fs.appendFileSync(path.join(root, 'core/util.ts'), 'export const MIN_SLUG = 1\n')
+  const second = (await c.call('catalog_release', {
+    agent: PEER, work: work[PEER], module: 'core',
+  })).json()
+  assert.equal(second.mapReuse.parsed, 1, 'the second release reuses the saved map')
+  assert.ok(second.mapReuse.reused > 0)
   c.close()
 })
 

@@ -53,8 +53,10 @@ When the seat's code for a module is satisfying, it calls `catalog_release`
 (`agent`, `work`, `module`). The server:
 
 1. **Rehashes** the module against the current tree.
-2. **Updates the whole mind map**: rebuilds it and saves it under
-   `.devops/mindmap/`.
+2. **Updates the whole mind map** and saves it under `.devops/mindmap/`. The
+   build reuses the saved map, so only changed files are parsed again
+   ([mind-map.md](mind-map.md)). The reply's `mapReuse` says how much was
+   reused.
 3. **Tells the other holders**: every other seat that holds the module at an
    older hash gets a `context.update` envelope, "an update is available"
    (`old_hash`, `new_hash`, `changed_by`, `recommended: true`). The map is

@@ -24,6 +24,18 @@ Built by `mindmap_build` (MCP) or `devops-mindmap build --save`. It runs no
 program and writes only `.devops/mindmap/`. Building takes well under a second
 on a few thousand files.
 
+A build reuses the saved map. Every file is still read and hashed, but a code
+file whose content hash is unchanged keeps its saved entry (symbols, imports,
+libraries, file doc), so only changed files are parsed again. Call links are
+scanned again only for the changed files and for files whose text names a
+definition that changed; every other file keeps its saved links. Docs, the
+module records, importers, tests and duplicates are recomputed, because they
+are cheap and depend on every file. The result is the map a full build gives.
+When the set of files, a manifest or a top-level name changed, the build parses
+everything. `fresh: true` (`--fresh` on the command line) forces that. The
+build's reply says how much was reused (`reuse`: reused, parsed,
+callsRescanned).
+
 ## The tree and the graph
 
 The map is one **tree** with **cross links**. Every node carries its own
