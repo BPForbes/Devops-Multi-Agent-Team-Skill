@@ -68,10 +68,11 @@ test('initialize negotiates, lists 34 tools, prompts and resources', async () =>
     for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_overview', 'mindmap_tree', 'mindmap_note', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
     const added = ['lint_check', 'lint_commands', 'config_get', 'config_set']
     for (const name of added) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 81)
+    assert.equal(tools.length, 85)
     const catalogTools = [
       'catalog_index', 'catalog_release', 'catalog_pull', 'catalog_request', 'catalog_decide',
       'catalog_finalize', 'goal_trail',
+      'autopilot_draft', 'autopilot_steer', 'autopilot_allocate', 'autopilot_status',
     ]
     for (const name of catalogTools) assert.ok(tools.includes(name), name)
     const scrum = [
@@ -848,6 +849,69 @@ test('the BA\'s second signature finalizes the item: map first, then the notice'
     assert.equal(trail.finalized.modules.core, saved.modules.core.hash)
     const again = (await c.call('catalog_finalize', { goal: 'goal-3c9e41' })).json()
     assert.equal(again.alreadyFinal, true)
+  } finally {
+    c.close()
+  }
+})
+
+const AUTOPILOT_BA = 'agent-0d0d0d'
+
+test('autopilot: draft from tasks, the BA steers, then one call allocates every seat', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  try {
+    const drafted = (await c.call('autopilot_draft', {
+      ba: AUTOPILOT_BA, title: 'Sprint 1',
+      tasks: [
+        { title: 'Make slugify safe' },
+        { title: 'Routes and pages', scope: { modules: ['api', 'web'] } },
+      ],
+    })).json()
+    assert.equal(drafted.state, 'steering')
+    const spanning = drafted.questions.find(q => q.ask === 'owner')
+    assert.ok(spanning, 'the task that spans modules waits for the BA')
+    const early = await c.call('autopilot_allocate', { caller: AUTOPILOT_BA })
+    assert.equal(early.isError, true)
+    const notBa = await c.call('autopilot_steer', {
+      caller: CODER, decisions: [{ task: spanning.task, owner: 'api' }],
+    })
+    assert.equal(notBa.isError, true)
+    const steered = (await c.call('autopilot_steer', {
+      caller: AUTOPILOT_BA,
+      decisions: [{
+        task: spanning.task, owner: 'api', objective: 'Routes have slugs', priority: 1,
+      }],
+    })).json()
+    assert.deepEqual(steered.questions, [])
+    const allocated = await c.call('autopilot_allocate', { caller: AUTOPILOT_BA })
+    assert.notEqual(allocated.isError, true, allocated.text)
+    const { launch, catalogs } = allocated.json()
+    assert.equal(catalogs, 2, 'each piece of work gets its catalog')
+    const leads = launch.seats.filter(seat => seat.roles.includes('manager'))
+    const apiLead = leads.find(seat => seat.module === 'api')
+    const inbox = await inboxOfSeat(c, apiLead.agent)
+    assert.equal(inbox.work.length, 1)
+    assert.equal(inbox.context.catalogs.length, 1)
+    const brief = launch.briefs.find(b => b.lead === apiLead.agent)
+    assert.match(brief.goals[0].spec, /Routes have slugs/)
+    const team = path.join(root, '.devops', 'teams', `${apiLead.team}.json`)
+    assert.ok(fs.existsSync(team), 'the team board is open')
+    const status = (await c.call('autopilot_status')).json()
+    assert.equal(status.state, 'allocated')
+    const again = await c.call('autopilot_allocate', { caller: AUTOPILOT_BA })
+    assert.equal(again.isError, true, 'a draft is allocated once')
+  } finally {
+    c.close()
+  }
+})
+
+test('autopilot: only Orchestration drafts', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root, DEVOPS_SEAT: CODER } })
+  try {
+    const refused = await c.call('autopilot_draft', { ba: AUTOPILOT_BA, tasks: [{ title: 'x' }] })
+    assert.equal(refused.isError, true)
+    assert.match(refused.text, /only Orchestration/)
   } finally {
     c.close()
   }

@@ -42,6 +42,9 @@ import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 import { isTeamId } from '../scripts/devops-ids.mjs'
 import { RISKS, planAllocation, spinUp } from '../scripts/devops-allocation.mjs'
 import {
+  AUTOPILOT_FILE, allocateAutopilot, draftAutopilot, measureTask, steerAutopilot,
+} from '../scripts/devops-autopilot.mjs'
+import {
   MEETING_KINDS, baScan, bugIssue, decideHeldWork, fileBugReport, forwardReports, goalDone,
   goalVerdict, holdMeeting, leadSignOff, meetingsFor, newApproach, pingsFor, prepareMerge,
   raiseToAnalyst, recordIssue, reportsFor, scheduleMeeting, teamSchedule,
@@ -372,6 +375,73 @@ function finalizeGoal(args, goal) {
       ledger: next, goal, files: trail.files, modules: hashes, notified, mapReuse: built.reuse,
     }
   })
+}
+
+/** The autopilot draft on disk, or undefined when none was drafted. */
+function readDraft(args) {
+  try {
+    return JSON.parse(fs.readFileSync(boardFile(args, AUTOPILOT_FILE), 'utf8'))
+  } catch (error) {
+    if (error.code === 'ENOENT') return undefined
+    throw error
+  }
+}
+
+/** Applies one change to the autopilot draft under its lock. `change` returns { draft, ...result }. */
+function draftChange(args, change) {
+  let result
+  updateJson(boardFile(args, AUTOPILOT_FILE), null, current => {
+    const { draft, ...rest } = change(current)
+    result = rest
+    return draft
+  }, UNFENCED)
+  return result
+}
+
+/** What a reply shows of a draft: its state, the questions for the BA, the plan and its totals. */
+function draftView(draft) {
+  const { tasks, plan, ...rest } = draft
+  const summary = tasks.map(({ id, title, owner, deferred, priority, measure }) => ({
+    id, title, owner, deferred, priority, modules: measure.modules, risks: measure.risks,
+  }))
+  return { ...rest, tasks: summary, totals: plan?.totals ?? null, plan: plan ?? null }
+}
+
+/** Opens each allocated team's board; a team that already has one is refused. */
+function openTeamBoards(args, boards) {
+  for (const board of boards) {
+    teamAction({ ...args, team: board.team }, current => {
+      if (current !== null) return { board: current, error: `${board.team} already has a board` }
+      return { board }
+    })
+  }
+}
+
+/** Delivers each piece of allocated work its catalog from the mind map. */
+function deliverAllocated(args, given) {
+  const map = currentMap(args)
+  return given.map(({ work, scope }) => {
+    const row = workRow(args, work)
+    const slice = sliceFor(map, { job: row.job, scope })
+    return { work, ...deliver(args, { work, row, slice }) }
+  })
+}
+
+const TASK_SCHEMA = {
+  type: 'object',
+  required: ['title'],
+  additionalProperties: false,
+  properties: {
+    title: { type: 'string', maxLength: MAX_TASK_TEXT },
+    description: { type: 'string', maxLength: MAX_TASK_TEXT },
+    scope: { type: 'object' },
+    risks: { type: 'array', items: { enum: RISKS } },
+    unknowns: { type: 'boolean' },
+    newSurface: { type: 'boolean' },
+    objective: { type: 'string', maxLength: MAX_TASK_TEXT },
+    acceptance: { type: 'array', items: { type: 'string', maxLength: MAX_TASK_TEXT } },
+    priority: { type: 'integer', minimum: 1 },
+  },
 }
 
 const scopeSchema = {
@@ -1881,6 +1951,143 @@ const TOOLS = [
         return { ...asked, alreadyHeld: true }
       }
       return { ...asked, context: deliverModule(args, { work: args.work, module: args.module }) }
+    },
+  },
+  {
+    name: 'autopilot_draft',
+    description: [
+      'Orchestration only: start autopilot for the first sprint. Each task is measured',
+      'against the mind map (scope from its files, modules or symbols, or matched from its',
+      'wording; files, modules, languages, risks) and planned: one team per module, one',
+      'coder per task up to the cap, review from another team, final QA and Security on',
+      'teams that author nothing. Returns the draft and the questions the Business Analyst',
+      '(`ba`) answers with autopilot_steer before autopilot_allocate.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, title: { type: 'string', maxLength: MAX_TASK_TEXT },
+        weeks: { type: 'integer', minimum: 1, maximum: MAX_SPRINT_WEEKS },
+        ba: { type: 'string' }, tasks: { type: 'array', minItems: 1, items: TASK_SCHEMA },
+        replace: { type: 'boolean', description: 'Replace a draft that is still being steered.' },
+      },
+      required: ['ba', 'tasks'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      if (BOUND_SEAT) throw new Error('only Orchestration starts autopilot')
+      const map = currentMap(args)
+      return draftChange(args, current => {
+        if (current !== null && (current.state !== 'steering' || !args.replace)) {
+          throw new Error(`a draft is already ${current.state}; pass replace while it is steering`)
+        }
+        const draft = draftAutopilot(map, {
+          title: args.title, tasks: args.tasks, weeks: args.weeks, ba: args.ba,
+        })
+        return { draft, ...draftView(draft) }
+      })
+    },
+  },
+  {
+    name: 'autopilot_steer',
+    description: [
+      'The Business Analyst (`caller`) guides autopilot until seats are allocated: per task',
+      '(`decisions`) the owning module of a task that spans modules, a new `scope`, the',
+      'client `objective`, `acceptance` and `priority`, risk flags, `unknowns`,',
+      '`newSurface`, or `defer`; and a coder cap per module (`caps`). Re-plans each time.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' },
+        decisions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['task'],
+            additionalProperties: false,
+            properties: {
+              task: { type: 'string' }, owner: { type: 'string' }, scope: { type: 'object' },
+              objective: { type: 'string', maxLength: MAX_TASK_TEXT },
+              acceptance: { type: 'array', items: { type: 'string', maxLength: MAX_TASK_TEXT } },
+              priority: { type: 'integer', minimum: 1 },
+              risks: { type: 'array', items: { enum: RISKS } },
+              unknowns: { type: 'boolean' }, newSurface: { type: 'boolean' },
+              defer: { type: 'boolean' },
+            },
+          },
+        },
+        caps: { type: 'object', additionalProperties: { type: 'integer', minimum: 1 } },
+      },
+      required: ['caller'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      const map = currentMap(args)
+      return draftChange(args, current => {
+        if (current === null) throw new Error('no autopilot draft: autopilot_draft starts one')
+        const rescope = {}
+        for (const decision of (args.decisions ?? []).filter(d => d.scope !== undefined)) {
+          const task = current.tasks.find(t => t.id === decision.task)
+          if (task) rescope[task.id] = measureTask(map, { ...task, scope: decision.scope })
+        }
+        const decisions = (args.decisions ?? []).map(({ scope, ...rest }) => rest)
+        const draft = steerAutopilot(current, {
+          by: args.caller, decisions, caps: args.caps ?? {}, rescope,
+        })
+        return { draft, ...draftView(draft) }
+      })
+    },
+  },
+  {
+    name: 'autopilot_allocate',
+    description: [
+      'The Business Analyst (`caller`) allocates the steered draft, once every question is',
+      'answered: mints each team\'s hash, lead and seats; opens the sprint, its goals (with',
+      'the client\'s objective, acceptance and priority, owned by the team) and each team\'s',
+      'Sprint Planning; opens every team board; hands out the authoring work without passing',
+      'any seat\'s open-work limit (the rest waits on the backlog for the lead and the BA);',
+      'and delivers each piece of work its mind-map catalog. Returns the launch list: each',
+      'seat\'s subagent, settings and work, and each lead\'s brief of the client\'s specs.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { dest, caller: { type: 'string' } },
+      required: ['caller'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      const draft = readDraft(args)
+      if (draft === undefined) throw new Error('no autopilot draft: autopilot_draft starts one')
+      const versions = { node: process.versions.node, plugin: PKG.version, schema: '1' }
+      const out = boardChange(args, board => {
+        const done = allocateAutopilot(board, draft, { by: args.caller, at: now(), versions })
+        return { ...done }
+      })
+      openTeamBoards(args, out.teamBoards)
+      const catalogs = deliverAllocated(args, out.given)
+      draftChange(args, current => ({
+        draft: {
+          ...current, state: 'allocated', sprint: out.sprint, launch: out.launch, at: now(),
+        },
+      }))
+      return {
+        sprint: out.sprint, launch: out.launch, overflow: out.overflow, catalogs: catalogs.length,
+      }
+    },
+  },
+  {
+    name: 'autopilot_status',
+    description: 'The autopilot draft: its state, the questions for the BA, the plan, and once '
+      + 'allocated the launch list.',
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    run: args => {
+      const draft = readDraft(args)
+      return draft === undefined ? { state: 'none' } : draftView(draft)
     },
   },
   {

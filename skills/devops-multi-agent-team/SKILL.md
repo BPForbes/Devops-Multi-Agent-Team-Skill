@@ -99,7 +99,13 @@ teams and seats from it (`allocation_plan`), spins up the board
 setup payload (recommended settings, versions, steps; the seat sets
 itself up)
 ([allocation-research.md](references/allocation-research.md),
-[scrum-meetings.md](references/scrum-meetings.md)). Every team lead,
+[scrum-meetings.md](references/scrum-meetings.md)). For the first sprint,
+**autopilot** does all of that from a list of tasks: `autopilot_draft`
+measures each task against the mind map and plans one team per module, the
+Business Analyst answers its questions and steers it (`autopilot_steer`),
+and `autopilot_allocate` opens the sprint, the team boards and the work in
+one step and returns a launch list; spawn one subagent per seat from it
+([autopilot.md](references/autopilot.md)). Every team lead,
 whatever the team's job, runs its team's meetings and signs its tasks
 off as done (`goal_signoff`) after a team member verified them; the
 Business Analyst signs twice (when the goal goes on the scheduled Sprint

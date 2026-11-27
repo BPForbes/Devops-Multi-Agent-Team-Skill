@@ -299,7 +299,7 @@ function requireReviewFields(item) {
  * goals it depends on (`dependsOn`) and its open bug issues (`bugIssues`).
  * `required` demands the four Sprint Review fields; other callers leave it off.
  */
-function clientFields(item, { required = false } = {}) {
+export function clientFields(item, { required = false } = {}) {
   if (required) requireReviewFields(item)
   const out = {}
   if (filled(item.objective)) out.objective = String(item.objective).trim()
