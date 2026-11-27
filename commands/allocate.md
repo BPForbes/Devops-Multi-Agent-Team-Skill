@@ -21,6 +21,11 @@ Also: `/devops allocate`, `/devops goal --mode allocate`, `assign pods`, `assign
    spawn one subagent per seat in the launch list (`subagent`, bound by its
    `env`, given its work, and the lead its brief). Do not spawn seats before
    allocation.
+   After that the sprint loop runs the next sprints on its own
+   ([sprint-loop.md](../skills/devops-multi-agent-team/references/sprint-loop.md)):
+   when a sprint closes, have the BA sign the report (`loop_report_sign`);
+   spawn the new seats and stop the retired ones in each new launch list; run
+   `loop_advance` after the person's `/devops continue` or the BA's steering.
 
 Mint ids with `node scripts/devops-ids.mjs mint team` and `mint agent`.
 Independence rules still apply for review/security/QA

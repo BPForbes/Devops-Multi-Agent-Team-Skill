@@ -94,3 +94,7 @@ seat from that list, with its settings and its brief or work, and the leads
 hold Sprint Planning. The server does not start subagents itself.
 `autopilot_status` shows the draft, its questions, its plan and, once
 allocated, the launch list.
+
+After the first sprint, the sprint loop drafts and allocates every next
+sprint the same way, carrying each module's team over
+([sprint-loop.md](sprint-loop.md)).

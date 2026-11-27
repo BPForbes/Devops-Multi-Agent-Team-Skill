@@ -843,3 +843,23 @@ test('a $ expansion near git is refused for the expansion, not as a push', async
   expect(refused.deny).toContain('expansion')
   expect(refused.deny).not.toContain('run the push as a command of its own')
 })
+
+/** The devops-loop.mjs runs among the fake session's process calls, without --dest. */
+const loopRuns = (runs: string[][]) => runs
+  .filter(argv => argv.some(a => a.endsWith('devops-loop.mjs')))
+  .map(argv => argv.slice(2, -2))
+
+test('the person signs off the sprint loop; a seat may not', async ($, on) => {
+  const runs: string[][] = []
+  engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const seatTyped = { command: 'devops', origin: { kind: 'agent' }, args: 'satisfied' }
+  const seat = await $.command.run(seatTyped)
+  expect(seat.text).toContain('only the person can run it')
+  await $.command.run({ ...PERSON, args: 'satisfied looks right' })
+  await $.command.run({ ...PERSON, args: 'continue keep the old API --more 3' })
+  expect(loopRuns(runs)).toEqual([
+    ['decide', 'satisfied', '--note', 'looks right'],
+    ['decide', 'continue', '--note', 'keep the old API', '--more', '3'],
+  ])
+})

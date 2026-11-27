@@ -45,6 +45,10 @@ import {
   AUTOPILOT_FILE, allocateAutopilot, draftAutopilot, measureTask, steerAutopilot,
 } from '../scripts/devops-autopilot.mjs'
 import {
+  LOOP_FILE, MAX_SPRINT_LIMIT, addReport, nextStep, pauseLoop, recordAllocation, signReport,
+  sprintReport, startLoop,
+} from '../scripts/devops-loop.mjs'
+import {
   MEETING_KINDS, baScan, bugIssue, decideHeldWork, fileBugReport, forwardReports, goalDone,
   goalVerdict, holdMeeting, leadSignOff, meetingsFor, newApproach, pingsFor, prepareMerge,
   raiseToAnalyst, recordIssue, reportsFor, scheduleMeeting, teamSchedule,
@@ -405,6 +409,123 @@ function draftView(draft) {
     id, title, owner, deferred, priority, modules: measure.modules, risks: measure.risks,
   }))
   return { ...rest, tasks: summary, totals: plan?.totals ?? null, plan: plan ?? null }
+}
+
+/**
+ * Allocates the saved draft as `by` (its Business Analyst), then records the
+ * sprint in the loop: started with the first sprint, carrying the teams, the
+ * goals' scopes and the deferred tasks to the next.
+ */
+function allocateDraft(args, by) {
+  const draft = readDraft(args)
+  if (draft === undefined) throw new Error('no autopilot draft: autopilot_draft starts one')
+  const versions = { node: process.versions.node, plugin: PKG.version, schema: '1' }
+  const carry = readLoop(args)?.carry
+  const out = boardChange(args, board => allocateAutopilot(board, draft, {
+    by, at: now(), versions, carry,
+  }))
+  openTeamBoards(args, out.teamBoards)
+  updateTeamMembers(args, out.teamUpdates)
+  const catalogs = deliverAllocated(args, out.given)
+  draftChange(args, current => ({
+    draft: { ...current, state: 'allocated', sprint: out.sprint, launch: out.launch, at: now() },
+  }))
+  const scopes = Object.fromEntries(out.given.map(({ goal, scope }) => [goal, scope]))
+  const deferred = draft.tasks.filter(task => task.deferred).map(taskInput)
+  loopChange(args, loop => ({
+    loop: recordAllocation(loop ?? startLoop({
+      ba: draft.ba, limit: draft.sprintLimit, at: now(),
+    }), { sprint: out.sprint, carry: out.carry, scopes, deferred }),
+  }))
+  return {
+    sprint: out.sprint, launch: out.launch, overflow: out.overflow, catalogs: catalogs.length,
+  }
+}
+
+/** The part of a drafted task the next draft takes as input. */
+function taskInput(task) {
+  const { id, measure, owner, deferred, ...input } = task
+  return { ...input, scope: measure.scope }
+}
+
+/** Gives each carried team its seats for this sprint, keeping its items. */
+function updateTeamMembers(args, updates) {
+  for (const { team, members } of updates) {
+    teamAction({ ...args, team }, current => ({
+      board: current === null
+        ? { team, members, items: [], refusals: [] }
+        : { ...current, members },
+    }))
+  }
+}
+
+/** The sprint loop on disk, or undefined before the first sprint is allocated. */
+function readLoop(args) {
+  try {
+    return JSON.parse(fs.readFileSync(boardFile(args, LOOP_FILE), 'utf8'))
+  } catch (error) {
+    if (error.code === 'ENOENT') return undefined
+    throw error
+  }
+}
+
+/** Applies one change to the sprint loop under its lock. `change` returns { loop, ...result }. */
+function loopChange(args, change) {
+  let result
+  updateJson(boardFile(args, LOOP_FILE), null, current => {
+    const { loop, ...rest } = change(current)
+    result = rest
+    return loop
+  }, UNFENCED)
+  return result
+}
+
+/**
+ * When the meeting just held closed its sprint, the Orchestrator's report on
+ * that sprint goes into the loop, for the BA to sign. Undefined otherwise.
+ */
+function reportClosedSprint(args, meeting) {
+  return reportSprint(args, readBoard(args).meetings[meeting]?.sprint)
+}
+
+/** Files the report on `sprint` when it is closed, in the loop, and has none yet. */
+function reportSprint(args, sprint) {
+  const board = readBoard(args)
+  const loop = readLoop(args)
+  const inLoop = loop !== undefined && loop.state === 'running' && loop.sprints.includes(sprint)
+  if (!inLoop || loop.reports[sprint] !== undefined) return undefined
+  if (board.sprints[sprint]?.status !== 'closed') return undefined
+  const report = sprintReport(board, { sprint, at: now() })
+  loopChange(args, current => ({ loop: addReport(current, report) }))
+  return report
+}
+
+/**
+ * Moves the loop on: pauses it for the client at the sprint limit or when
+ * nothing is left, or drafts the next sprint from the backlog and, when the
+ * draft has no question for the BA, allocates it at once.
+ */
+function advanceLoop(args) {
+  if (readLoop(args) === undefined) {
+    throw new Error('no sprint loop: it starts when the first sprint is allocated')
+  }
+  reportSprint(args, readLoop(args).sprints.at(-1))
+  const loop = readLoop(args)
+  const step = nextStep(loop, readBoard(args))
+  if (step.action === 'pause') {
+    loopChange(args, current => ({ loop: pauseLoop(current, step.reason) }))
+    return { action: 'paused', reason: step.reason }
+  }
+  if (step.action !== 'draft') return step
+  const weeks = readDraft(args)?.weeks
+  const draft = draftAutopilot(currentMap(args), {
+    title: step.title, tasks: step.tasks, weeks, ba: loop.ba,
+  })
+  draftChange(args, () => ({ draft: { ...draft, sprintLimit: loop.limit } }))
+  if (draft.questions.length > 0) {
+    return { action: 'steer', questions: draft.questions, ...draftView(draft) }
+  }
+  return { action: 'allocated', ...allocateDraft(args, loop.ba) }
 }
 
 /** Opens each allocated team's board; a team that already has one is refused. */
@@ -1286,12 +1407,16 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => ({
-      board: holdMeeting(board, {
-        id: args.id, by: args.caller, minutes: args.minutes, attendees: args.attendees,
-        record: args.record, at: now(),
-      }),
-    })),
+    run: args => {
+      const held = boardChange(args, board => ({
+        board: holdMeeting(board, {
+          id: args.id, by: args.caller, minutes: args.minutes, attendees: args.attendees,
+          record: args.record, at: now(),
+        }),
+      }))
+      const report = reportClosedSprint(args, args.id)
+      return report === undefined ? held : { ...held, sprintReport: report }
+    },
   },
   {
     name: 'goal_merge',
@@ -1970,6 +2095,10 @@ const TOOLS = [
         weeks: { type: 'integer', minimum: 1, maximum: MAX_SPRINT_WEEKS },
         ba: { type: 'string' }, tasks: { type: 'array', minItems: 1, items: TASK_SCHEMA },
         replace: { type: 'boolean', description: 'Replace a draft that is still being steered.' },
+        sprintLimit: {
+          type: 'integer', minimum: 1, maximum: MAX_SPRINT_LIMIT,
+          description: 'Sprints the loop runs before it pauses to ask the client (default 10).',
+        },
       },
       required: ['ba', 'tasks'],
       additionalProperties: false,
@@ -1982,9 +2111,11 @@ const TOOLS = [
         if (current !== null && (current.state !== 'steering' || !args.replace)) {
           throw new Error(`a draft is already ${current.state}; pass replace while it is steering`)
         }
-        const draft = draftAutopilot(map, {
+        const drafted = draftAutopilot(map, {
           title: args.title, tasks: args.tasks, weeks: args.weeks, ba: args.ba,
         })
+        const limited = args.sprintLimit === undefined ? {} : { sprintLimit: args.sprintLimit }
+        const draft = { ...drafted, ...limited }
         return { draft, ...draftView(draft) }
       })
     },
@@ -2059,25 +2190,7 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => {
-      const draft = readDraft(args)
-      if (draft === undefined) throw new Error('no autopilot draft: autopilot_draft starts one')
-      const versions = { node: process.versions.node, plugin: PKG.version, schema: '1' }
-      const out = boardChange(args, board => {
-        const done = allocateAutopilot(board, draft, { by: args.caller, at: now(), versions })
-        return { ...done }
-      })
-      openTeamBoards(args, out.teamBoards)
-      const catalogs = deliverAllocated(args, out.given)
-      draftChange(args, current => ({
-        draft: {
-          ...current, state: 'allocated', sprint: out.sprint, launch: out.launch, at: now(),
-        },
-      }))
-      return {
-        sprint: out.sprint, launch: out.launch, overflow: out.overflow, catalogs: catalogs.length,
-      }
-    },
+    run: args => allocateDraft(args, args.caller),
   },
   {
     name: 'autopilot_status',
@@ -2088,6 +2201,73 @@ const TOOLS = [
     run: args => {
       const draft = readDraft(args)
       return draft === undefined ? { state: 'none' } : draftView(draft)
+    },
+  },
+  {
+    name: 'loop_status',
+    description: [
+      'The sprint loop: running, paused (why) or satisfied; its sprints, the sprint limit,',
+      'each sprint\'s report with the BA\'s signature and the client\'s sign-off, and what the',
+      'loop does next.',
+    ].join(' '),
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    run: args => {
+      const loop = readLoop(args)
+      if (loop === undefined) return { state: 'none' }
+      const { carry, scopes, ...shown } = loop
+      return { ...shown, next: nextStep(loop, readBoard(args)) }
+    },
+  },
+  {
+    name: 'loop_report_sign',
+    description: [
+      'The Business Analyst (`caller`) signs the Orchestrator\'s report on a closed sprint,',
+      'with its view of how the vision was carried out (`notes`). When the vision is',
+      'unclear, `askClient` asks the client and pauses the loop until they answer with',
+      '/devops continue. Otherwise the loop moves on at once: it drafts the next sprint from',
+      'the backlog and allocates it, or pauses at the sprint limit or when nothing is left.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, sprint: { type: 'string' },
+        notes: { type: 'string', maxLength: MAX_TASK_TEXT },
+        askClient: { type: 'string', maxLength: MAX_TASK_TEXT },
+      },
+      required: ['caller', 'sprint'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      loopChange(args, loop => {
+        if (loop === null) throw new Error('no sprint loop yet')
+        return {
+          loop: signReport(loop, {
+            sprint: args.sprint, by: args.caller, notes: args.notes, askClient: args.askClient,
+            at: now(),
+          }),
+        }
+      })
+      return { signed: args.sprint, next: advanceLoop(args) }
+    },
+  },
+  {
+    name: 'loop_advance',
+    description: [
+      'Orchestration only: move the loop on after the client answers (/devops continue), or',
+      'after the BA steers a draft that had questions. Pauses, drafts or allocates the next',
+      'sprint the same way the BA\'s signature does.',
+    ].join(' '),
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      if (BOUND_SEAT) throw new Error('only Orchestration moves the loop on')
+      const draft = readDraft(args)
+      if (draft?.state === 'steering' && draft.questions.length === 0 && readLoop(args)) {
+        return { action: 'allocated', ...allocateDraft(args, draft.ba) }
+      }
+      return advanceLoop(args)
     },
   },
   {

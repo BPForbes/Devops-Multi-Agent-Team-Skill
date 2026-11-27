@@ -68,11 +68,12 @@ test('initialize negotiates, lists 34 tools, prompts and resources', async () =>
     for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_overview', 'mindmap_tree', 'mindmap_note', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
     const added = ['lint_check', 'lint_commands', 'config_get', 'config_set']
     for (const name of added) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 85)
+    assert.equal(tools.length, 88)
     const catalogTools = [
       'catalog_index', 'catalog_release', 'catalog_pull', 'catalog_request', 'catalog_decide',
       'catalog_finalize', 'goal_trail',
       'autopilot_draft', 'autopilot_steer', 'autopilot_allocate', 'autopilot_status',
+      'loop_status', 'loop_report_sign', 'loop_advance',
     ]
     for (const name of catalogTools) assert.ok(tools.includes(name), name)
     const scrum = [
@@ -912,6 +913,61 @@ test('autopilot: only Orchestration drafts', async () => {
     const refused = await c.call('autopilot_draft', { ba: AUTOPILOT_BA, tasks: [{ title: 'x' }] })
     assert.equal(refused.isError, true)
     assert.match(refused.text, /only Orchestration/)
+  } finally {
+    c.close()
+  }
+})
+
+const LOOP_SCRIPT = path.resolve(path.dirname(SERVER), '..', 'scripts', 'devops-loop.mjs')
+
+/** Closes the sprint on disk as the last retrospective does, with every planned goal unfinished. */
+function closeSprintOnDisk(root, sprint) {
+  const file = path.join(root, BOARD)
+  const board = JSON.parse(fs.readFileSync(file, 'utf8'))
+  const planned = board.allocations[sprint].teams.flatMap(team => team.goals ?? [])
+  for (const goal of planned) {
+    Object.assign(board.goals[goal], { state: 'backlog', sprint: '' })
+    board.goals[goal].history.push({ at: '2026-11-28T00:00:00Z', event: 'returned', from: sprint })
+  }
+  const closed = { goals: [], status: 'closed', closed: '2026-11-28T00:00:00Z' }
+  Object.assign(board.sprints[sprint], closed)
+  fs.writeFileSync(file, JSON.stringify(board))
+}
+
+test('sprint loop: a closed sprint is reported, the BA signs, the next sprint runs', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  try {
+    await c.call('autopilot_draft', {
+      ba: AUTOPILOT_BA, tasks: [{ title: 'Make slugify safe' }, { title: 'Use pageTitle' }],
+    })
+    const first = (await c.call('autopilot_allocate', { caller: AUTOPILOT_BA })).json()
+    const leads = first.launch.seats.filter(seat => seat.roles.includes('manager'))
+    const coreLead = leads.find(seat => seat.module === 'core')
+    assert.equal((await c.call('loop_status')).json().state, 'running')
+    closeSprintOnDisk(root, first.sprint)
+    const waiting = (await c.call('loop_advance')).json()
+    assert.equal(waiting.reason, 'ba-signature', 'the report waits for the BA')
+    const report = (await c.call('loop_status')).json().reports[first.sprint]
+    assert.equal(report.unfinished.length, 2)
+    const signed = (await c.call('loop_report_sign', {
+      caller: AUTOPILOT_BA, sprint: first.sprint, notes: 'vision on track',
+    })).json()
+    assert.equal(signed.next.action, 'allocated', 'the next sprint starts on its own')
+    const second = signed.next
+    assert.notEqual(second.sprint, first.sprint)
+    const carried = second.launch.seats.find(seat => seat.agent === coreLead.agent)
+    assert.ok(carried?.carried, 'the core team keeps its lead')
+    const inbox = await inboxOfSeat(c, coreLead.agent)
+    assert.equal(inbox.work.length, 1, 'the old work is carried, not doubled')
+    const status = (await c.call('loop_status')).json()
+    assert.equal(status.sprints.length, 2)
+    const { spawnSync } = await import('node:child_process')
+    const words = ['decide', 'satisfied', '--note', 'ship it', '--dest', root]
+    const ran = spawnSync('node', [LOOP_SCRIPT, ...words])
+    assert.equal(ran.status, 0, String(ran.stderr))
+    assert.equal((await c.call('loop_status')).json().state, 'satisfied')
+    assert.equal((await c.call('loop_advance')).json().action, 'none')
   } finally {
     c.close()
   }

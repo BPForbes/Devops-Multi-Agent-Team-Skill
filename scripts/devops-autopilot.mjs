@@ -3,7 +3,7 @@
 // Business Analyst, then allocated in one step. Pure rules: the server reads
 // the map and persists the draft and the board.
 import { RISKS, planAllocation, spinUp } from './devops-allocation.mjs'
-import { OPEN_WORK_LIMIT, assignWork, mintId } from './devops-board.mjs'
+import { OPEN_WORK_LIMIT, assignWork, carryOpenWork, mintId } from './devops-board.mjs'
 import { resolveScope } from './devops-catalog.mjs'
 import { isAgentId } from './devops-ids.mjs'
 import { clientFields } from './devops-scrum.mjs'
@@ -253,16 +253,34 @@ export function steerAutopilot(draft, { by, decisions = [], caps = {}, rescope =
  * authors, and the review, QA and Security seats it holds for other teams'
  * work. The lead comes first, holding manager and the team's main job.
  */
-function seatsOf(team, mintAgent) {
+function jobsOf(team) {
   const judging = job => team.judges.reduce((n, judge) => n + judge[job], 0)
   const counts = [
     ['coder', team.authors?.coder ?? 0], ['researcher', team.authors?.researcher ?? 0],
     ['reviewer', judging('reviewer')], ['qa', judging('qa')], ['security', judging('security')],
   ]
-  const jobs = counts.flatMap(([job, count]) => Array.from({ length: count }, () => job))
-  return jobs.map((job, i) => ({
-    agent: mintAgent(), job, roles: i === 0 ? ['manager', job] : [job],
+  return counts.flatMap(([job, count]) => Array.from({ length: count }, () => job))
+}
+
+/**
+ * A team's seats for this sprint. A carried team keeps the seats whose job
+ * is still needed, its lead first; new seats fill what is missing, and the
+ * seats left over retire. The lead holds manager and its job.
+ */
+function seatsOf(team, mintAgent, carried) {
+  const left = [...(carried?.seats ?? [])]
+  const isLead = seat => Number(seat.agent === carried?.lead)
+  const leadFirst = left.sort((a, b) => isLead(b) - isLead(a))
+  const kept = jobsOf(team).map(job => {
+    const at = leadFirst.findIndex(seat => seat.job === job)
+    if (at === -1) return { agent: mintAgent(), job, carried: false }
+    return { ...leadFirst.splice(at, 1)[0], carried: true }
+  })
+  const seats = kept.map((seat, i) => ({
+    agent: seat.agent, job: seat.job, carried: seat.carried,
+    roles: i === 0 ? ['manager', seat.job] : [seat.job],
   }))
+  return { seats, retired: leadFirst.map(({ agent, job }) => ({ agent, job })) }
 }
 
 /** The goals a team builds, in the BA's priority order (unranked last, then by task order). */
@@ -324,11 +342,21 @@ function assignResearch(board, { team, seats, ranked, at, mint }) {
 }
 
 /** The team hash, lead and seats for every planned team. */
-function mintTeams(plan, mintHash) {
+/** The key a team carries over by: its module, or the name of a team that authors nothing. */
+export const carryKey = team => team.module ?? team.name
+
+/**
+ * The team hash, lead and seats for every planned team. A team in `carry`
+ * (from the sprint before, by module or by name) keeps its hash and seats.
+ */
+function mintTeams(plan, mintHash, carry = {}) {
   return Object.fromEntries(plan.teams.map(team => {
-    const seats = seatsOf(team, () => mintHash('agent'))
+    const carried = carry[carryKey(team)]
+    const { seats, retired } = seatsOf(team, () => mintHash('agent'), carried)
     const module = team.module ?? null
-    const record = { team: mintHash('team'), lead: seats[0].agent, seats, module }
+    const id = carried?.team ?? mintHash('team')
+    const lead = seats[0].agent
+    const record = { team: id, lead, seats, retired, module, carried: Boolean(carried) }
     return [team.name, record]
   }))
 }
@@ -354,7 +382,7 @@ function recordSpecs(board, { draft, plan, goals, teams }) {
  * board, the team boards to open, the work given (with each task's scope, for
  * its catalog), the overflow per team and the launch list.
  */
-export function allocateAutopilot(board, draft, { by, at, mint, versions }) {
+export function allocateAutopilot(board, draft, { by, at, mint, versions, carry }) {
   need(by === draft.ba, `only the Business Analyst (${draft.ba}) allocates`)
   need(draft.state === 'steering', `the draft is already ${draft.state}`)
   need(draft.questions.length === 0,
@@ -366,19 +394,23 @@ export function allocateAutopilot(board, draft, { by, at, mint, versions }) {
     taken[id] = true
     return id
   }
-  const teams = mintTeams(draft.plan, mintHash)
+  const teams = mintTeams(draft.plan, mintHash, carry)
+  const goalOf = id => draft.tasks.find(task => task.id === id).goal ?? mintHash('goal')
   const goals = Object.fromEntries(draft.plan.teams.filter(t => t.authors)
-    .flatMap(t => t.authors.streams).map(id => [id, mintHash('goal')]))
+    .flatMap(t => t.authors.streams).map(id => [id, goalOf(id)]))
   const leads = Object.fromEntries(Object.entries(teams)
     .map(([name, t]) => [name, { team: t.team, lead: t.lead }]))
   const spun = spinUp(board, draft.plan, {
     name: draft.title, weeks: draft.weeks, goals, teams: leads, at, mint, versions,
   })
-  return finishAllocation(spun, { draft, teams, goals, at, mint })
+  return finishAllocation(spun, { draft, teams, goals, at, mint, carry })
 }
 
-function finishAllocation(spun, { draft, teams, goals, at, mint }) {
+function finishAllocation(spun, { draft, teams, goals, at, mint, carry = {} }) {
   let next = recordSpecs(spun.board, { draft, plan: draft.plan, goals, teams })
+  for (const goal of Object.values(goals)) {
+    next = carryOpenWork(next, { goal, sprint: spun.sprint, at })
+  }
   const given = []
   const overflow = {}
   for (const team of draft.plan.teams.filter(t => t.authors)) {
@@ -390,12 +422,19 @@ function finishAllocation(spun, { draft, teams, goals, at, mint }) {
     given.push(...coded.given, ...researched.given)
     if (coded.overflow.length > 0) overflow[team.name] = coded.overflow
   }
-  const teamBoards = Object.values(teams).map(t => openBoard({
-    team: t.team, members: t.seats.map(seat => ({ agent: seat.agent, roles: seat.roles })),
-  }).board)
+  const membersOf = t => t.seats.map(seat => ({ agent: seat.agent, roles: seat.roles }))
+  const teamBoards = Object.values(teams).filter(t => !t.carried)
+    .map(t => openBoard({ team: t.team, members: membersOf(t) }).board)
+  const teamUpdates = Object.values(teams).filter(t => t.carried)
+    .map(t => ({ team: t.team, members: membersOf(t) }))
+  const carryOut = Object.fromEntries(draft.plan.teams.map(planned => {
+    const t = teams[planned.name]
+    return [carryKey(planned), { team: t.team, lead: t.lead, seats: t.seats, module: t.module }]
+  }))
   return {
-    sprint: spun.sprint, board: next, teamBoards, given, overflow, goals,
-    launch: launchList({ draft, teams, given, goals, sprint: spun.sprint }),
+    sprint: spun.sprint, board: next, teamBoards, teamUpdates, carry: carryOut,
+    given, overflow, goals,
+    launch: launchList({ draft, teams, given, goals, sprint: spun.sprint, carry }),
   }
 }
 
@@ -404,9 +443,10 @@ function finishAllocation(spun, { draft, teams, goals, at, mint }) {
  * that plays its job, the settings that bind it, and the work it was given;
  * each lead with the client's specification for its goals; the BA.
  */
-export function launchList({ draft, teams, given, goals, sprint }) {
+export function launchList({ draft, teams, given, goals, sprint, carry = {} }) {
   const seats = Object.entries(teams).flatMap(([name, t]) => t.seats.map(seat => ({
     agent: seat.agent, team: t.team, teamName: name, module: t.module, roles: seat.roles,
+    carried: seat.carried,
     subagent: `devops-multi-agent-team:${AGENT_TYPE[seat.job]}`,
     env: { DEVOPS_SEAT: seat.agent, DEVOPS_TEAM: t.team },
     work: given.filter(g => g.agent === seat.agent).map(g => g.work),
@@ -418,5 +458,11 @@ export function launchList({ draft, teams, given, goals, sprint }) {
   }))
   const analyst = AGENT_TYPE['business-analyst']
   const ba = { agent: draft.ba, subagent: `devops-multi-agent-team:${analyst}` }
-  return { sprint, ba, seats, briefs }
+  const planned = new Set(draft.plan.teams.map(carryKey))
+  const idle = Object.entries(carry).filter(([key]) => !planned.has(key))
+    .flatMap(([, t]) => t.seats.map(({ agent, job }) => ({ agent, job, team: t.team })))
+  const resized = Object.values(teams)
+    .flatMap(t => t.retired.map(seat => ({ ...seat, team: t.team })))
+  const retired = [...resized, ...idle]
+  return { sprint, ba, seats, retired, briefs }
 }

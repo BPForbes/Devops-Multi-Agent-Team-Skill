@@ -49,6 +49,7 @@
     "scripts/devops-claude-settings.mjs",
     "scripts/devops-catalog.mjs",
     "scripts/devops-autopilot.mjs",
+    "scripts/devops-loop.mjs",
     "scripts/devops-formal.mjs",
     "scripts/devops-lint.mjs",
     "scripts/devops-lint-rules.mjs",

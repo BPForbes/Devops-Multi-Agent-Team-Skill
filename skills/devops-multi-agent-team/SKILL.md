@@ -105,7 +105,12 @@ measures each task against the mind map and plans one team per module, the
 Business Analyst answers its questions and steers it (`autopilot_steer`),
 and `autopilot_allocate` opens the sprint, the team boards and the work in
 one step and returns a launch list; spawn one subagent per seat from it
-([autopilot.md](references/autopilot.md)). Every team lead,
+([autopilot.md](references/autopilot.md)). Then the **sprint loop** runs
+sprints until the client is satisfied: each closed sprint gets the
+Orchestrator's report, the BA signs it (`loop_report_sign`, asking the client
+when the vision is unclear), the next sprint is drafted from the backlog and
+allocated on its own with the teams carried over, and the client ends it
+with `/devops satisfied` ([sprint-loop.md](references/sprint-loop.md)). Every team lead,
 whatever the team's job, runs its team's meetings and signs its tasks
 off as done (`goal_signoff`) after a team member verified them; the
 Business Analyst signs twice (when the goal goes on the scheduled Sprint
