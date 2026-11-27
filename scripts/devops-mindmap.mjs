@@ -16,7 +16,7 @@ const GRAPH_FILE = 'graph.json'
 const NOTES_FILE = 'NOTES.md'
 const MAX_DOC = 280
 const ENTRY_FILE = /(^|\/)(main\.(go|rs|py|c|cc|cpp|java|kt|cs|swift|zig|dart|ts|js|mjs)|__main__\.py|manage\.py|Program\.cs|(index|app|server|cli)\.(ts|tsx|js|mjs|py|rb|php))$/
-const FORMAT = 1
+const FORMAT = 2
 const MAX_FILE_BYTES = 256 * 1024
 const MAX_FILES = 4000
 const MAX_SYMBOLS_PER_FILE = 200
@@ -531,6 +531,26 @@ function definitionsOf(files, T) {
   return definitions
 }
 
+/** Which files import each file. */
+function importersOf(files) {
+  const importedBy = {}
+  for (const [rel, info] of Object.entries(files)) {
+    for (const target of info.imports) (importedBy[target] ??= []).push(rel)
+  }
+  return importedBy
+}
+
+/** Which test files import each code file that is not a test itself. */
+function testsOf(files) {
+  const testedBy = {}
+  for (const [rel, info] of Object.entries(files)) {
+    if (!info.test) continue
+    const targets = info.imports.filter(target => files[target] && !files[target].test)
+    for (const target of targets) (testedBy[target] ??= []).push(rel)
+  }
+  return testedBy
+}
+
 /** What decides how bare imports are told apart: manifests, local packages, top names. */
 function manifestSignature(declared, local, localTopNames) {
   const manifests = [...declared].map(([key, entry]) => [key, entry.declaredIn]).sort()
@@ -591,7 +611,7 @@ function callsByFile(calls) {
  * call links unless a definition it names changed, so only the changed part
  * is parsed again; the result is the map a full build would give.
  */
-export function buildMindMap(destInput, { roots, save = false, previous } = {}) {
+export function buildMindMap(destInput, { roots, save = false, previous, saveGraph = false } = {}) {
   const dest = resolveDest(destInput, roots)
   const T = loadText(dest)
   const found = walk(dest)
@@ -652,8 +672,7 @@ export function buildMindMap(destInput, { roots, save = false, previous } = {}) 
     texts.set(rel, text)
   }
 
-  const importedBy = {}
-  for (const [rel, info] of Object.entries(files)) for (const target of info.imports) (importedBy[target] ??= []).push(rel)
+  const importedBy = importersOf(files)
 
   const definitions = definitionsOf(files, T)
   const rescan = prior
@@ -738,8 +757,7 @@ export function buildMindMap(destInput, { roots, save = false, previous } = {}) 
   for (const m of Object.values(modules)) m.libraries = [...m.libraries].sort()
   for (const name of Object.keys(modules)) modules[name].hash = moduleHash({ modules, files }, name)
 
-  const testedBy = {}
-  for (const [rel, info] of Object.entries(files)) if (info.test) for (const target of info.imports) if (files[target] && !files[target].test) (testedBy[target] ??= []).push(rel)
+  const testedBy = testsOf(files)
 
   const duplicates = [...definitions].filter(([, defs]) => {
     const sources = defs.filter(d => !files[d.file].test && d.kind !== 'method' && !/\.d\.ts$/.test(d.file))
@@ -767,13 +785,17 @@ export function buildMindMap(destInput, { roots, save = false, previous } = {}) 
   result.reuse = { reused, parsed: changed.size, callsRescanned: rescan.size }
   if (save) {
     const dir = path.join(dest, MINDMAP_DIR)
-    for (const [name, body] of [[MAP_FILE, JSON.stringify(map) + '\n'], [SUMMARY_FILE, result.summary], [OVERVIEW_FILE, overview], [GRAPH_FILE, JSON.stringify(graph) + '\n']]) {
+    const outputs = [
+      [MAP_FILE, JSON.stringify(packMap(map)) + '\n'], [SUMMARY_FILE, result.summary],
+      [OVERVIEW_FILE, overview], ...(saveGraph ? [[GRAPH_FILE, JSON.stringify(graph) + '\n']] : []),
+    ]
+    for (const [name, body] of outputs) {
       const file = path.join(dir, name)
       assertInside(dest, file)
       fs.mkdirSync(dir, { recursive: true })
       fs.writeFileSync(file, body)
     }
-    result.saved = [path.join(MINDMAP_DIR, MAP_FILE), path.join(MINDMAP_DIR, SUMMARY_FILE), path.join(MINDMAP_DIR, OVERVIEW_FILE), path.join(MINDMAP_DIR, GRAPH_FILE)]
+    result.saved = outputs.map(([name]) => path.join(MINDMAP_DIR, name))
   }
   return result
 }
@@ -1225,9 +1247,98 @@ export function renderSummary(map, overview, graph, T = loadText()) {
 /** The saved map of the project, or undefined when none is saved in this format. */
 export function loadSaved(dest) {
   try {
-    const map = JSON.parse(fs.readFileSync(path.join(dest, MINDMAP_DIR, MAP_FILE), 'utf8'))
-    return map.format === FORMAT ? map : undefined
+    const saved = JSON.parse(fs.readFileSync(path.join(dest, MINDMAP_DIR, MAP_FILE), 'utf8'))
+    return saved.format === FORMAT ? unpackMap(saved) : undefined
   } catch { return undefined }
+}
+
+/**
+ * The fields of a symbol in saved order. A saved symbol is a row of these
+ * values; a missing one is null, trailing missing ones are left off, and
+ * `exported` is 1 or 0.
+ */
+const SYMBOL_FIELDS = [
+  'name', 'kind', 'line', 'end', 'exported', 'signature', 'doc', 'documentedIn',
+]
+
+function packSymbol(symbol) {
+  const row = SYMBOL_FIELDS.map(key => {
+    if (!(key in symbol)) return null
+    return key === 'exported' ? Number(symbol.exported) : symbol[key]
+  })
+  while (row.length > 0 && row.at(-1) === null) row.pop()
+  return row
+}
+
+function unpackSymbol(row) {
+  const symbol = {}
+  row.forEach((value, i) => {
+    if (value === null) return
+    const key = SYMBOL_FIELDS[i]
+    symbol[key] = key === 'exported' ? value === 1 : value
+  })
+  return symbol
+}
+
+/** A path table: each path once, so other fields name a path by its index. */
+function pathTable(map) {
+  const paths = [...Object.keys(map.files), ...Object.keys(map.docs)].sort()
+  const index = new Map(paths.map((rel, i) => [rel, i]))
+  const ref = rel => {
+    if (!index.has(rel)) index.set(rel, paths.push(rel) - 1)
+    return index.get(rel)
+  }
+  return { paths, ref }
+}
+
+const splitRef = ref => [ref.slice(0, ref.lastIndexOf('#')), ref.slice(ref.lastIndexOf('#') + 1)]
+
+/**
+ * The saved form of a map: paths once in a table, symbols and call links as
+ * rows, and nothing that loading can derive again (importers, tests, each
+ * file's module and test flag). unpackMap gives back the same map.
+ */
+export function packMap(map) {
+  const { paths, ref } = pathTable(map)
+  const files = {}
+  for (const [rel, info] of Object.entries(map.files)) {
+    const { module, test, symbols, imports, documentedBy, ...rest } = info
+    files[rel] = {
+      ...rest,
+      imports: imports.map(ref),
+      symbols: symbols.map(packSymbol),
+      ...(documentedBy ? { documentedBy: documentedBy.map(ref) } : {}),
+    }
+  }
+  const calls = map.calls.map(({ from, to, count }) => {
+    const [fromFile, fromName] = splitRef(from)
+    const [toFile, toName] = splitRef(to)
+    return [ref(fromFile), fromName, ref(toFile), toName, count]
+  })
+  const { importedBy, testedBy, ...kept } = map
+  return { ...kept, files, calls, paths }
+}
+
+/** The map a packed one was made from. */
+export function unpackMap(saved) {
+  const { paths, files: packedFiles, calls: packedCalls, ...rest } = saved
+  const at = i => paths[i]
+  const files = {}
+  for (const [rel, info] of Object.entries(packedFiles)) {
+    const { imports, symbols, documentedBy, ...kept } = info
+    files[rel] = {
+      ...kept,
+      module: moduleOf(rel),
+      test: TEST_FILE.test(rel),
+      imports: imports.map(at),
+      symbols: symbols.map(unpackSymbol),
+      ...(documentedBy ? { documentedBy: documentedBy.map(at) } : {}),
+    }
+  }
+  const calls = packedCalls.map(([fromFile, fromName, toFile, toName, count]) => ({
+    from: `${at(fromFile)}#${fromName}`, to: `${at(toFile)}#${toName}`, count,
+  }))
+  return { ...rest, files, calls, importedBy: importersOf(files), testedBy: testsOf(files) }
 }
 
 /** Which files changed since the saved map, so an agent re-reads only those. */
@@ -1332,7 +1443,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   try {
     if (command === 'build') {
       const previous = args.includes('--fresh') ? undefined : loadSaved(dest)
-      const result = buildMindMap(dest, { save: args.includes('--save'), previous })
+      const saveGraph = args.includes('--graph')
+      const result = buildMindMap(dest, { save: args.includes('--save'), previous, saveGraph })
       if (args.includes('--json')) console.log(JSON.stringify(result.map))
       else console.log(result.saved ? `${loadText(dest).t('cliSaved', { files: result.saved.join(', ') })}\n${JSON.stringify(result.map.counts)}` : result.summary)
     } else if (command === 'tree') {

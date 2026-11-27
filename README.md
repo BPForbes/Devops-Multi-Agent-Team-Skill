@@ -63,8 +63,9 @@ section, libraries; linked by imports, calls, uses, documents, links, tests).
 docstring, file header or README, the doc sections that name it, and a
 hand-written note from `NOTES.md`. Files: `OVERVIEW.md` (a quick scan),
 `MINDMAP.md` (the tree with documentation, docs to code, modules, libraries,
-possible duplicates), `graph.json` (nodes and edges), `mindmap.json` (behind
-`mindmap_query`) and `NOTES.md` (yours, never overwritten). No sentence is
+possible duplicates), `mindmap.json` (packed, behind `mindmap_query`; read it
+through the tools), `graph.json` (nodes and edges, only on request with
+`graph: true`) and `NOTES.md` (yours, never overwritten). No sentence is
 written in the code: all wording and English word lists are in
 [`mindmap-text.json`](mindmap-text.json), and a project can change any of them
 in `.devops/mindmap/text.json`. "How does X work?"

@@ -586,6 +586,7 @@ const TOOLS = [
         save: { type: 'boolean' },
         full: { type: 'boolean', description: MINDMAP_TEXT.t('paramFull') },
         fresh: { type: 'boolean', description: MINDMAP_TEXT.t('paramFresh') },
+        graph: { type: 'boolean', description: MINDMAP_TEXT.t('paramGraph') },
       },
       additionalProperties: false,
     },
@@ -594,7 +595,8 @@ const TOOLS = [
       const dir = projectDir(args)
       const previous = optionalBool(args, 'fresh', false) ? undefined : loadSaved(dir)
       const save = optionalBool(args, 'save', false)
-      const result = buildMindMap(dir, { roots: allowedRoots(), save, previous })
+      const saveGraph = optionalBool(args, 'graph', false)
+      const result = buildMindMap(dir, { roots: allowedRoots(), save, previous, saveGraph })
       const full = optionalBool(args, 'full', false)
       return {
         dest: result.dest,
