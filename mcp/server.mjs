@@ -7,7 +7,7 @@
 // secret.
 
 import fs from 'node:fs'
-import { UNFENCED, projectPath, updateJson, writeAtomic } from '../scripts/devops-store.mjs'
+import { UNFENCED, projectPath, readJson, updateJson } from '../scripts/devops-store.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -41,16 +41,14 @@ import {
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 import { isTeamId } from '../scripts/devops-ids.mjs'
 import { RISKS, planAllocation, spinUp } from '../scripts/devops-allocation.mjs'
+import * as orch from '../scripts/devops-orchestrate.mjs'
 import {
   AUTOPILOT_FILE, allocateAutopilot, draftAutopilot, measureTask, steerAutopilot,
 } from '../scripts/devops-autopilot.mjs'
-import { DASHBOARD_FILE, renderDashboard } from '../scripts/devops-dashboard.mjs'
-import {
-  MAX_BATCH_SIZE, MESSAGES_FILE, batchItems, messagePolicy,
-} from '../scripts/devops-messages.mjs'
+import { writeDashboard } from '../scripts/devops-dashboard.mjs'
+import { MESSAGES_FILE, batchItems, messagePolicy } from '../scripts/devops-messages.mjs'
 import {
   addVisionNote, forwardDeadlock, raiseDeadlock, resolveDeadlock, stalledGoals, teamOfGoal,
-  VISION_SOURCES,
 } from '../scripts/devops-vision.mjs'
 import {
   LOOP_FILE, MAX_SPRINT_LIMIT, addReport, nextStep, pauseLoop, recordAllocation, signReport,
@@ -209,20 +207,31 @@ const GOAL_STATE = {
   type: 'string', enum: ['backlog', 'ready', 'in_progress', 'review', 'qa', 'security', 'done'],
 }
 
+/** The project folder of a tool call, as the shared orchestration sees it. */
+const dirOf = args => projectDir(args)
+const teamAction = (args, change) => orch.teamAction(dirOf(args), args.team, change)
+const readBoard = args => orch.readBoard(dirOf(args))
+const boardChange = (args, change) => orch.boardChange(dirOf(args), change)
+const readLedger = args => orch.readLedger(dirOf(args))
+const ledgerChange = (args, change) => orch.ledgerChange(dirOf(args), change)
+const readLoop = args => orch.readLoop(dirOf(args))
+const loopChange = (args, change) => orch.loopChange(dirOf(args), change)
+const readDraft = args => orch.readDraft(dirOf(args))
+const draftChange = (args, change) => orch.draftChange(dirOf(args), change)
+const currentMap = args => orch.currentMap(dirOf(args), allowedRoots())
+const deliver = (args, a) => orch.deliver(dirOf(args), allowedRoots(), a)
+const deliverModule = (args, a) => orch.deliverModule(dirOf(args), allowedRoots(), a)
+const workRow = (args, work) => orch.workRow(dirOf(args), work)
+const goalOf = orch.goalOf
+const mintFresh = orch.mintFresh
+
 /** The board file's path inside the project (projectPath refuses symbolic links). */
 function boardFile(args, rel = BOARD_FILE) {
   return projectPath(projectDir(args), rel)
 }
 
-function readBoard(args) {
-  try {
-    const text = fs.readFileSync(boardFile(args), 'utf8')
-    return normalizeBoard(JSON.parse(text))
-  } catch (error) {
-    if (error.code === 'ENOENT') return emptyBoard()
-    throw error
-  }
-}
+
+
 
 /** A team's own board file, under the project's teams folder. */
 function teamFile(args) {
@@ -251,149 +260,22 @@ function teamChange(args, change) {
   return result
 }
 
-/** A team write that keeps a refusal: the board is saved, then the refusal is reported. */
-function teamAction(args, change) {
-  const out = teamChange(args, change)
-  if (out.error !== undefined) throw new Error(out.error)
-  return out
-}
 
 function readTeam(args) {
-  let text
-  try {
-    text = fs.readFileSync(teamFile(args), 'utf8')
-  } catch (error) {
-    if (error.code === 'ENOENT') return boardOrThrow(null, args.team)
-    throw error
-  }
-  return boardOrThrow(JSON.parse(text), args.team)
+  return boardOrThrow(readJson(teamFile(args), null), args.team)
 }
 
-/** Applies one change to the board and saves it. `change` returns { board, ...result }. */
-function boardChange(args, change) {
-  // One lock covers read, change and write: no update is lost between servers.
-  let result
-  updateJson(boardFile(args), emptyBoard(), current => {
-    const { board, ...rest } = change(normalizeBoard(current))
-    result = rest
-    return board
-  }, UNFENCED)
-  refreshDashboard(args)
-  return result
-}
 
-/**
- * Rewrites .devops/DASHBOARD.md from the board, the catalog ledger, the loop
- * and the saved map's files. Called after each change, so the report is never
- * behind the board.
- */
-function refreshDashboard(args) {
-  const text = renderDashboard({
-    board: readBoard(args), ledger: readLedger(args), loop: readLoop(args),
-    project: path.basename(projectDir(args)),
-  })
-  const file = boardFile(args, DASHBOARD_FILE)
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  writeAtomic(file, text)
-}
 
-/** The project's mind map: the saved one, or one built now when none is saved. */
-function currentMap(args) {
-  const dir = projectDir(args)
-  return loadSaved(dir) ?? buildMindMap(dir, { roots: allowedRoots() }).map
-}
 
-function readLedger(args) {
-  try {
-    return JSON.parse(fs.readFileSync(boardFile(args, CATALOG_FILE), 'utf8'))
-  } catch (error) {
-    if (error.code === 'ENOENT') return emptyLedger()
-    throw error
-  }
-}
 
-/**
- * Applies one change to the catalog ledger under its lock. Each change gets
- * the next tick, which the envelopes it sends carry. `change` returns
- * { ledger, ...result }.
- */
-function ledgerChange(args, change) {
-  let result
-  updateJson(boardFile(args, CATALOG_FILE), emptyLedger(), current => {
-    const tick = (current.tick ?? 0) + 1
-    const { ledger, ...rest } = change(current, tick)
-    result = rest
-    return { ...ledger, tick }
-  }, UNFENCED)
-  refreshDashboard(args)
-  return result
-}
 
-const mintFresh = prefix => mintId(prefix, {})
 
-/** The goal a catalog is for, as the BA wrote it on the board: the client's vision. */
-function goalOf(board, goal) {
-  return { id: goal, title: board.goals[goal]?.title ?? goal }
-}
 
-/** Puts one catalog envelope in the seat's inbox and records what it holds. */
-function deliver(args, { work, row, slice }) {
-  const goal = goalOf(readBoard(args), row.goal)
-  const policy = readMessagePolicy(args)
-  const files = filesWithHashes(currentMap(args), slice)
-  return ledgerChange(args, (ledger, tick) => {
-    const envelopes = batchItems(slice.entries, policy).map(({ items, batch }) => catalogEnvelope({
-      id: mintFresh('catalog'), tick, work, agent: row.agent, goal,
-      slice: { ...slice, entries: items }, batch,
-    }))
-    let next = ledger
-    for (const envelope of envelopes) {
-      next = grant(next, { agent: row.agent, work, envelope, at: now() })
-    }
-    next = { ...next, works: { ...next.works, [work]: { ...next.works[work], files } } }
-    return {
-      ledger: next,
-      catalog: envelopes.map(envelope => envelope.id),
-      messages: envelopes.length,
-      modules: slice.entries.map(entry => entry.module),
-      files: files.length,
-      unknown: slice.unknown,
-    }
-  })
-}
 
-/** The files of a slice's modules, each with its hash in the map. */
-function filesWithHashes(map, slice) {
-  return slice.entries
-    .filter(entry => entry.detail === 'full')
-    .flatMap(entry => (map.modules[entry.module]?.files ?? []).map(rel => ({
-      path: rel, hash: map.files[rel]?.hash ?? null, module: entry.module,
-    })))
-}
 
-/** The batching setting for messages to agents: .devops/messages.json, or the defaults. */
-function readMessagePolicy(args) {
-  try {
-    return messagePolicy(JSON.parse(fs.readFileSync(boardFile(args, MESSAGES_FILE), 'utf8')))
-  } catch (error) {
-    if (error.code === 'ENOENT') return messagePolicy({})
-    throw error
-  }
-}
 
-/** The work row for a work id, or an error naming it. */
-function workRow(args, work) {
-  const row = readBoard(args).assignments[work]
-  if (row === undefined) throw new Error(`unknown work: ${work}`)
-  return row
-}
 
-/** Gives a seat one more module for its work, as a catalog of that module alone. */
-function deliverModule(args, { work, module }) {
-  const row = workRow(args, work)
-  const entry = entryFor(currentMap(args), module, row.job, 0)
-  return deliver(args, { work, row, slice: { job: row.job, unknown: [], entries: [entry] } })
-}
 
 /**
  * The modules an item touched: those of the files its hand-offs changed (in
@@ -435,187 +317,20 @@ function finalizeGoal(args, goal) {
   })
 }
 
-/** The autopilot draft on disk, or undefined when none was drafted. */
-function readDraft(args) {
-  try {
-    return JSON.parse(fs.readFileSync(boardFile(args, AUTOPILOT_FILE), 'utf8'))
-  } catch (error) {
-    if (error.code === 'ENOENT') return undefined
-    throw error
-  }
-}
 
-/** Applies one change to the autopilot draft under its lock. `change` returns { draft, ...result }. */
-function draftChange(args, change) {
-  let result
-  updateJson(boardFile(args, AUTOPILOT_FILE), null, current => {
-    const { draft, ...rest } = change(current)
-    result = rest
-    return draft
-  }, UNFENCED)
-  return result
-}
 
-/** What a reply shows of a draft: its state, the questions for the BA, the plan and its totals. */
-function draftView(draft) {
-  const { tasks, plan, ...rest } = draft
-  const summary = tasks.map(({ id, title, owner, deferred, priority, measure }) => ({
-    id, title, owner, deferred, priority, modules: measure.modules, risks: measure.risks,
-  }))
-  return { ...rest, tasks: summary, totals: plan?.totals ?? null, plan: plan ?? null }
-}
 
-/**
- * Allocates the saved draft as `by` (its Business Analyst), then records the
- * sprint in the loop: started with the first sprint, carrying the teams, the
- * goals' scopes and the deferred tasks to the next.
- */
-function allocateDraft(args, by) {
-  const draft = readDraft(args)
-  if (draft === undefined) throw new Error('no autopilot draft: autopilot_draft starts one')
-  const versions = { node: process.versions.node, plugin: PKG.version, schema: '1' }
-  const carry = readLoop(args)?.carry
-  const out = boardChange(args, board => allocateAutopilot(board, draft, {
-    by, at: now(), versions, carry,
-  }))
-  openTeamBoards(args, out.teamBoards)
-  updateTeamMembers(args, out.teamUpdates)
-  const catalogs = deliverAllocated(args, out.given)
-  draftChange(args, current => ({
-    draft: { ...current, state: 'allocated', sprint: out.sprint, launch: out.launch, at: now() },
-  }))
-  const scopes = Object.fromEntries(out.given.map(({ goal, scope }) => [goal, scope]))
-  const deferred = draft.tasks.filter(task => task.deferred).map(taskInput)
-  loopChange(args, loop => ({
-    loop: recordAllocation(loop ?? startLoop({
-      ba: draft.ba, limit: draft.sprintLimit, at: now(),
-    }), { sprint: out.sprint, carry: out.carry, scopes, deferred }),
-  }))
-  return {
-    sprint: out.sprint, launch: out.launch, overflow: out.overflow, catalogs: catalogs.length,
-  }
-}
 
-/** The part of a drafted task the next draft takes as input. */
-function taskInput(task) {
-  const { id, measure, owner, deferred, ...input } = task
-  return { ...input, scope: measure.scope }
-}
 
-/** Gives each carried team its seats for this sprint, keeping its items. */
-function updateTeamMembers(args, updates) {
-  for (const { team, members } of updates) {
-    teamAction({ ...args, team }, current => ({
-      board: current === null
-        ? { team, members, items: [], refusals: [] }
-        : { ...current, members },
-    }))
-  }
-}
 
-/** The team lead named in the allocation for `team`, or undefined. */
-function teamLeadOf(board, team) {
-  for (const allocation of Object.values(board.allocations ?? {})) {
-    const row = allocation.teams.find(t => t.team === team)
-    if (row !== undefined) return row.lead
-  }
-  return undefined
-}
 
-/** The Business Analyst of the loop, or of the draft before it. */
-function analystOf(args) {
-  return readLoop(args)?.ba ?? readDraft(args)?.ba
-}
 
-/** The sprint loop on disk, or undefined before the first sprint is allocated. */
-function readLoop(args) {
-  try {
-    return JSON.parse(fs.readFileSync(boardFile(args, LOOP_FILE), 'utf8'))
-  } catch (error) {
-    if (error.code === 'ENOENT') return undefined
-    throw error
-  }
-}
 
-/** Applies one change to the sprint loop under its lock. `change` returns { loop, ...result }. */
-function loopChange(args, change) {
-  let result
-  updateJson(boardFile(args, LOOP_FILE), null, current => {
-    const { loop, ...rest } = change(current)
-    result = rest
-    return loop
-  }, UNFENCED)
-  refreshDashboard(args)
-  return result
-}
 
-/**
- * When the meeting just held closed its sprint, the Orchestrator's report on
- * that sprint goes into the loop, for the BA to sign. Undefined otherwise.
- */
-function reportClosedSprint(args, meeting) {
-  return reportSprint(args, readBoard(args).meetings[meeting]?.sprint)
-}
 
-/** Files the report on `sprint` when it is closed, in the loop, and has none yet. */
-function reportSprint(args, sprint) {
-  const board = readBoard(args)
-  const loop = readLoop(args)
-  const inLoop = loop !== undefined && loop.state === 'running' && loop.sprints.includes(sprint)
-  if (!inLoop || loop.reports[sprint] !== undefined) return undefined
-  if (board.sprints[sprint]?.status !== 'closed') return undefined
-  const report = sprintReport(board, { sprint, at: now() })
-  loopChange(args, current => ({ loop: addReport(current, report) }))
-  return report
-}
 
-/**
- * Moves the loop on: pauses it for the client at the sprint limit or when
- * nothing is left, or drafts the next sprint from the backlog and, when the
- * draft has no question for the BA, allocates it at once.
- */
-function advanceLoop(args) {
-  if (readLoop(args) === undefined) {
-    throw new Error('no sprint loop: it starts when the first sprint is allocated')
-  }
-  reportSprint(args, readLoop(args).sprints.at(-1))
-  const loop = readLoop(args)
-  const step = nextStep(loop, readBoard(args))
-  if (step.action === 'pause') {
-    loopChange(args, current => ({ loop: pauseLoop(current, step.reason) }))
-    return { action: 'paused', reason: step.reason }
-  }
-  if (step.action !== 'draft') return step
-  const weeks = readDraft(args)?.weeks
-  const draft = draftAutopilot(currentMap(args), {
-    title: step.title, tasks: step.tasks, weeks, ba: loop.ba,
-  })
-  draftChange(args, () => ({ draft: { ...draft, sprintLimit: loop.limit } }))
-  if (draft.questions.length > 0) {
-    return { action: 'steer', questions: draft.questions, ...draftView(draft) }
-  }
-  return { action: 'allocated', ...allocateDraft(args, loop.ba) }
-}
 
-/** Opens each allocated team's board; a team that already has one is refused. */
-function openTeamBoards(args, boards) {
-  for (const board of boards) {
-    teamAction({ ...args, team: board.team }, current => {
-      if (current !== null) return { board: current, error: `${board.team} already has a board` }
-      return { board }
-    })
-  }
-}
 
-/** Delivers each piece of allocated work its catalog from the mind map. */
-function deliverAllocated(args, given) {
-  const map = currentMap(args)
-  return given.map(({ work, scope }) => {
-    const row = workRow(args, work)
-    const slice = sliceFor(map, { job: row.job, scope })
-    return { work, ...deliver(args, { work, row, slice }) }
-  })
-}
 
 const TASK_SCHEMA = {
   type: 'object',
@@ -1483,7 +1198,7 @@ const TOOLS = [
           record: args.record, at: now(),
         }),
       }))
-      const report = reportClosedSprint(args, args.id)
+      const report = orch.reportClosed(dirOf(args), args.id)
       return report === undefined ? held : { ...held, sprintReport: report }
     },
   },
@@ -2175,18 +1890,7 @@ const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => {
       if (BOUND_SEAT) throw new Error('only Orchestration starts autopilot')
-      const map = currentMap(args)
-      return draftChange(args, current => {
-        if (current !== null && (current.state !== 'steering' || !args.replace)) {
-          throw new Error(`a draft is already ${current.state}; pass replace while it is steering`)
-        }
-        const drafted = draftAutopilot(map, {
-          title: args.title, tasks: args.tasks, weeks: args.weeks, ba: args.ba,
-        })
-        const limited = args.sprintLimit === undefined ? {} : { sprintLimit: args.sprintLimit }
-        const draft = { ...drafted, ...limited }
-        return { draft, ...draftView(draft) }
-      })
+      return orch.runWord(projectDir(args), 'draft', args, allowedRoots())
     },
   },
   {
@@ -2225,20 +1929,7 @@ const TOOLS = [
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => {
-      const map = currentMap(args)
-      return draftChange(args, current => {
-        if (current === null) throw new Error('no autopilot draft: autopilot_draft starts one')
-        const rescope = {}
-        for (const decision of (args.decisions ?? []).filter(d => d.scope !== undefined)) {
-          const task = current.tasks.find(t => t.id === decision.task)
-          if (task) rescope[task.id] = measureTask(map, { ...task, scope: decision.scope })
-        }
-        const decisions = (args.decisions ?? []).map(({ scope, ...rest }) => rest)
-        const draft = steerAutopilot(current, {
-          by: args.caller, decisions, caps: args.caps ?? {}, rescope,
-        })
-        return { draft, ...draftView(draft) }
-      })
+      return orch.runWord(projectDir(args), 'steer', args, allowedRoots())
     },
   },
   {
@@ -2259,7 +1950,9 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => allocateDraft(args, args.caller),
+    run: args => {
+      return orch.runWord(projectDir(args), 'allocate', args, allowedRoots())
+    },
   },
   {
     name: 'autopilot_status',
@@ -2268,15 +1961,15 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
     annotations: { readOnlyHint: true, destructiveHint: false },
     run: args => {
-      const draft = readDraft(args)
-      return draft === undefined ? { state: 'none' } : draftView(draft)
+      return orch.runWord(projectDir(args), 'status', args)
     },
   },
   {
     name: 'goal_vision',
     description: [
-      'A vision note on a goal: the client\'s words (`source` client), or the BA\'s or lead\'s',
-      'reading of them. Notes show on the dashboard next to the goal\'s objective and',
+      'A vision note on a goal from the BA or the lead (`source`), reading what the client',
+      'said. The client\'s own words are added by the person with /devops vision. Notes show on',
+      'the dashboard next to the goal\'s objective and',
       'acceptance, so the team can see the vision it builds.',
     ].join(' '),
     inputSchema: {
@@ -2284,18 +1977,15 @@ const TOOLS = [
       properties: {
         dest, caller: { type: 'string' }, goal: { type: 'string' },
         text: { type: 'string', maxLength: MAX_TASK_TEXT },
-        source: { enum: VISION_SOURCES },
+        source: { enum: ['ba', 'lead'] },
       },
       required: ['caller', 'goal', 'text', 'source'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => {
-      const next = addVisionNote(board, {
-        goal: args.goal, text: args.text, source: args.source, by: args.caller, at: now(),
-      })
-      return { board: next, goal: args.goal, notes: next.goals[args.goal].vision.length }
-    }),
+    run: args => {
+      return orch.runWord(projectDir(args), 'goal-vision', args)
+    },
   },
   {
     name: 'deadlock_scan',
@@ -2305,7 +1995,9 @@ const TOOLS = [
     ].join(' '),
     inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
     annotations: { readOnlyHint: true, destructiveHint: false },
-    run: args => ({ stalled: stalledGoals(readBoard(args)) }),
+    run: args => {
+      return orch.runWord(projectDir(args), 'deadlock-scan', args)
+    },
   },
   {
     name: 'deadlock_raise',
@@ -2325,15 +2017,7 @@ const TOOLS = [
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => {
-      const board = readBoard(args)
-      const team = teamOfGoal(board, args.goal)
-      const lead = teamLeadOf(board, team)
-      if (lead === undefined || lead !== args.caller) {
-        throw new Error(`only the lead of the goal's team (${lead ?? 'none'}) raises a deadlock`)
-      }
-      return boardChange(args, current => raiseDeadlock(current, {
-        goal: args.goal, team, lead: args.caller, reason: args.reason, at: now(), mint: mintFresh,
-      }))
+      return orch.runWord(projectDir(args), 'deadlock-raise', args)
     },
   },
   {
@@ -2354,12 +2038,9 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => ({
-      board: resolveDeadlock(board, {
-        id: args.id, ba: args.caller, analyst: analystOf(args), vision: args.vision,
-        question: args.question, at: now(),
-      }),
-    })),
+    run: args => {
+      return orch.runWord(projectDir(args), 'deadlock-resolve', args)
+    },
   },
   {
     name: 'deadlock_forward',
@@ -2377,45 +2058,7 @@ const TOOLS = [
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => {
-      const board = readBoard(args)
-      const record = board.deadlocks?.[args.id]
-      if (record === undefined) throw new Error(`unknown deadlock: ${args.id}`)
-      const lead = teamLeadOf(board, record.team)
-      const members = (teamMembers({ ...args, team: record.team }) ?? []).filter(m => m !== lead)
-      return boardChange(args, current => ({
-        board: forwardDeadlock(current, {
-          id: args.id, lead: args.caller, teamLead: lead, members: [...members, lead],
-          meeting: args.meeting, at: now(),
-        }),
-      }))
-    },
-  },
-  {
-    name: 'messages_policy',
-    description: [
-      'How JSON is passed to agents: `default` (one message) or `batches` (a long list as a',
-      'sequence of messages of `batchSize` items each, so an agent reads the first and asks',
-      'for the rest when it needs them). Give `batching` and `batchSize` to set it; nothing to',
-      'read it.',
-    ].join(' '),
-    inputSchema: {
-      type: 'object',
-      properties: {
-        dest,
-        batching: { enum: ['default', 'batches'] },
-        batchSize: { type: 'integer', minimum: 1, maximum: MAX_BATCH_SIZE },
-      },
-      additionalProperties: false,
-    },
-    annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => {
-      const file = boardFile(args, MESSAGES_FILE)
-      if (args.batching === undefined && args.batchSize === undefined) {
-        return readMessagePolicy(args)
-      }
-      const policy = messagePolicy({ ...readMessagePolicy(args), ...args })
-      updateJson(file, null, () => policy, UNFENCED)
-      return policy
+      return orch.runWord(projectDir(args), 'deadlock-forward', args)
     },
   },
   {
@@ -2428,10 +2071,7 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
     annotations: { readOnlyHint: true, destructiveHint: false },
     run: args => {
-      const loop = readLoop(args)
-      if (loop === undefined) return { state: 'none' }
-      const { carry, scopes, ...shown } = loop
-      return { ...shown, next: nextStep(loop, readBoard(args)) }
+      return orch.runWord(projectDir(args), 'loop-status', args)
     },
   },
   {
@@ -2455,16 +2095,7 @@ const TOOLS = [
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => {
-      loopChange(args, loop => {
-        if (loop === null) throw new Error('no sprint loop yet')
-        return {
-          loop: signReport(loop, {
-            sprint: args.sprint, by: args.caller, notes: args.notes, askClient: args.askClient,
-            at: now(),
-          }),
-        }
-      })
-      return { signed: args.sprint, next: advanceLoop(args) }
+      return orch.runWord(projectDir(args), 'loop-sign', args, allowedRoots())
     },
   },
   {
@@ -2478,11 +2109,7 @@ const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => {
       if (BOUND_SEAT) throw new Error('only Orchestration moves the loop on')
-      const draft = readDraft(args)
-      if (draft?.state === 'steering' && draft.questions.length === 0 && readLoop(args)) {
-        return { action: 'allocated', ...allocateDraft(args, draft.ba) }
-      }
-      return advanceLoop(args)
+      return orch.runWord(projectDir(args), 'loop-advance', args, allowedRoots())
     },
   },
   {

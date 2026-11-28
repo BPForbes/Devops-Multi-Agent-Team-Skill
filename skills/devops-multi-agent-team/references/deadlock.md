@@ -12,8 +12,8 @@ or building something other than the client's vision. Rules:
 
 A goal is stalled when either is true (`deadlock_scan` lists them):
 
-- it stayed unchanged across **2 standups** of its team (the daily meeting),
-  counted since its last change;
+- it stayed unchanged across **2 feedback meetings** of its team (a daily
+  standup or a refinement), counted since its last change;
 - it was **sent back twice**.
 
 A goal with an open deadlock is not listed again.
@@ -33,7 +33,8 @@ A goal with an open deadlock is not listed again.
    answer becomes the goal's vision note (source `client`), and feedback goes to
    the BA, then the lead.
 5. **Lead forwards** (`deadlock_forward`) the feedback to the team's members,
-   at the next standup or refinement (`meeting`). The deadlock closes.
+   at the next standup or refinement (`meeting`, which must be a held one of
+   that team). The deadlock closes.
 
 Standup and refinement are where most of these loops run: the lead carries
 the BA's feedback there, and the record keeps the meeting it was forwarded at.
@@ -47,5 +48,5 @@ history and show on the dashboard next to its objective and acceptance.
 ## Limits
 
 - A BA that does not act leaves the deadlock open. Nothing times it out yet.
-- The standup count is the only clock: a team that holds no standups will
-  not stall by this rule (a send-back still counts).
+- Feedback meetings are the only clock: a team that holds none will not stall
+  by this rule (a send-back still counts).

@@ -1,11 +1,12 @@
 // Client vision and deadlocks (references/deadlock.md). Pure rules; the server
 // and the mod persist the board.
-import { BOARD_FILE, emptyBoard, mintId } from './devops-board.mjs'
-import { isMain } from './devops-main.mjs'
-import { UNFENCED, projectPath, updateJson } from './devops-store.mjs'
+import { mintId } from './devops-board.mjs'
+import { heldMeetings } from './devops-scrum.mjs'
 
-/** Standups a goal may go unchanged across before it is stalled. */
+/** Standups (daily or refinement) a goal may go unchanged across before it is stalled. */
 export const STALL_STANDUPS = 2
+/** The meetings that carry the BA's feedback to the members. */
+export const FEEDBACK_MEETINGS = ['daily', 'refinement']
 /** Send-backs a goal may take before it is stalled. */
 export const SEND_BACKS = 2
 export const VISION_SOURCES = Object.freeze(['client', 'ba', 'lead'])
@@ -46,10 +47,10 @@ export function teamOfGoal(board, goal) {
   return undefined
 }
 
-/** Held standups of one team held after a time. */
+/** Feedback meetings of one team held after a time. */
 function standupsAfter(board, team, at) {
-  return Object.values(board.meetings ?? {}).filter(m => m.team === team && m.kind === 'daily'
-    && m.state === 'held' && timeOf(m.held_at) > timeOf(at)).length
+  const kinds = FEEDBACK_MEETINGS
+  return heldMeetings(board, { team, kinds }).filter(m => timeOf(m.held_at) > timeOf(at)).length
 }
 
 /**
@@ -91,7 +92,7 @@ export function raiseDeadlock(board, { goal, team, lead, reason, at, mint }) {
   const vision = latestVision(next.goals[goal])
   const record = {
     id, goal, team, raised_by: lead, reason: reason.trim(), state: 'raised', at,
-    vision_found: vision !== undefined, vision: vision?.text ?? null,
+    vision_found: vision !== undefined,
     history: [{ at, event: 'raised', by: lead }],
   }
   next.deadlocks = { ...deadlocks, [id]: record }
@@ -126,10 +127,7 @@ export function resolveDeadlock(board, { id, ba, analyst, vision, question, at }
   const next = addVisionNote(board, {
     goal: board.deadlocks[id]?.goal, text: vision, source: 'ba', by: ba, at,
   })
-  return stepDeadlock(next, id, {
-    from, to: 'feedback', event: 'ba_feedback', by: ba, at,
-    extra: { feedback: vision.trim() },
-  })
+  return stepDeadlock(next, id, { from, to: 'feedback', event: 'ba_feedback', by: ba, at })
 }
 
 /** The person's answer to the BA's question: it becomes the goal's client vision. */
@@ -142,7 +140,6 @@ export function answerDeadlock(board, { id, answer, at }) {
   })
   return stepDeadlock(withVision, id, {
     from: ['with_client'], to: 'feedback', event: 'client_answer', by: 'client', at,
-    extra: { answer: answer.trim() },
   })
 }
 
@@ -153,6 +150,14 @@ export function answerDeadlock(board, { id, answer, at }) {
 export function forwardDeadlock(board, { id, lead, teamLead, members, meeting, at }) {
   need(lead === teamLead, `only the team lead (${teamLead}) forwards feedback`)
   need(Array.isArray(members) && members.length > 0, 'forward to at least one member')
+  const record = board.deadlocks?.[id]
+  need(record !== undefined, `unknown deadlock: ${id}`)
+  if (meeting !== undefined) {
+    const held = board.meetings?.[meeting]
+    const feedback = held?.state === 'held' && FEEDBACK_MEETINGS.includes(held.kind)
+    need(feedback && held.team === record.team,
+      `${meeting} is not a held standup or refinement of ${record.team}`)
+  }
   return stepDeadlock(board, id, {
     from: ['feedback'], to: 'forwarded', event: 'forwarded', by: lead, at,
     extra: { forwarded_to: [...new Set(members)].sort(), meeting: meeting ?? null },
@@ -164,44 +169,4 @@ export function openDeadlocks(board) {
   return Object.values(board.deadlocks ?? {})
     .filter(d => d.state !== 'forwarded')
     .sort((a, b) => timeOf(a.at) - timeOf(b.at))
-}
-
-const USAGE = [
-  'usage: devops-vision vision GOAL TEXT --dest DIR',
-  '       devops-vision answer DEADLOCK TEXT --dest DIR',
-].join('\n')
-
-/** The person's words: a vision note on a goal, or the answer to a deadlock's question. */
-function main(argv) {
-  const at = argv.indexOf('--dest')
-  const dest = at === -1 ? undefined : argv[at + 1]
-  const rest = at === -1 ? argv : [...argv.slice(0, at), ...argv.slice(at + 2)]
-  const [command, target, ...words] = rest
-  const text = words.join(' ')
-  if (dest === undefined || target === undefined || !filled(text)) {
-    console.error(USAGE)
-    return 1
-  }
-  const file = projectPath(dest, BOARD_FILE)
-  const when = new Date().toISOString()
-  updateJson(file, emptyBoard(), board => {
-    if (command === 'vision') {
-      return addVisionNote(board, { goal: target, text, source: 'client', by: 'client', at: when })
-    }
-    if (command === 'answer') return answerDeadlock(board, { id: target, answer: text, at: when })
-    throw new Error(USAGE)
-  }, UNFENCED)
-  console.log(command === 'vision'
-    ? `Vision noted on ${target}.`
-    : `Answer recorded for ${target}; the BA gives feedback to the team lead next.`)
-  return 0
-}
-
-if (isMain(import.meta.url)) {
-  try {
-    process.exitCode = main(process.argv.slice(2))
-  } catch (error) {
-    console.error(`devops-vision: ${error.message}`)
-    process.exitCode = 2
-  }
 }

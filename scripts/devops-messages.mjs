@@ -5,8 +5,10 @@
 // when it needs it. The setting lives beside the board. Pure rules.
 import path from 'node:path'
 
+import { BOARD_FILE } from './devops-board.mjs'
+
 /** The setting file, beside the board (relative to the project folder). */
-export const MESSAGES_FILE = path.join('devops-skill', 'thoughts', 'non-final', 'messages.json')
+export const MESSAGES_FILE = path.join(path.dirname(BOARD_FILE), 'messages.json')
 export const BATCHING = Object.freeze(['default', 'batches'])
 export const DEFAULT_POLICY = Object.freeze({ batching: 'default', batchSize: 20 })
 export const MAX_BATCH_SIZE = 200

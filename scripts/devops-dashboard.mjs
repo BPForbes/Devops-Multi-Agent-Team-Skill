@@ -1,11 +1,16 @@
-// The dashboard report (references/dashboard.md). Pure: the caller reads the
-// state and writes the text.
-import { openDeadlocks, stalledGoals } from './devops-vision.mjs'
-
+// The dashboard report (references/dashboard.md): renders the state, and
+// writeDashboard puts it beside the board.
+import fs from 'node:fs'
 import path from 'node:path'
 
-/** The dashboard file, beside the board in the thought folder (relative to the project folder). */
-export const DASHBOARD_FILE = path.join('devops-skill', 'thoughts', 'non-final', 'DASHBOARD.md')
+import { BOARD_FILE, emptyBoard, normalizeBoard } from './devops-board.mjs'
+import { CATALOG_FILE, emptyLedger } from './devops-catalog.mjs'
+import { LOOP_FILE } from './devops-loop.mjs'
+import { projectPath, readJson, writeAtomic } from './devops-store.mjs'
+import { openDeadlocks, stalledGoals } from './devops-vision.mjs'
+
+/** The dashboard file, beside the board (relative to the project folder). */
+export const DASHBOARD_FILE = path.join(path.dirname(BOARD_FILE), 'DASHBOARD.md')
 const FILES_SHOWN = 20
 const NOTES_SHOWN = 3
 
@@ -112,4 +117,20 @@ export function renderDashboard({ board, ledger, loop, project = 'project' }) {
     visionSection(board),
     workSection(board, ledger),
   ].join('\n')
+}
+
+/**
+ * Rewrites the dashboard of the project at `dest` from what is on disk: the
+ * board, the catalog ledger and the sprint loop. Every writer calls it, so the
+ * report is never behind the state.
+ */
+export function writeDashboard(dest) {
+  const board = normalizeBoard(readJson(projectPath(dest, BOARD_FILE), emptyBoard()))
+  const ledger = readJson(projectPath(dest, CATALOG_FILE), emptyLedger())
+  const loop = readJson(projectPath(dest, LOOP_FILE), undefined)
+  const text = renderDashboard({ board, ledger, loop, project: path.basename(dest) })
+  const file = projectPath(dest, DASHBOARD_FILE)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  writeAtomic(file, text)
+  return file
 }

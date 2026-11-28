@@ -846,7 +846,7 @@ test('a $ expansion near git is refused for the expansion, not as a push', async
 
 /** The devops-loop.mjs runs among the fake session's process calls, without --dest. */
 const loopRuns = (runs: string[][]) => runs
-  .filter(argv => argv.some(a => a.endsWith('devops-loop.mjs')))
+  .filter(argv => argv.some(a => a.endsWith('devops-orchestrate.mjs')))
   .map(argv => argv.slice(2, -2))
 
 test('the person signs off the sprint loop; a seat may not', async ($, on) => {
@@ -859,13 +859,13 @@ test('the person signs off the sprint loop; a seat may not', async ($, on) => {
   await $.command.run({ ...PERSON, args: 'satisfied looks right' })
   await $.command.run({ ...PERSON, args: 'continue keep the old API --more 3' })
   expect(loopRuns(runs)).toEqual([
-    ['decide', 'satisfied', '--note', 'looks right'],
-    ['decide', 'continue', '--note', 'keep the old API', '--more', '3'],
+    ['satisfied', 'looks', 'right'],
+    ['continue', 'keep', 'the', 'old', 'API', '--more', '3'],
   ])
 })
 
 const visionRuns = (runs: string[][]) => runs
-  .filter(argv => argv.some(a => a.endsWith('devops-vision.mjs')))
+  .filter(argv => argv.some(a => a.endsWith('devops-orchestrate.mjs')))
   .map(argv => argv.slice(2, -2))
 
 test('the person adds the client\'s vision and answers the BA; a seat may not', async ($, on) => {

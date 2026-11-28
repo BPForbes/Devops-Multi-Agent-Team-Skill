@@ -1,6 +1,12 @@
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
+/** The value after `name` in argv, or undefined. */
+export function argOf(argv, name) {
+  const at = argv.indexOf(name)
+  return at === -1 ? undefined : argv[at + 1]
+}
+
 /**
  * Whether the module at `metaUrl` is the program node was started with. npm links a package's
  * bins (global installs, npx) as symlinks, so both sides are compared as real paths.

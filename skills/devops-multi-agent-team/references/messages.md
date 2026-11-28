@@ -3,9 +3,9 @@
 Read this file. Do not paste it into seat prompts.
 
 JSON passed to agents is either one message (the default) or **batches**. Set
-it with `messages_policy` (`batching` `default` or `batches`, and `batchSize`,
-1 to 200, default 20). The setting is kept in `devops-skill/thoughts/non-final/messages.json`.
-Rules: `scripts/devops-messages.mjs`.
+it with `/devops messages default` or `/devops messages batches [SIZE]` (the
+size is 1 to 200, default 20); `/devops messages show` reads it. The setting is
+kept beside the board. Rules: `scripts/devops-messages.mjs`.
 
 In `batches`, a long list goes out as a sequence: each message holds up to
 `batchSize` items and its place (`batch: { index, of }`). An agent reads the

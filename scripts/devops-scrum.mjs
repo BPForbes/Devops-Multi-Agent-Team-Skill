@@ -525,6 +525,20 @@ export function holdMeeting(board, { id, by, minutes, attendees, record = {}, at
 }
 
 /** A sprint's meetings, or one team's, oldest first. */
+/**
+ * The held meetings matching the filters (a sprint, a team, kinds: any of),
+ * oldest first by when they were held. The record the BA and the loop read.
+ */
+export function heldMeetings(board, { sprint, team, kinds } = {}) {
+  return Object.entries(normalizeBoard(board).meetings)
+    .filter(([, m]) => m.state === 'held'
+      && (sprint === undefined || m.sprint === sprint)
+      && (team === undefined || m.team === team)
+      && (kinds === undefined || kinds.includes(m.kind)))
+    .map(([id, m]) => ({ id, ...m }))
+    .sort((a, b) => String(a.held_at).localeCompare(String(b.held_at)))
+}
+
 export function meetingsFor(board, { sprint, team }) {
   return Object.entries(normalizeBoard(board).meetings)
     .filter(([, m]) => m.sprint === sprint && (team === undefined || m.team === team))

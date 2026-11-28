@@ -83,6 +83,8 @@ test('the lead raises; the BA gives the vision; feedback goes to the lead', () =
     id: raised.id, lead: LEAD, teamLead: LEAD, members: ['agent-0a0a0a'],
     meeting: 'meeting-000009', at: AT,
   }
+  const standup = { team: TEAM, kind: 'daily', state: 'held', held_at: AT }
+  board.meetings['meeting-000009'] = standup
   board = forwardDeadlock(board, forward)
   assert.equal(board.deadlocks[raised.id].state, 'forwarded')
   assert.deepEqual(board.deadlocks[raised.id].forwarded_to, ['agent-0a0a0a'])

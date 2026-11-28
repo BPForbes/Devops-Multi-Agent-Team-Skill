@@ -1,12 +1,8 @@
-// The sprint loop (references/sprint-loop.md): after the first sprint,
-// sprints follow one another until the client is satisfied. Each closed
-// sprint gets the Orchestrator's report, the Business Analyst signs it, and
-// the client signs off on it. Pure rules, plus the command the client's
-// /devops satisfied and /devops continue run.
+// The sprint loop (references/sprint-loop.md): sprints follow one another
+// until the client is satisfied. Pure rules; the words persist them.
 import path from 'node:path'
 
-import { isMain } from './devops-main.mjs'
-import { UNFENCED, projectPath, updateJson } from './devops-store.mjs'
+import { heldMeetings } from './devops-scrum.mjs'
 
 /** The loop file, relative to the project folder. */
 export const LOOP_FILE = path.join('.devops', 'loop.json')
@@ -39,8 +35,7 @@ export function recordAllocation(loop, { sprint, carry, scopes, deferred }) {
   return { ...loop, sprints, carry, scopes: { ...loop.scopes, ...scopes }, deferred }
 }
 
-const meetingsOf = (board, sprint, kind) => Object.values(board.meetings ?? {})
-  .filter(m => m.sprint === sprint && m.kind === kind && m.state === 'held')
+const meetingsOf = (board, sprint, kind) => heldMeetings(board, { sprint, kinds: [kind] })
 
 const returnedFrom = (goal, sprint) => (goal.history ?? [])
   .some(event => event.event === 'returned' && event.from === sprint)
@@ -152,40 +147,4 @@ export function nextStep(loop, board) {
 /** Pauses the loop for the client, with why. */
 export function pauseLoop(loop, reason) {
   return { ...loop, pause: { reason, sprint: loop.sprints.at(-1) } }
-}
-
-const DECIDED = {
-  satisfied: 'The client is satisfied: the sprint loop has ended.',
-  continue: 'The loop continues; Orchestration starts the next sprint with loop_advance.',
-}
-
-function main(argv) {
-  const [command, decision, ...rest] = argv
-  const opt = name => {
-    const at = rest.indexOf(name)
-    return at === -1 ? undefined : rest[at + 1]
-  }
-  if (command !== 'decide' || opt('--dest') === undefined) {
-    console.error('Usage: devops-loop decide satisfied|continue [--note TEXT] [--more N] '
-      + '--dest DIR')
-    return 1
-  }
-  const more = opt('--more') === undefined ? undefined : Number(opt('--more'))
-  const file = projectPath(opt('--dest'), LOOP_FILE)
-  updateJson(file, null, loop => {
-    need(loop !== null, 'no sprint loop yet: it starts when the first sprint is allocated')
-    const at = new Date().toISOString()
-    return clientDecision(loop, { decision, note: opt('--note'), more, at })
-  }, UNFENCED)
-  console.log(DECIDED[decision])
-  return 0
-}
-
-if (isMain(import.meta.url)) {
-  try {
-    process.exitCode = main(process.argv.slice(2))
-  } catch (error) {
-    console.error(`devops-loop: ${error.message}`)
-    process.exitCode = 2
-  }
 }

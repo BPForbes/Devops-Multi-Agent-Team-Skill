@@ -51,6 +51,7 @@
     "scripts/devops-autopilot.mjs",
     "scripts/devops-loop.mjs",
     "scripts/devops-vision.mjs",
+    "scripts/devops-orchestrate.mjs",
     "scripts/devops-messages.mjs",
     "scripts/devops-dashboard.mjs",
     "scripts/devops-formal.mjs",

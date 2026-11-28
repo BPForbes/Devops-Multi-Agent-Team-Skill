@@ -34,6 +34,16 @@ export function writeAtomic(file, text) {
   fs.renameSync(tmp, file)
 }
 
+/** The parsed JSON in `file`, or `fallback` when there is no such file. */
+export function readJson(file, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch (error) {
+    if (error.code === 'ENOENT') return fallback
+    throw error
+  }
+}
+
 /**
  * Takes the lock by exclusive create. A lock is never broken automatically:
  * a second writer waits, and if the lock is still held after LOCK_WAIT_MS it

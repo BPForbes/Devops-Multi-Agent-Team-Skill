@@ -22,7 +22,13 @@ const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
 const HUMAN_ONLY_WORDS = new Set([
   'on', 'off', 'enable', 'disable', 'skill', 'skills',
   'push-ok', 'push-reset', 'gates', 'allow-branch', 'comments', 'monitor', 'bug', 'load',
-  'satisfied', 'continue', 'answer', 'vision',
+  'satisfied', 'continue', 'answer', 'vision', 'messages',
+])
+/** Words only the person types: the client's own voice and the sign-offs. */
+const PERSON_WORDS = new Set(['vision', 'answer', 'satisfied', 'continue', 'messages'])
+/** Orchestration words: anyone may type them; the BA and lead checks are in the word itself. */
+const ORCHESTRATION_WORDS = new Set([
+  'draft', 'steer', 'allocate', 'advance', 'sign', 'raise', 'resolve', 'forward', 'scan',
 ])
 const ACTIVE_REF = { plugin: 'devops-multi-agent-team', key: 'active' } as const
 const SETTINGS_SCRIPT = 'scripts/devops-claude-settings.mjs'
@@ -204,29 +210,15 @@ async function bugAnswer($: EngineInterface, rest: string): Promise<string> {
   return ran.out ?? 'the board could not be updated'
 }
 
-const LOOP_SCRIPT = 'devops-loop.mjs'
-const VISION_SCRIPT = 'devops-vision.mjs'
-
-/** The client's words: a vision note on a goal, or the answer to a deadlock's question. */
-async function visionWords($: EngineInterface, word: string, rest: string): Promise<string> {
-  const [target = '', ...words] = shellWords(rest)
-  const ran = await runPluginScript($, VISION_SCRIPT, [word, target, ...words])
-  return ran.out ?? 'the board could not be updated'
-}
+const ORCHESTRATE_SCRIPT = 'devops-orchestrate.mjs'
 
 /**
- * The person's sign-off on the latest sprint report: satisfied ends the
- * sprint loop; continue keeps it going, answering the BA's question with the
- * words typed, and `--more N` allows N more sprints past the limit.
+ * The person's words that change the project's state (vision, answer,
+ * satisfied, continue, messages). One script applies them all.
  */
-async function loopDecision($: EngineInterface, decision: string, rest: string): Promise<string> {
-  const words = shellWords(rest)
-  const at = words.indexOf('--more')
-  const more = at === -1 ? [] : ['--more', words[at + 1] ?? '']
-  const note = words.filter((_, i) => at === -1 || (i !== at && i !== at + 1)).join(' ')
-  const args = ['decide', decision, ...(note === '' ? [] : ['--note', note]), ...more]
-  const ran = await runPluginScript($, LOOP_SCRIPT, args)
-  return ran.out ?? 'the sprint loop could not be updated'
+async function wordRun($: EngineInterface, word: string, rest: string): Promise<string> {
+  const ran = await runPluginScript($, ORCHESTRATE_SCRIPT, [word, ...shellWords(rest)])
+  return ran.out ?? `/devops ${word} could not be applied`
 }
 
 const LOAD_USAGE = 'Usage: /devops load REPORT approve|decline [REASON]'
@@ -829,9 +821,8 @@ export const register: Register = on => {
       }
     }
     if (word === 'bug') return { text: await bugAnswer($, rest) }
-    if (word === 'answer' || word === 'vision') return { text: await visionWords($, word, rest) }
-    if (word === 'satisfied' || word === 'continue') {
-      return { text: await loopDecision($, word, rest) }
+    if (PERSON_WORDS.has(word) || ORCHESTRATION_WORDS.has(word)) {
+      return { text: await wordRun($, word, rest) }
     }
     if (word === 'load') return { text: await loadAnswer($, rest) }
     if (word === 'push-reset') {
