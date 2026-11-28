@@ -7,7 +7,7 @@
 // secret.
 
 import fs from 'node:fs'
-import { UNFENCED, projectPath, updateJson } from '../scripts/devops-store.mjs'
+import { UNFENCED, projectPath, updateJson, writeAtomic } from '../scripts/devops-store.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -44,6 +44,14 @@ import { RISKS, planAllocation, spinUp } from '../scripts/devops-allocation.mjs'
 import {
   AUTOPILOT_FILE, allocateAutopilot, draftAutopilot, measureTask, steerAutopilot,
 } from '../scripts/devops-autopilot.mjs'
+import { DASHBOARD_FILE, renderDashboard } from '../scripts/devops-dashboard.mjs'
+import {
+  MAX_BATCH_SIZE, MESSAGES_FILE, batchItems, messagePolicy,
+} from '../scripts/devops-messages.mjs'
+import {
+  addVisionNote, forwardDeadlock, raiseDeadlock, resolveDeadlock, stalledGoals, teamOfGoal,
+  VISION_SOURCES,
+} from '../scripts/devops-vision.mjs'
 import {
   LOOP_FILE, MAX_SPRINT_LIMIT, addReport, nextStep, pauseLoop, recordAllocation, signReport,
   sprintReport, startLoop,
@@ -270,7 +278,23 @@ function boardChange(args, change) {
     result = rest
     return board
   }, UNFENCED)
+  refreshDashboard(args)
   return result
+}
+
+/**
+ * Rewrites .devops/DASHBOARD.md from the board, the catalog ledger, the loop
+ * and the saved map's files. Called after each change, so the report is never
+ * behind the board.
+ */
+function refreshDashboard(args) {
+  const text = renderDashboard({
+    board: readBoard(args), ledger: readLedger(args), loop: readLoop(args),
+    project: path.basename(projectDir(args)),
+  })
+  const file = boardFile(args, DASHBOARD_FILE)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  writeAtomic(file, text)
 }
 
 /** The project's mind map: the saved one, or one built now when none is saved. */
@@ -301,6 +325,7 @@ function ledgerChange(args, change) {
     result = rest
     return { ...ledger, tick }
   }, UNFENCED)
+  refreshDashboard(args)
   return result
 }
 
@@ -314,17 +339,46 @@ function goalOf(board, goal) {
 /** Puts one catalog envelope in the seat's inbox and records what it holds. */
 function deliver(args, { work, row, slice }) {
   const goal = goalOf(readBoard(args), row.goal)
+  const policy = readMessagePolicy(args)
+  const files = filesWithHashes(currentMap(args), slice)
   return ledgerChange(args, (ledger, tick) => {
-    const envelope = catalogEnvelope({
-      id: mintFresh('catalog'), tick, work, agent: row.agent, goal, slice,
-    })
+    const envelopes = batchItems(slice.entries, policy).map(({ items, batch }) => catalogEnvelope({
+      id: mintFresh('catalog'), tick, work, agent: row.agent, goal,
+      slice: { ...slice, entries: items }, batch,
+    }))
+    let next = ledger
+    for (const envelope of envelopes) {
+      next = grant(next, { agent: row.agent, work, envelope, at: now() })
+    }
+    next = { ...next, works: { ...next.works, [work]: { ...next.works[work], files } } }
     return {
-      ledger: grant(ledger, { agent: row.agent, work, envelope, at: now() }),
-      catalog: envelope.id,
+      ledger: next,
+      catalog: envelopes.map(envelope => envelope.id),
+      messages: envelopes.length,
       modules: slice.entries.map(entry => entry.module),
+      files: files.length,
       unknown: slice.unknown,
     }
   })
+}
+
+/** The files of a slice's modules, each with its hash in the map. */
+function filesWithHashes(map, slice) {
+  return slice.entries
+    .filter(entry => entry.detail === 'full')
+    .flatMap(entry => (map.modules[entry.module]?.files ?? []).map(rel => ({
+      path: rel, hash: map.files[rel]?.hash ?? null, module: entry.module,
+    })))
+}
+
+/** The batching setting for messages to agents: .devops/messages.json, or the defaults. */
+function readMessagePolicy(args) {
+  try {
+    return messagePolicy(JSON.parse(fs.readFileSync(boardFile(args, MESSAGES_FILE), 'utf8')))
+  } catch (error) {
+    if (error.code === 'ENOENT') return messagePolicy({})
+    throw error
+  }
 }
 
 /** The work row for a work id, or an error naming it. */
@@ -459,6 +513,20 @@ function updateTeamMembers(args, updates) {
   }
 }
 
+/** The team lead named in the allocation for `team`, or undefined. */
+function teamLeadOf(board, team) {
+  for (const allocation of Object.values(board.allocations ?? {})) {
+    const row = allocation.teams.find(t => t.team === team)
+    if (row !== undefined) return row.lead
+  }
+  return undefined
+}
+
+/** The Business Analyst of the loop, or of the draft before it. */
+function analystOf(args) {
+  return readLoop(args)?.ba ?? readDraft(args)?.ba
+}
+
 /** The sprint loop on disk, or undefined before the first sprint is allocated. */
 function readLoop(args) {
   try {
@@ -477,6 +545,7 @@ function loopChange(args, change) {
     result = rest
     return loop
   }, UNFENCED)
+  refreshDashboard(args)
   return result
 }
 
@@ -2201,6 +2270,152 @@ const TOOLS = [
     run: args => {
       const draft = readDraft(args)
       return draft === undefined ? { state: 'none' } : draftView(draft)
+    },
+  },
+  {
+    name: 'goal_vision',
+    description: [
+      'A vision note on a goal: the client\'s words (`source` client), or the BA\'s or lead\'s',
+      'reading of them. Notes show on the dashboard next to the goal\'s objective and',
+      'acceptance, so the team can see the vision it builds.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, goal: { type: 'string' },
+        text: { type: 'string', maxLength: MAX_TASK_TEXT },
+        source: { enum: VISION_SOURCES },
+      },
+      required: ['caller', 'goal', 'text', 'source'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => {
+      const next = addVisionNote(board, {
+        goal: args.goal, text: args.text, source: args.source, by: args.caller, at: now(),
+      })
+      return { board: next, goal: args.goal, notes: next.goals[args.goal].vision.length }
+    }),
+  },
+  {
+    name: 'deadlock_scan',
+    description: [
+      'Goals that have stopped moving: unchanged across standups of their team, or sent back',
+      'several times, and not yet raised. The team lead raises them (deadlock_raise).',
+    ].join(' '),
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    run: args => ({ stalled: stalledGoals(readBoard(args)) }),
+  },
+  {
+    name: 'deadlock_raise',
+    description: [
+      'The team lead (`caller`) raises a stalled goal, with the reason. The record notes',
+      'whether the goal already has a vision the lead can read; the Business Analyst decides',
+      'next (deadlock_resolve).',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, goal: { type: 'string' },
+        reason: { type: 'string', maxLength: MAX_TASK_TEXT },
+      },
+      required: ['caller', 'goal', 'reason'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      const board = readBoard(args)
+      const team = teamOfGoal(board, args.goal)
+      const lead = teamLeadOf(board, team)
+      if (lead === undefined || lead !== args.caller) {
+        throw new Error(`only the lead of the goal's team (${lead ?? 'none'}) raises a deadlock`)
+      }
+      return boardChange(args, current => raiseDeadlock(current, {
+        goal: args.goal, team, lead: args.caller, reason: args.reason, at: now(), mint: mintFresh,
+      }))
+    },
+  },
+  {
+    name: 'deadlock_resolve',
+    description: [
+      'The Business Analyst (`caller`) decides a raised deadlock: `vision` gives the client\'s',
+      'vision from what it reads (feedback goes to the team lead), or `question` asks the',
+      'client, pausing the goal until the person answers (/devops answer).',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, id: { type: 'string' },
+        vision: { type: 'string', maxLength: MAX_TASK_TEXT },
+        question: { type: 'string', maxLength: MAX_TASK_TEXT },
+      },
+      required: ['caller', 'id'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => boardChange(args, board => ({
+      board: resolveDeadlock(board, {
+        id: args.id, ba: args.caller, analyst: analystOf(args), vision: args.vision,
+        question: args.question, at: now(),
+      }),
+    })),
+  },
+  {
+    name: 'deadlock_forward',
+    description: [
+      'The team lead (`caller`) forwards the BA\'s feedback to the team\'s members, at standup or',
+      'refinement (`meeting`). Closes the deadlock.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, id: { type: 'string' }, meeting: { type: 'string' },
+      },
+      required: ['caller', 'id'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      const board = readBoard(args)
+      const record = board.deadlocks?.[args.id]
+      if (record === undefined) throw new Error(`unknown deadlock: ${args.id}`)
+      const lead = teamLeadOf(board, record.team)
+      const members = (teamMembers({ ...args, team: record.team }) ?? []).filter(m => m !== lead)
+      return boardChange(args, current => ({
+        board: forwardDeadlock(current, {
+          id: args.id, lead: args.caller, teamLead: lead, members: [...members, lead],
+          meeting: args.meeting, at: now(),
+        }),
+      }))
+    },
+  },
+  {
+    name: 'messages_policy',
+    description: [
+      'How JSON is passed to agents: `default` (one message) or `batches` (a long list as a',
+      'sequence of messages of `batchSize` items each, so an agent reads the first and asks',
+      'for the rest when it needs them). Give `batching` and `batchSize` to set it; nothing to',
+      'read it.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        batching: { enum: ['default', 'batches'] },
+        batchSize: { type: 'integer', minimum: 1, maximum: MAX_BATCH_SIZE },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      const file = boardFile(args, MESSAGES_FILE)
+      if (args.batching === undefined && args.batchSize === undefined) {
+        return readMessagePolicy(args)
+      }
+      const policy = messagePolicy({ ...readMessagePolicy(args), ...args })
+      updateJson(file, null, () => policy, UNFENCED)
+      return policy
     },
   },
   {

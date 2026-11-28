@@ -2373,6 +2373,25 @@
                   "items": {
                     "$ref": "#/$defs/CatalogEntry"
                   }
+                },
+                "batch": {
+                  "description": "Where this message sits when a long catalog is sent in batches: its index from 0 and the count of messages.",
+                  "type": "object",
+                  "required": [
+                    "index",
+                    "of"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "index": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "of": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
                 }
               }
             }

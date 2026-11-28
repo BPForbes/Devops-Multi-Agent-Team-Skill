@@ -863,3 +863,24 @@ test('the person signs off the sprint loop; a seat may not', async ($, on) => {
     ['decide', 'continue', '--note', 'keep the old API', '--more', '3'],
   ])
 })
+
+const visionRuns = (runs: string[][]) => runs
+  .filter(argv => argv.some(a => a.endsWith('devops-vision.mjs')))
+  .map(argv => argv.slice(2, -2))
+
+test('the person adds the client\'s vision and answers the BA; a seat may not', async ($, on) => {
+  const runs: string[][] = []
+  engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const seatAsks = {
+    command: 'devops', origin: { kind: 'agent' }, args: 'vision goal-3c9e41 keep it',
+  }
+  const seat = await $.command.run(seatAsks)
+  expect(seat.text).toContain('only the person can run it')
+  await $.command.run({ ...PERSON, args: 'vision goal-3c9e41 Slugs keep unicode' })
+  await $.command.run({ ...PERSON, args: 'answer deadlock-0a1b2c yes keep it' })
+  expect(visionRuns(runs)).toEqual([
+    ['vision', 'goal-3c9e41', 'Slugs', 'keep', 'unicode'],
+    ['answer', 'deadlock-0a1b2c', 'yes', 'keep', 'it'],
+  ])
+})

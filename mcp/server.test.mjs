@@ -68,12 +68,14 @@ test('initialize negotiates, lists 34 tools, prompts and resources', async () =>
     for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_overview', 'mindmap_tree', 'mindmap_note', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
     const added = ['lint_check', 'lint_commands', 'config_get', 'config_set']
     for (const name of added) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 88)
+    assert.equal(tools.length, 94)
     const catalogTools = [
       'catalog_index', 'catalog_release', 'catalog_pull', 'catalog_request', 'catalog_decide',
       'catalog_finalize', 'goal_trail',
       'autopilot_draft', 'autopilot_steer', 'autopilot_allocate', 'autopilot_status',
       'loop_status', 'loop_report_sign', 'loop_advance',
+      'goal_vision', 'deadlock_scan', 'deadlock_raise', 'deadlock_resolve', 'deadlock_forward',
+      'messages_policy',
     ]
     for (const name of catalogTools) assert.ok(tools.includes(name), name)
     const scrum = [
@@ -968,6 +970,61 @@ test('sprint loop: a closed sprint is reported, the BA signs, the next sprint ru
     assert.equal(ran.status, 0, String(ran.stderr))
     assert.equal((await c.call('loop_status')).json().state, 'satisfied')
     assert.equal((await c.call('loop_advance')).json().action, 'none')
+  } finally {
+    c.close()
+  }
+})
+
+const THOUGHTS = path.join('devops-skill', 'thoughts', 'non-final')
+const readThought = (root, name) => fs.readFileSync(path.join(root, THOUGHTS, name), 'utf8')
+
+test('dashboard: files and hashes, vision, and a deadlock raised and forwarded', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  try {
+    const tasks = [{ title: 'Make slugify safe' }]
+    await c.call('autopilot_draft', { ba: AUTOPILOT_BA, tasks })
+    const allocated = (await c.call('autopilot_allocate', { caller: AUTOPILOT_BA })).json()
+    const dashboard = readThought(root, 'DASHBOARD.md')
+    assert.match(dashboard, /## Work items and files/)
+    assert.match(dashboard, /\| core\/util\.ts \| [0-9a-f]{12} \|/)
+    const leads = allocated.launch.seats.filter(seat => seat.roles.includes('manager'))
+    const coreLead = leads.find(seat => seat.module === 'core')
+    const saved = JSON.parse(readThought(root, 'board.json'))
+    const goal = saved.allocations[allocated.sprint].teams.flatMap(t => t.goals ?? [])[0]
+    assert.ok(goal, 'the team has a goal')
+    const note = { caller: AUTOPILOT_BA, goal, text: 'Slugs keep unicode', source: 'client' }
+    assert.equal((await c.call('goal_vision', note)).json().notes, 1)
+    assert.match(readThought(root, 'DASHBOARD.md'), /Slugs keep unicode/)
+    assert.ok(Array.isArray((await c.call('deadlock_scan')).json().stalled))
+    const asBa = { caller: AUTOPILOT_BA, goal, reason: 'stuck' }
+    assert.equal((await c.call('deadlock_raise', asBa)).isError, true)
+    const asLead = { caller: coreLead.agent, goal, reason: 'stuck on tests' }
+    const raised = await c.call('deadlock_raise', asLead)
+    assert.notEqual(raised.isError, true, raised.text)
+    const boardNow = () => JSON.parse(readThought(root, 'board.json'))
+    const id = Object.keys(boardNow().deadlocks)[0]
+    const vision = 'Unicode and ASCII both kept'
+    const feedback = await c.call('deadlock_resolve', { caller: AUTOPILOT_BA, id, vision })
+    assert.notEqual(feedback.isError, true, feedback.text)
+    const meeting = 'meeting-000009'
+    const forwarded = await c.call('deadlock_forward', { caller: coreLead.agent, id, meeting })
+    assert.notEqual(forwarded.isError, true, forwarded.text)
+    assert.equal(boardNow().deadlocks[id].state, 'forwarded')
+    assert.match(readThought(root, 'DASHBOARD.md'), /forwarded/)
+  } finally {
+    c.close()
+  }
+})
+
+test('messages: batches on request, one message by default', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  try {
+    assert.equal((await c.call('messages_policy')).json().batching, 'default')
+    const set = (await c.call('messages_policy', { batching: 'batches', batchSize: 2 })).json()
+    assert.deepEqual(set, { batching: 'batches', batchSize: 2 })
+    assert.equal((await c.call('messages_policy', { batchSize: 0 })).isError, true)
   } finally {
     c.close()
   }

@@ -22,7 +22,7 @@ const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
 const HUMAN_ONLY_WORDS = new Set([
   'on', 'off', 'enable', 'disable', 'skill', 'skills',
   'push-ok', 'push-reset', 'gates', 'allow-branch', 'comments', 'monitor', 'bug', 'load',
-  'satisfied', 'continue',
+  'satisfied', 'continue', 'answer', 'vision',
 ])
 const ACTIVE_REF = { plugin: 'devops-multi-agent-team', key: 'active' } as const
 const SETTINGS_SCRIPT = 'scripts/devops-claude-settings.mjs'
@@ -205,6 +205,14 @@ async function bugAnswer($: EngineInterface, rest: string): Promise<string> {
 }
 
 const LOOP_SCRIPT = 'devops-loop.mjs'
+const VISION_SCRIPT = 'devops-vision.mjs'
+
+/** The client's words: a vision note on a goal, or the answer to a deadlock's question. */
+async function visionWords($: EngineInterface, word: string, rest: string): Promise<string> {
+  const [target = '', ...words] = shellWords(rest)
+  const ran = await runPluginScript($, VISION_SCRIPT, [word, target, ...words])
+  return ran.out ?? 'the board could not be updated'
+}
 
 /**
  * The person's sign-off on the latest sprint report: satisfied ends the
@@ -821,6 +829,7 @@ export const register: Register = on => {
       }
     }
     if (word === 'bug') return { text: await bugAnswer($, rest) }
+    if (word === 'answer' || word === 'vision') return { text: await visionWords($, word, rest) }
     if (word === 'satisfied' || word === 'continue') {
       return { text: await loopDecision($, word, rest) }
     }

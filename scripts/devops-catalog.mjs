@@ -193,10 +193,11 @@ export function updateEnvelope({ id, tick, module, oldHash, newHash, by, goal })
 }
 
 /** A context.catalog envelope: the slice of the map for one piece of work. */
-export function catalogEnvelope({ id, tick, work, agent, goal, slice }) {
+export function catalogEnvelope({ id, tick, work, agent, goal, slice, batch }) {
+  const body = { work, seat: agent, goal, job: slice.job, entries: slice.entries }
   return {
     v: ENVELOPE_VERSION, kind: 'context.catalog', id, from: SERVER_FROM, sent_tick: tick,
-    body: { work, seat: agent, goal, job: slice.job, entries: slice.entries },
+    body: batch === undefined ? body : { ...body, batch },
   }
 }
 
