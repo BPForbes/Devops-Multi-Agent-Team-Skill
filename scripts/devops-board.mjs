@@ -485,6 +485,19 @@ export function assignWork(board, { goal, job, agent, team, description, by, at,
   return { id, board: next, held }
 }
 
+/**
+ * Closes the open work on a goal that goes to a new sprint: each assigned or
+ * accepted row becomes `carried`, so a seat does not hold the goal twice.
+ */
+export function carryOpenWork(board, { goal, sprint, at }) {
+  const next = normalizeBoard(structuredClone(board))
+  for (const row of Object.values(next.assignments)) {
+    if (row.goal !== goal || (row.state !== 'assigned' && row.state !== 'accepted')) continue
+    Object.assign(row, { state: 'carried', carried_at: at, carried_to: sprint })
+  }
+  return next
+}
+
 /** The work a seat has been given and has not finished. */
 export function workInbox(board, agent) {
   return Object.entries(normalizeBoard(board).assignments)

@@ -7,7 +7,7 @@
 // secret.
 
 import fs from 'node:fs'
-import { UNFENCED, projectPath, updateJson } from '../scripts/devops-store.mjs'
+import { UNFENCED, projectPath, readJson, updateJson } from '../scripts/devops-store.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -22,24 +22,45 @@ import { lintCheck, lintCommands } from '../scripts/devops-lint.mjs'
 import { changeSetting, getSetting } from '../scripts/devops-config.mjs'
 import { ghasPlan } from '../scripts/devops-ghas.mjs'
 import { buildGraph, checkStory, guidance, linkStories, loadCatalog, newStory, parseStory } from '../scripts/devops-stories.mjs'
-import { buildMindMap, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree } from '../scripts/devops-mindmap.mjs'
+import {
+  buildMindMap, loadSaved, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus,
+  mindMapTree,
+} from '../scripts/devops-mindmap.mjs'
+import {
+  CATALOG_FILE, catalogEnvelope, catalogInbox, catalogIndex, decideRequest, emptyLedger,
+  entryFor, finalize, goalTrail, grant, moduleByHash, pendingRequests, pull, release,
+  requestModule, sliceFor,
+} from '../scripts/devops-catalog.mjs'
 import { moduleMap, reuseSearch } from '../scripts/devops-research.mjs'
 import {
   acceptWork, allowSameTeam, ackHandoff, addGoal, assignWork, blameFor, closeHandoff,
   completeWork, createSprint, emptyBoard, GOAL_STATES, inboxFor, markThreadRead, moveGoal,
   normalizeBoard, openThread, replyThread, resolveThread, routeHandoff, sendHandoff, sprintView,
-  threadsFor, unreadThreads, workInbox, backlogView, BOARD_FILE, MAX_SPRINT_WEEKS,
+  threadsFor, unreadThreads, workInbox, backlogView, BOARD_FILE, MAX_SPRINT_WEEKS, mintId,
 } from '../scripts/devops-board.mjs'
 import { tagCreate, tagHistory, tagPlan } from '../scripts/devops-tags.mjs'
 import { isTeamId } from '../scripts/devops-ids.mjs'
 import { RISKS, planAllocation, spinUp } from '../scripts/devops-allocation.mjs'
+import * as orch from '../scripts/devops-orchestrate.mjs'
+import {
+  AUTOPILOT_FILE, allocateAutopilot, draftAutopilot, measureTask, steerAutopilot,
+} from '../scripts/devops-autopilot.mjs'
+import { writeDashboard } from '../scripts/devops-dashboard.mjs'
+import { MESSAGES_FILE, batchItems, messagePolicy } from '../scripts/devops-messages.mjs'
+import {
+  addVisionNote, forwardDeadlock, raiseDeadlock, resolveDeadlock, stalledGoals, teamOfGoal,
+} from '../scripts/devops-vision.mjs'
+import {
+  LOOP_FILE, MAX_SPRINT_LIMIT, addReport, nextStep, pauseLoop, recordAllocation, signReport,
+  sprintReport, startLoop,
+} from '../scripts/devops-loop.mjs'
 import {
   MEETING_KINDS, baScan, bugIssue, decideHeldWork, fileBugReport, forwardReports, goalDone,
   goalVerdict, holdMeeting, leadSignOff, meetingsFor, newApproach, pingsFor, prepareMerge,
   raiseToAnalyst, recordIssue, reportsFor, scheduleMeeting, teamSchedule,
 } from '../scripts/devops-scrum.mjs'
 import {
-  TEAM_DIR, needsAttention, openBoard, readMembers, recordRefusal, teamIntake, teamMove,
+  TEAM_DIR, isLead, needsAttention, openBoard, readMembers, recordRefusal, teamIntake, teamMove,
   teamSignOff,
 } from '../scripts/devops-teams.mjs'
 
@@ -50,6 +71,14 @@ const ID = /^[a-z][a-z0-9-]*$/
 
 /** Mind map wording lives in mindmap-text.json; tool lists are sent before a project is known, so the package defaults apply here. */
 const MINDMAP_TEXT = loadText()
+/** The longest text a mind-map reply carries inline; the saved files hold the rest. */
+const MAX_REPLY_CHARS = 6000
+/** Cuts long text to the reply limit and says where the rest is. */
+const capReply = (text = '') => {
+  if (text.length <= MAX_REPLY_CHARS) return text
+  const more = text.length - MAX_REPLY_CHARS
+  return `${text.slice(0, MAX_REPLY_CHARS)}\n… (${more} more characters in .devops/mindmap/)`
+}
 
 const SETUP_SCRIPT = fs.readFileSync(path.join(PACKAGE_ROOT, 'mcp', 'setup-script.md'), 'utf8').trim()
 
@@ -178,20 +207,31 @@ const GOAL_STATE = {
   type: 'string', enum: ['backlog', 'ready', 'in_progress', 'review', 'qa', 'security', 'done'],
 }
 
+/** The project folder of a tool call, as the shared orchestration sees it. */
+const dirOf = args => projectDir(args)
+const teamAction = (args, change) => orch.teamAction(dirOf(args), args.team, change)
+const readBoard = args => orch.readBoard(dirOf(args))
+const boardChange = (args, change) => orch.boardChange(dirOf(args), change)
+const readLedger = args => orch.readLedger(dirOf(args))
+const ledgerChange = (args, change) => orch.ledgerChange(dirOf(args), change)
+const readLoop = args => orch.readLoop(dirOf(args))
+const loopChange = (args, change) => orch.loopChange(dirOf(args), change)
+const readDraft = args => orch.readDraft(dirOf(args))
+const draftChange = (args, change) => orch.draftChange(dirOf(args), change)
+const currentMap = args => orch.currentMap(dirOf(args), allowedRoots())
+const deliver = (args, a) => orch.deliver(dirOf(args), allowedRoots(), a)
+const deliverModule = (args, a) => orch.deliverModule(dirOf(args), allowedRoots(), a)
+const workRow = (args, work) => orch.workRow(dirOf(args), work)
+const goalOf = orch.goalOf
+const mintFresh = orch.mintFresh
+
 /** The board file's path inside the project (projectPath refuses symbolic links). */
 function boardFile(args, rel = BOARD_FILE) {
   return projectPath(projectDir(args), rel)
 }
 
-function readBoard(args) {
-  try {
-    const text = fs.readFileSync(boardFile(args), 'utf8')
-    return normalizeBoard(JSON.parse(text))
-  } catch (error) {
-    if (error.code === 'ENOENT') return emptyBoard()
-    throw error
-  }
-}
+
+
 
 /** A team's own board file, under the project's teams folder. */
 function teamFile(args) {
@@ -220,34 +260,108 @@ function teamChange(args, change) {
   return result
 }
 
-/** A team write that keeps a refusal: the board is saved, then the refusal is reported. */
-function teamAction(args, change) {
-  const out = teamChange(args, change)
-  if (out.error !== undefined) throw new Error(out.error)
-  return out
-}
 
 function readTeam(args) {
-  let text
-  try {
-    text = fs.readFileSync(teamFile(args), 'utf8')
-  } catch (error) {
-    if (error.code === 'ENOENT') return boardOrThrow(null, args.team)
-    throw error
-  }
-  return boardOrThrow(JSON.parse(text), args.team)
+  return boardOrThrow(readJson(teamFile(args), null), args.team)
 }
 
-/** Applies one change to the board and saves it. `change` returns { board, ...result }. */
-function boardChange(args, change) {
-  // One lock covers read, change and write: no update is lost between servers.
-  let result
-  updateJson(boardFile(args), emptyBoard(), current => {
-    const { board, ...rest } = change(normalizeBoard(current))
-    result = rest
-    return board
-  }, UNFENCED)
-  return result
+
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * The modules an item touched: those of the files its hand-offs changed (in
+ * the new map, or the saved one for a deleted file) and those its works held.
+ */
+function touchedModules(trail, works, { built, before, ledger }) {
+  const ofFile = rel => built.files[rel]?.module ?? before?.files?.[rel]?.module
+  const fromFiles = trail.files.map(ofFile).filter(Boolean)
+  const fromWorks = works.flatMap(work => ledger.works?.[work]?.modules ?? [])
+  return [...new Set([...fromFiles, ...fromWorks])].filter(name => built.modules[name]).sort()
+}
+
+/**
+ * Finalizes an item once the Business Analyst signed it a second time (after
+ * QA): the map is updated and saved first, then the modules the item changed
+ * are rehashed, the other seats holding them are told an update is
+ * available, and the item's seats drop what they held. Undefined when the
+ * item is not final yet or was finalized before.
+ */
+function finalizeGoal(args, goal) {
+  const board = readBoard(args)
+  const trail = goalTrail(board, goal)
+  if (!trail.final || readLedger(args).finals?.[goal] !== undefined) return undefined
+  const dir = projectDir(args)
+  const before = loadSaved(dir)
+  const built = buildMindMap(dir, { roots: allowedRoots(), save: true, previous: before })
+  const works = Object.entries(board.assignments)
+    .filter(([, row]) => row.goal === goal).map(([id]) => id)
+  const ledgerNow = readLedger(args)
+  const modules = touchedModules(trail, works, { built: built.map, before, ledger: ledgerNow })
+  const hashes = Object.fromEntries(modules.map(name => [name, built.map.modules[name].hash]))
+  return ledgerChange(args, (ledger, tick) => {
+    const { ledger: next, notified } = finalize(ledger, {
+      goal, works, hashes, files: trail.files, by: trail.finalBy, tick, mint: mintFresh, at: now(),
+    })
+    return {
+      ledger: next, goal, files: trail.files, modules: hashes, notified, mapReuse: built.reuse,
+    }
+  })
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const TASK_SCHEMA = {
+  type: 'object',
+  required: ['title'],
+  additionalProperties: false,
+  properties: {
+    title: { type: 'string', maxLength: MAX_TASK_TEXT },
+    description: { type: 'string', maxLength: MAX_TASK_TEXT },
+    scope: { type: 'object' },
+    risks: { type: 'array', items: { enum: RISKS } },
+    unknowns: { type: 'boolean' },
+    newSurface: { type: 'boolean' },
+    objective: { type: 'string', maxLength: MAX_TASK_TEXT },
+    acceptance: { type: 'array', items: { type: 'string', maxLength: MAX_TASK_TEXT } },
+    priority: { type: 'integer', minimum: 1 },
+  },
+}
+
+const scopeSchema = {
+  type: 'object',
+  description: 'What the work touches, to build its context catalog from the mind map.',
+  properties: {
+    modules: { type: 'array', items: { type: 'string' } },
+    files: { type: 'array', items: { type: 'string' } },
+    symbols: { type: 'array', items: { type: 'string' } },
+  },
+  additionalProperties: false,
+}
+const MAX_CATALOG_DEPTH = 3
+const seatModuleProps = {
+  dest, agent: { type: 'string' }, work: { type: 'string' }, module: { type: 'string' },
 }
 
 const TOOLS = [
@@ -440,11 +554,37 @@ const TOOLS = [
   {
     name: 'mindmap_build',
     description: MINDMAP_TEXT.t('toolBuild'),
-    inputSchema: { type: 'object', properties: { dest, save: { type: 'boolean' }, full: { type: 'boolean', description: MINDMAP_TEXT.t('paramFull') } }, additionalProperties: false },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest,
+        save: { type: 'boolean' },
+        full: { type: 'boolean', description: MINDMAP_TEXT.t('paramFull') },
+        fresh: { type: 'boolean', description: MINDMAP_TEXT.t('paramFresh') },
+        graph: { type: 'boolean', description: MINDMAP_TEXT.t('paramGraph') },
+      },
+      additionalProperties: false,
+    },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     run: args => {
-      const result = buildMindMap(projectDir(args), { roots: allowedRoots(), save: optionalBool(args, 'save', false) })
-      return { dest: result.dest, counts: result.map.counts, saved: result.saved ?? null, overview: result.overview, summary: result.summary, ...(optionalBool(args, 'full', false) ? { map: result.map } : {}) }
+      const dir = projectDir(args)
+      const previous = optionalBool(args, 'fresh', false) ? undefined : loadSaved(dir)
+      const save = optionalBool(args, 'save', false)
+      const saveGraph = optionalBool(args, 'graph', false)
+      const result = buildMindMap(dir, { roots: allowedRoots(), save, previous, saveGraph })
+      const full = optionalBool(args, 'full', false)
+      return {
+        dest: result.dest,
+        counts: result.map.counts,
+        reuse: result.reuse,
+        saved: result.saved ?? null,
+        overview: capReply(result.overview),
+        summary: capReply(result.summary),
+        ...(full ? {
+          mapFile: result.saved?.[0] ?? null,
+          note: 'the full map is in the saved file; save=true writes it',
+        } : {}),
+      }
     },
   },
   {
@@ -1051,12 +1191,16 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => ({
-      board: holdMeeting(board, {
-        id: args.id, by: args.caller, minutes: args.minutes, attendees: args.attendees,
-        record: args.record, at: now(),
-      }),
-    })),
+    run: args => {
+      const held = boardChange(args, board => ({
+        board: holdMeeting(board, {
+          id: args.id, by: args.caller, minutes: args.minutes, attendees: args.attendees,
+          record: args.record, at: now(),
+        }),
+      }))
+      const report = orch.reportClosed(dirOf(args), args.id)
+      return report === undefined ? held : { ...held, sprintReport: report }
+    },
   },
   {
     name: 'goal_merge',
@@ -1143,11 +1287,15 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false },
-    run: args => boardChange(args, board => goalDone(board, {
-      goal: args.goal, by: args.caller, team: args.team, members: teamMembers(args),
-      kind: args.kind, surface: args.surface, demoer: args.demoer, meets: args.meets,
-      override: args.override, at: now(),
-    })),
+    run: args => {
+      const signed = boardChange(args, board => goalDone(board, {
+        goal: args.goal, by: args.caller, team: args.team, members: teamMembers(args),
+        kind: args.kind, surface: args.surface, demoer: args.demoer, meets: args.meets,
+        override: args.override, at: now(),
+      }))
+      const final = finalizeGoal(args, args.goal)
+      return final === undefined ? signed : { ...signed, final }
+    },
   },
   {
     name: 'goal_raise',
@@ -1420,6 +1568,11 @@ const TOOLS = [
         agent: { type: 'string' },
         team: { type: 'string' },
         description: { type: 'string' },
+        scope: scopeSchema,
+        depth: {
+          type: 'integer', minimum: 0, maximum: MAX_CATALOG_DEPTH,
+          description: 'Dependency steps around the scope to include as references (default 1).',
+        },
       },
       required: ['goal', 'job', 'agent', 'team', 'description'],
       additionalProperties: false,
@@ -1427,10 +1580,16 @@ const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false },
     run: args => {
       if (BOUND_SEAT) throw new Error('only Orchestration may assign work')
-      return boardChange(args, board => assignWork(board, {
+      const assigned = boardChange(args, board => assignWork(board, {
         goal: args.goal, job: args.job, agent: args.agent, team: args.team,
         description: args.description, by: 'orchestration', at: now(),
       }))
+      if (args.scope === undefined || assigned.held) return assigned
+      const row = workRow(args, assigned.id)
+      const slice = sliceFor(currentMap(args), {
+        job: row.job, scope: args.scope, depth: args.depth,
+      })
+      return { ...assigned, context: deliver(args, { work: assigned.id, row, slice }) }
     },
   },
   {
@@ -1474,8 +1633,17 @@ const TOOLS = [
           type: 'array',
           items: {
             type: 'object',
-            properties: { agent: { type: 'string' }, role: { type: 'string' } },
-            required: ['agent', 'role'],
+            properties: {
+              agent: { type: 'string' },
+              role: { type: 'string', description: 'One role, for example manager or assignee.' },
+              roles: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Every role the member holds, for example ["manager", "coder"]. '
+                + 'Use this for a lead who also works as a coder or researcher.',
+              },
+            },
+            required: ['agent'],
             additionalProperties: false,
           },
         },
@@ -1488,7 +1656,7 @@ const TOOLS = [
       if (current !== null) throw new Error(`${args.team} already has a board`)
       const opened = openBoard({ team: args.team, members: args.members })
       if (!opened.ok) throw new Error(opened.reason)
-      const lead = opened.board.members.find(m => m.role === 'manager')
+      const lead = opened.board.members.find(m => m.roles.includes('manager'))
       if (lead.agent !== args.caller) throw new Error('only the lead may open the board')
       return { board: opened.board, team: args.team, members: opened.board.members }
     }),
@@ -1582,9 +1750,441 @@ const TOOLS = [
     },
     annotations: { readOnlyHint: true, destructiveHint: false },
     run: args => {
-      const view = needsAttention(readTeam(args), args.caller)
+      const board = readTeam(args)
+      const view = needsAttention(board, args.caller)
       if (!view.ok) throw new Error(view.reason)
-      return view
+      const members = board.members.map(member => member.agent)
+      return { ...view, catalogRequests: pendingRequests(readLedger(args), members) }
+    },
+  },
+  {
+    name: 'catalog_index',
+    description: [
+      'The mind map\'s catalog index: each module\'s record hash, for quick lookup.',
+      'Give `module` for its hash, or `hash` for its module.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { dest, module: { type: 'string' }, hash: { type: 'string' } },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    run: args => {
+      const map = currentMap(args)
+      if (args.hash !== undefined) {
+        return { hash: args.hash, module: moduleByHash(map, args.hash) ?? null }
+      }
+      const index = catalogIndex(map)
+      if (args.module !== undefined) {
+        return { module: args.module, hash: index[args.module] ?? null }
+      }
+      return { generatedAt: map.generatedAt, index }
+    },
+  },
+  {
+    name: 'catalog_release',
+    description: [
+      'A seat is done with a module of its catalog (its code is satisfying).',
+      'The server rehashes the module, saves the whole mind map, tells every other',
+      'seat holding an older hash that an update is available, and drops the entry.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: seatModuleProps,
+      required: ['agent', 'work', 'module'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      const dir = projectDir(args)
+      const build = { roots: allowedRoots(), save: true, previous: loadSaved(dir) }
+      const built = buildMindMap(dir, build)
+      const fresh = built.map
+      const newHash = fresh.modules[args.module]?.hash
+      if (newHash === undefined) throw new Error(`${args.module} is not in the mind map`)
+      return ledgerChange(args, (ledger, tick) => {
+        const out = release(ledger, {
+          agent: args.agent, work: args.work, module: args.module, newHash, tick, mint: mintFresh,
+        })
+        const { ledger: next, ...result } = out
+        return { ledger: next, ...result, mapSaved: true, mapReuse: built.reuse }
+      })
+    },
+  },
+  {
+    name: 'catalog_pull',
+    description: 'Take the current entry for a module you hold, after an '
+      + '"update is available" notice.',
+    inputSchema: {
+      type: 'object',
+      properties: { dest, agent: { type: 'string' }, module: { type: 'string' } },
+      required: ['agent', 'module'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      const held = readLedger(args).holdings?.[args.agent]?.[args.module]
+      if (held === undefined) throw new Error(`${args.agent} does not hold ${args.module}`)
+      const entry = entryFor(currentMap(args), args.module, held.job, held.distance ?? 0)
+      return ledgerChange(args, ledger => ({
+        ledger: pull(ledger, { agent: args.agent, module: args.module, entry, at: now() }),
+        entry,
+      }))
+    },
+  },
+  {
+    name: 'catalog_request',
+    description: [
+      'Ask for a module your work\'s catalog does not include. Granted at once when the',
+      'work already reaches it; otherwise held for your team lead (catalog_decide).',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: seatModuleProps,
+      required: ['agent', 'work', 'module'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      if (currentMap(args).modules[args.module] === undefined) {
+        throw new Error(`${args.module} is not in the mind map`)
+      }
+      const asked = ledgerChange(args, ledger => {
+        const { ledger: next, ...result } = requestModule(ledger, {
+          agent: args.agent, work: args.work, module: args.module, at: now(), mint: mintFresh,
+        })
+        return { ledger: next, ...result }
+      })
+      if (!asked.granted) return asked
+      if (readLedger(args).holdings?.[args.agent]?.[args.module] !== undefined) {
+        return { ...asked, alreadyHeld: true }
+      }
+      return { ...asked, context: deliverModule(args, { work: args.work, module: args.module }) }
+    },
+  },
+  {
+    name: 'autopilot_draft',
+    description: [
+      'Orchestration only: start autopilot for the first sprint. Each task is measured',
+      'against the mind map (scope from its files, modules or symbols, or matched from its',
+      'wording; files, modules, languages, risks) and planned: one team per module, one',
+      'coder per task up to the cap, review from another team, final QA and Security on',
+      'teams that author nothing. Returns the draft and the questions the Business Analyst',
+      '(`ba`) answers with autopilot_steer before autopilot_allocate.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, title: { type: 'string', maxLength: MAX_TASK_TEXT },
+        weeks: { type: 'integer', minimum: 1, maximum: MAX_SPRINT_WEEKS },
+        ba: { type: 'string' }, tasks: { type: 'array', minItems: 1, items: TASK_SCHEMA },
+        replace: { type: 'boolean', description: 'Replace a draft that is still being steered.' },
+        sprintLimit: {
+          type: 'integer', minimum: 1, maximum: MAX_SPRINT_LIMIT,
+          description: 'Sprints the loop runs before it pauses to ask the client (default 10).',
+        },
+      },
+      required: ['ba', 'tasks'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      if (BOUND_SEAT) throw new Error('only Orchestration starts autopilot')
+      return orch.runWord(projectDir(args), 'draft', args, allowedRoots())
+    },
+  },
+  {
+    name: 'autopilot_steer',
+    description: [
+      'The Business Analyst (`caller`) guides autopilot until seats are allocated: per task',
+      '(`decisions`) the owning module of a task that spans modules, a new `scope`, the',
+      'client `objective`, `acceptance` and `priority`, risk flags, `unknowns`,',
+      '`newSurface`, or `defer`; and a coder cap per module (`caps`). Re-plans each time.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' },
+        decisions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['task'],
+            additionalProperties: false,
+            properties: {
+              task: { type: 'string' }, owner: { type: 'string' }, scope: { type: 'object' },
+              objective: { type: 'string', maxLength: MAX_TASK_TEXT },
+              acceptance: { type: 'array', items: { type: 'string', maxLength: MAX_TASK_TEXT } },
+              priority: { type: 'integer', minimum: 1 },
+              risks: { type: 'array', items: { enum: RISKS } },
+              unknowns: { type: 'boolean' }, newSurface: { type: 'boolean' },
+              defer: { type: 'boolean' },
+            },
+          },
+        },
+        caps: { type: 'object', additionalProperties: { type: 'integer', minimum: 1 } },
+      },
+      required: ['caller'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      return orch.runWord(projectDir(args), 'steer', args, allowedRoots())
+    },
+  },
+  {
+    name: 'autopilot_allocate',
+    description: [
+      'The Business Analyst (`caller`) allocates the steered draft, once every question is',
+      'answered: mints each team\'s hash, lead and seats; opens the sprint, its goals (with',
+      'the client\'s objective, acceptance and priority, owned by the team) and each team\'s',
+      'Sprint Planning; opens every team board; hands out the authoring work without passing',
+      'any seat\'s open-work limit (the rest waits on the backlog for the lead and the BA);',
+      'and delivers each piece of work its mind-map catalog. Returns the launch list: each',
+      'seat\'s subagent, settings and work, and each lead\'s brief of the client\'s specs.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { dest, caller: { type: 'string' } },
+      required: ['caller'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      return orch.runWord(projectDir(args), 'allocate', args, allowedRoots())
+    },
+  },
+  {
+    name: 'autopilot_status',
+    description: 'The autopilot draft: its state, the questions for the BA, the plan, and once '
+      + 'allocated the launch list.',
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    run: args => {
+      return orch.runWord(projectDir(args), 'status', args)
+    },
+  },
+  {
+    name: 'goal_vision',
+    description: [
+      'A vision note on a goal from the BA or the lead (`source`), reading what the client',
+      'said. The client\'s own words are added by the person with /devops vision. Notes show on',
+      'the dashboard next to the goal\'s objective and',
+      'acceptance, so the team can see the vision it builds.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, goal: { type: 'string' },
+        text: { type: 'string', maxLength: MAX_TASK_TEXT },
+        source: { enum: ['ba', 'lead'] },
+      },
+      required: ['caller', 'goal', 'text', 'source'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      return orch.runWord(projectDir(args), 'goal-vision', args)
+    },
+  },
+  {
+    name: 'deadlock_scan',
+    description: [
+      'Goals that have stopped moving: unchanged across standups of their team, or sent back',
+      'several times, and not yet raised. The team lead raises them (deadlock_raise).',
+    ].join(' '),
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    run: args => {
+      return orch.runWord(projectDir(args), 'deadlock-scan', args)
+    },
+  },
+  {
+    name: 'deadlock_raise',
+    description: [
+      'The team lead (`caller`) raises a stalled goal, with the reason. The record notes',
+      'whether the goal already has a vision the lead can read; the Business Analyst decides',
+      'next (deadlock_resolve).',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, goal: { type: 'string' },
+        reason: { type: 'string', maxLength: MAX_TASK_TEXT },
+      },
+      required: ['caller', 'goal', 'reason'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      return orch.runWord(projectDir(args), 'deadlock-raise', args)
+    },
+  },
+  {
+    name: 'deadlock_resolve',
+    description: [
+      'The Business Analyst (`caller`) decides a raised deadlock: `vision` gives the client\'s',
+      'vision from what it reads (feedback goes to the team lead), or `question` asks the',
+      'client, pausing the goal until the person answers (/devops answer).',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, id: { type: 'string' },
+        vision: { type: 'string', maxLength: MAX_TASK_TEXT },
+        question: { type: 'string', maxLength: MAX_TASK_TEXT },
+      },
+      required: ['caller', 'id'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      return orch.runWord(projectDir(args), 'deadlock-resolve', args)
+    },
+  },
+  {
+    name: 'deadlock_forward',
+    description: [
+      'The team lead (`caller`) forwards the BA\'s feedback to the team\'s members, at standup or',
+      'refinement (`meeting`). Closes the deadlock.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, id: { type: 'string' }, meeting: { type: 'string' },
+      },
+      required: ['caller', 'id'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      return orch.runWord(projectDir(args), 'deadlock-forward', args)
+    },
+  },
+  {
+    name: 'loop_status',
+    description: [
+      'The sprint loop: running, paused (why) or satisfied; its sprints, the sprint limit,',
+      'each sprint\'s report with the BA\'s signature and the client\'s sign-off, and what the',
+      'loop does next.',
+    ].join(' '),
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    run: args => {
+      return orch.runWord(projectDir(args), 'loop-status', args)
+    },
+  },
+  {
+    name: 'loop_report_sign',
+    description: [
+      'The Business Analyst (`caller`) signs the Orchestrator\'s report on a closed sprint,',
+      'with its view of how the vision was carried out (`notes`). When the vision is',
+      'unclear, `askClient` asks the client and pauses the loop until they answer with',
+      '/devops continue. Otherwise the loop moves on at once: it drafts the next sprint from',
+      'the backlog and allocates it, or pauses at the sprint limit or when nothing is left.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, caller: { type: 'string' }, sprint: { type: 'string' },
+        notes: { type: 'string', maxLength: MAX_TASK_TEXT },
+        askClient: { type: 'string', maxLength: MAX_TASK_TEXT },
+      },
+      required: ['caller', 'sprint'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      return orch.runWord(projectDir(args), 'loop-sign', args, allowedRoots())
+    },
+  },
+  {
+    name: 'loop_advance',
+    description: [
+      'Orchestration only: move the loop on after the client answers (/devops continue), or',
+      'after the BA steers a draft that had questions. Pauses, drafts or allocates the next',
+      'sprint the same way the BA\'s signature does.',
+    ].join(' '),
+    inputSchema: { type: 'object', properties: { dest }, additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      if (BOUND_SEAT) throw new Error('only Orchestration moves the loop on')
+      return orch.runWord(projectDir(args), 'loop-advance', args, allowedRoots())
+    },
+  },
+  {
+    name: 'goal_trail',
+    description: [
+      'An item\'s progress and file updates: each hand-off with its signer and the side',
+      'branch\'s commit, tree and changed files, each Done-chain signature, and, once the',
+      'Business Analyst signed it twice, the module hashes it was finalized with.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { dest, goal: { type: 'string' } },
+      required: ['goal'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    run: args => ({
+      ...goalTrail(readBoard(args), args.goal),
+      finalized: readLedger(args).finals?.[args.goal] ?? null,
+    }),
+  },
+  {
+    name: 'catalog_finalize',
+    description: [
+      'Orchestration only: finalize an item whose Done chain carries the Business Analyst\'s',
+      'second signature, if goal_done did not already. Updates and saves the map first,',
+      'then tells the seats holding a changed module that an update is available.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: { dest, goal: { type: 'string' } },
+      required: ['goal'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    run: args => {
+      if (BOUND_SEAT) throw new Error('only Orchestration may finalize an item')
+      if (!goalTrail(readBoard(args), args.goal).final) {
+        throw new Error(`${args.goal} is not final: the Business Analyst has not signed it twice`)
+      }
+      return finalizeGoal(args, args.goal) ?? { goal: args.goal, alreadyFinal: true }
+    },
+  },
+  {
+    name: 'catalog_decide',
+    description: [
+      'The team lead decides a held catalog request, keeping the team on course.',
+      'An approved module is delivered to the seat; a refusal needs a reason.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dest, team: { type: 'string' }, caller: { type: 'string' }, id: { type: 'string' },
+        approve: { type: 'boolean' }, reason: { type: 'string' },
+      },
+      required: ['team', 'caller', 'id', 'approve'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    run: args => {
+      const board = readTeam(args)
+      if (!isLead(board, args.caller)) throw new Error(`only the ${args.team} lead may decide`)
+      const request = readLedger(args).requests?.[args.id]
+      if (request === undefined) throw new Error(`unknown request: ${args.id}`)
+      if (!board.members.some(member => member.agent === request.agent)) {
+        throw new Error(`${request.agent} is not on ${args.team}`)
+      }
+      ledgerChange(args, ledger => ({
+        ledger: decideRequest(ledger, {
+          id: args.id, lead: args.caller, approve: args.approve, reason: args.reason, at: now(),
+        }),
+      }))
+      if (!args.approve) return { id: args.id, state: 'refused' }
+      const context = deliverModule(args, { work: request.work, module: request.module })
+      return { id: args.id, state: 'approved', context }
     },
   },
 ]
@@ -1692,6 +2292,7 @@ function inboxOf(agent) {
     handoffs: inboxFor(board, agent),
     work: workInbox(board, agent),
     threads: unreadThreads(board, agent),
+    context: catalogInbox(readLedger({}), agent),
   }
 }
 

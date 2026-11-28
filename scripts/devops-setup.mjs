@@ -10,7 +10,8 @@ export const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.
 
 const SKIP_DIRS = new Set([
   '.git', 'node_modules', 'target', 'dist', 'build', '.venv', 'venv', '__pycache__',
-  '.devops', 'devops-skill', '.terraform', 'vendor', 'bin', 'obj', '.next', '.cache', '.gradle', '.idea',
+  '.devops', 'devops-skill', '.claude', '.terraform', 'vendor', 'bin', 'obj',
+  '.next', '.cache', '.gradle', '.idea',
 ])
 const MAX_DEPTH = 5
 const MAX_ENTRIES = 20000

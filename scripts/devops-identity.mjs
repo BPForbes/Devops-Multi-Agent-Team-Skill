@@ -19,12 +19,15 @@ const SENDERS = Object.freeze({
   'human.digest': ['manager'],
   'human.answer': ['human'],
   'run.authorize': ['human'],
+  'context.catalog': ['server'],
+  'context.update': ['server'],
 })
 
 const SEAT_WORK = Object.freeze([
   'work.checkin', 'work.heartbeat', 'work.accept', 'work.estimate',
   'meeting.update', 'meeting.summary', 'question.ask', 'question.answer',
   'help.request', 'help.answer', 'handoff.triage', 'handoff.send-back',
+  'context.release', 'context.request',
 ])
 
 /** The roles allowed to send a kind. Unknown kinds are allowed to no one. */

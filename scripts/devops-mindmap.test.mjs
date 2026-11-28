@@ -3,7 +3,10 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { buildMindMap, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus, mindMapTree, symbolsOf } from './devops-mindmap.mjs'
+import {
+  buildMindMap, loadSaved, loadText, mindMapNote, mindMapOverview, mindMapQuery, mindMapStatus,
+  mindMapTree, packMap, symbolsOf, unpackMap,
+} from './devops-mindmap.mjs'
 
 function project(files) {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dmat-mind-')))
@@ -63,7 +66,10 @@ test('mind map links docs, files, imports, calls, libraries, tests and duplicate
 test('saved map, status shows only what changed, query answers without reading files', () => {
   const dir = project(SAMPLE)
   const built = buildMindMap(dir, { save: true })
-  assert.deepEqual(built.saved, ['mindmap.json', 'MINDMAP.md', 'OVERVIEW.md', 'graph.json'].map(name => path.join('.devops', 'mindmap', name)))
+  const savedFiles = ['mindmap.json', 'MINDMAP.md', 'OVERVIEW.md']
+  assert.deepEqual(built.saved, savedFiles.map(name => path.join('.devops', 'mindmap', name)))
+  const graphFile = path.join(dir, '.devops/mindmap/graph.json')
+  assert.equal(fs.existsSync(graphFile), false, 'the graph is saved only on request')
   assert.equal(mindMapStatus(dir).stale, false)
 
   fs.appendFileSync(path.join(dir, 'src/util/strings.ts'), 'export const extra = 1\n')
@@ -168,7 +174,7 @@ test('documentation is part of the map: doc comments, docstrings, file headers, 
 
 test('the map is a tree with cross links; a node explains how it works with its neighbours\' docs and notes', () => {
   const dir = project(DOCUMENTED)
-  const { graph, summary } = buildMindMap(dir, { save: true })
+  const { graph, summary } = buildMindMap(dir, { save: true, saveGraph: true })
   const node = id => graph.nodes.find(n => n.id === id)
   assert.equal(node('module:src/cart').parent, 'project')
   assert.equal(node('file:src/cart/cart.ts').parent, 'module:src/cart')
@@ -235,4 +241,81 @@ test('no sentence is in the code: the wording and word lists come from mindmap-t
 
   fs.writeFileSync(path.join(dir, '.devops/mindmap/text.json'), JSON.stringify({ text: { noSuchKey: 'x' }, words: { genericNames: 'run' } }))
   assert.throws(() => loadText(dir), /unknown text key "noSuchKey".*words\.genericNames has the wrong type/)
+})
+
+test('the map skips .claude, so worktrees kept under it are not indexed', () => {
+  const dir = project({
+    'src/app.ts': 'export function appStart() {\n  return 1\n}\n',
+    '.claude/worktrees/seat-1/src/copy.ts': 'export function copyOfStart() {\n  return 2\n}\n',
+  })
+  const map = buildMindMap(dir).map
+  const indexed = [...Object.keys(map.files), ...Object.keys(map.docs)]
+  assert.ok(indexed.some(rel => rel === 'src/app.ts'))
+  assert.equal(indexed.filter(rel => rel.startsWith('.claude/')).length, 0)
+})
+
+/** The saved form of a map, as the next build reads it back. */
+const savedCopy = map => JSON.parse(JSON.stringify(map))
+const withoutDate = map => ({ ...map, generatedAt: null })
+
+/** Builds the sample, applies `edit`, then compares a build from the saved map with a full one. */
+function incrementalAgainstFull(edit) {
+  const dir = project(SAMPLE)
+  const before = savedCopy(buildMindMap(dir).map)
+  edit(dir)
+  const full = buildMindMap(dir)
+  const incremental = buildMindMap(dir, { previous: before })
+  assert.deepEqual(withoutDate(incremental.map), withoutDate(full.map))
+  return incremental.reuse
+}
+
+const write = (dir, rel, text) => fs.writeFileSync(path.join(dir, rel), text)
+
+test('a build from the saved map parses only the changed file, and gives the full map', () => {
+  const reuse = incrementalAgainstFull(dir => write(dir, 'src/util/strings.ts',
+    "export function slugify(text: string) {\n  return text.trim().toLowerCase()\n}\n"))
+  assert.equal(reuse.parsed, 1)
+  assert.ok(reuse.reused > 0)
+})
+
+test('a new definition rescans the calls of unchanged files that name it', () => {
+  const reuse = incrementalAgainstFull(dir => write(dir, 'src/web/other.ts',
+    'export function slugify(text: string) {\n  return text\n}\n'
+    + 'export function routeFor(name: string) {\n  return name\n}\n'))
+  assert.equal(reuse.parsed, 1)
+  assert.ok(reuse.callsRescanned > 1)
+})
+
+test('a removed definition drops the links that pointed at it, as a full build does', () => {
+  incrementalAgainstFull(dir => write(dir, 'src/util/strings.ts',
+    'export function slugifyText(text: string) {\n  return text.toLowerCase()\n}\n'))
+})
+
+test('a new file or a changed manifest falls back to a full build', () => {
+  const added = incrementalAgainstFull(dir => write(dir, 'src/util/extra.ts',
+    'export function extraThing() {\n  return 1\n}\n'))
+  assert.equal(added.reused, 0)
+  const manifest = incrementalAgainstFull(dir => write(dir, 'package.json',
+    JSON.stringify({ name: 'sample', dependencies: { lodash: '^4.17.21' } })))
+  assert.equal(manifest.reused, 0)
+})
+
+test('the saved map is packed, and loads back as the same map', () => {
+  const dir = project(SAMPLE)
+  const built = buildMindMap(dir, { save: true })
+  const saved = JSON.parse(fs.readFileSync(path.join(dir, '.devops/mindmap/mindmap.json'), 'utf8'))
+  assert.ok(Array.isArray(saved.paths))
+  assert.ok(Array.isArray(saved.calls[0]), 'call links are rows')
+  assert.equal(saved.importedBy, undefined, 'importers are derived on load')
+  assert.deepEqual(unpackMap(packMap(built.map)), built.map)
+  assert.deepEqual(loadSaved(dir), built.map)
+})
+
+test('the packed map is smaller, and an old saved format is rebuilt instead of misread', () => {
+  const dir = project(SAMPLE)
+  const { map } = buildMindMap(dir, { save: true })
+  assert.ok(JSON.stringify(packMap(map)).length < JSON.stringify(map).length)
+  const file = path.join(dir, '.devops/mindmap/mindmap.json')
+  fs.writeFileSync(file, JSON.stringify({ ...map, format: 1 }))
+  assert.equal(loadSaved(dir), undefined)
 })

@@ -68,7 +68,15 @@ test('initialize negotiates, lists 34 tools, prompts and resources', async () =>
     for (const name of ['detect_project', 'install_devops_team', 'ensure_gitignore', 'add_language', 'check_toolchain', 'sandbox_plan', 'list_languages', 'list_services', 'module_map', 'reuse_search', 'tag_history', 'tag_plan', 'tag_create', 'ghas_plan', 'comment_audit', 'story_parse', 'story_graph', 'story_new', 'story_link', 'story_check', 'story_guidance', 'cleanup_brief', 'cleanup_scan', 'formal_check', 'mindmap_overview', 'mindmap_tree', 'mindmap_note', 'mindmap_build', 'mindmap_status', 'mindmap_query']) assert.ok(tools.includes(name), name)
     const added = ['lint_check', 'lint_commands', 'config_get', 'config_set']
     for (const name of added) assert.ok(tools.includes(name), name)
-    assert.equal(tools.length, 74)
+    assert.equal(tools.length, 93)
+    const catalogTools = [
+      'catalog_index', 'catalog_release', 'catalog_pull', 'catalog_request', 'catalog_decide',
+      'catalog_finalize', 'goal_trail',
+      'autopilot_draft', 'autopilot_steer', 'autopilot_allocate', 'autopilot_status',
+      'loop_status', 'loop_report_sign', 'loop_advance',
+      'goal_vision', 'deadlock_scan', 'deadlock_raise', 'deadlock_resolve', 'deadlock_forward',
+    ]
+    for (const name of catalogTools) assert.ok(tools.includes(name), name)
     const scrum = [
       'allocation_plan', 'board_spin_up', 'meeting_schedule', 'meeting_hold', 'goal_signoff',
       'report_forward', 'goal_merge', 'goal_done', 'report_prepare', 'report_new_approach',
@@ -680,3 +688,332 @@ test('a seat bound to a team hash cannot act under another team', async () => {
   assert.match(own.text, /goal is not on the board/)
   c.close()
 })
+
+const CATALOG_PROJECT = {
+  'core/util.ts': 'export function slugify(text: string) {\n  return text.toLowerCase()\n}\n',
+  'core/util.test.ts': "import { slugify } from './util'\nslugify('A')\n",
+  'api/routes.ts': "import { slugify } from '../core/util'\n"
+    + "export function routeFor(name: string) {\n  return '/' + slugify(name)\n}\n",
+  'web/page.ts': 'export function pageTitle() {\n  return 1\n}\n',
+}
+const LEAD = 'agent-0c0c0c'
+const CODER = 'agent-0a0a0a'
+const PEER = 'agent-0b0b0b'
+
+const inboxOfSeat = async (c, agent) => JSON.parse(
+  (await c.rpc('resources/read', { uri: `devops://inbox/${agent}` })).result.contents[0].text,
+)
+
+/** Two seats given work on the core module, each delivered a catalog. */
+async function twoSeatsOnCore(c) {
+  await c.call('board_add_goal', { goal: 'goal-3c9e41', title: 'Slugs for every route' })
+  const work = {}
+  for (const agent of [CODER, PEER]) {
+    const assigned = await c.call('work_assign', {
+      goal: 'goal-3c9e41', job: 'coder', agent, team: 'team-1a2b3c',
+      description: 'Make slugs safe', scope: { files: ['core/util.ts'] }, depth: 0,
+    })
+    assert.notEqual(assigned.isError, true, assigned.text)
+    work[agent] = assigned.json().id
+    assert.deepEqual(assigned.json().context.modules, ['core'])
+  }
+  return work
+}
+
+test('assigned work delivers a catalog of the mind map, not the whole map', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  await twoSeatsOnCore(c)
+  const inbox = await inboxOfSeat(c, CODER)
+  const [catalog] = inbox.context.catalogs
+  assert.equal(catalog.kind, 'context.catalog')
+  assert.equal(catalog.body.goal.title, 'Slugs for every route')
+  assert.deepEqual(catalog.body.entries.map(entry => entry.module), ['core'])
+  assert.match(inbox.context.holding.core.hash, /^[0-9a-f]{12}$/)
+  const index = (await c.call('catalog_index')).json().index
+  assert.equal(index.core, inbox.context.holding.core.hash)
+  c.close()
+})
+
+test('a release rehashes, saves the map, tells the other holder, and drops the entry', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  const work = await twoSeatsOnCore(c)
+  const oldHash = (await inboxOfSeat(c, PEER)).context.holding.core.hash
+  fs.appendFileSync(path.join(root, 'core/util.ts'), 'export const MAX_SLUG = 40\n')
+  const released = await c.call('catalog_release', {
+    agent: CODER, work: work[CODER], module: 'core',
+  })
+  assert.notEqual(released.isError, true, released.text)
+  assert.deepEqual(released.json().notified, [PEER])
+  assert.ok(fs.existsSync(path.join(root, '.devops/mindmap/mindmap.json')))
+  assert.equal((await inboxOfSeat(c, CODER)).context.holding.core, undefined)
+  const notice = (await inboxOfSeat(c, PEER)).context.updates[0]
+  assert.equal(notice.body.old_hash, oldHash)
+  assert.notEqual(notice.body.new_hash, oldHash)
+  const saved = JSON.parse(fs.readFileSync(path.join(root, '.devops/mindmap/mindmap.json'), 'utf8'))
+  const why = 'the map is updated before the notice'
+  assert.equal(saved.modules.core.hash, notice.body.new_hash, why)
+  const pulled = await c.call('catalog_pull', { agent: PEER, module: 'core' })
+  assert.equal(pulled.json().entry.hash, notice.body.new_hash)
+  const after = await inboxOfSeat(c, PEER)
+  assert.deepEqual(after.context.updates, [])
+  assert.equal(after.context.catalogs[0].body.entries[0].hash, notice.body.new_hash)
+  fs.appendFileSync(path.join(root, 'core/util.ts'), 'export const MIN_SLUG = 1\n')
+  const second = (await c.call('catalog_release', {
+    agent: PEER, work: work[PEER], module: 'core',
+  })).json()
+  assert.equal(second.mapReuse.parsed, 1, 'the second release reuses the saved map')
+  assert.ok(second.mapReuse.reused > 0)
+  c.close()
+})
+
+test('a module outside the work waits for the lead, who keeps the team on course', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  const work = await twoSeatsOnCore(c)
+  await c.call('team_board_open', {
+    team: 'team-1a2b3c', caller: LEAD,
+    members: [{ agent: LEAD, roles: ['manager'] }, { agent: CODER, roles: ['coder'] }],
+  })
+  const asked = (await c.call('catalog_request', {
+    agent: CODER, work: work[CODER], module: 'web',
+  })).json()
+  assert.equal(asked.granted, false)
+  const view = (await c.call('needs_attention', { team: 'team-1a2b3c', caller: LEAD })).json()
+  assert.equal(view.catalogRequests[0].module, 'web')
+  const byCoder = await c.call('catalog_decide', {
+    team: 'team-1a2b3c', caller: CODER, id: asked.request, approve: true,
+  })
+  assert.equal(byCoder.isError, true)
+  const approved = await c.call('catalog_decide', {
+    team: 'team-1a2b3c', caller: LEAD, id: asked.request, approve: true,
+  })
+  assert.equal(approved.json().state, 'approved')
+  assert.ok((await inboxOfSeat(c, CODER)).context.holding.web)
+  c.close()
+})
+
+const BOARD = path.join('devops-skill', 'thoughts', 'non-final', 'board.json')
+
+/** Adds the coder's side-branch hand-off and the BA's two signatures to the board on disk. */
+function signTwice(root, goal) {
+  const file = path.join(root, BOARD)
+  const board = JSON.parse(fs.readFileSync(file, 'utf8'))
+  board.handoffs['handoff-0000f1'] = {
+    payload: {
+      kind: 'coder-to-review', item: 'item-3c9e41', goal, signed_by: CODER,
+      from: { job: 'coder', agent: CODER, team: 'team-1a2b3c' },
+      to: { job: 'reviewer', agent: 'agent-0e0e0e', team: 'team-2b3c4d' },
+      reason: 'ready for review', blame: null, created: '2026-11-01T00:00:00Z',
+      artifacts: {
+        branch: 'side/core', commit: 'c'.repeat(40), tree: 'd'.repeat(40), files: ['core/util.ts'],
+      },
+    },
+    state: 'done',
+  }
+  board.goals[goal].signoffs = [
+    { step: 'ba', by: 'agent-0d0d0d', at: '2026-11-04T00:00:00Z' },
+    { step: 'ba_final', by: 'agent-0d0d0d', at: '2026-11-05T00:00:00Z' },
+  ]
+  fs.writeFileSync(file, JSON.stringify(board))
+}
+
+test('the BA\'s second signature finalizes the item: map first, then the notice', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  try {
+    await c.call('board_add_goal', { goal: 'goal-3c9e41', title: 'Slugs for every route' })
+    await c.call('board_add_goal', { goal: 'goal-4d5e6f', title: 'Route titles' })
+    for (const [agent, goal] of [[CODER, 'goal-3c9e41'], [PEER, 'goal-4d5e6f']]) {
+      await c.call('work_assign', {
+        goal, job: 'coder', agent, team: 'team-1a2b3c', description: 'Slugs',
+        scope: { modules: ['core'] }, depth: 0,
+      })
+    }
+    const early = await c.call('catalog_finalize', { goal: 'goal-3c9e41' })
+    assert.equal(early.isError, true)
+    assert.match(early.text, /not final/)
+    signTwice(root, 'goal-3c9e41')
+    fs.appendFileSync(path.join(root, 'core/util.ts'), 'export const MAX_SLUG = 40\n')
+    const final = await c.call('catalog_finalize', { goal: 'goal-3c9e41' })
+    assert.notEqual(final.isError, true, final.text)
+    assert.deepEqual(final.json().files, ['core/util.ts'])
+    assert.deepEqual(final.json().notified, { core: [PEER] })
+    const mapFile = path.join(root, '.devops/mindmap/mindmap.json')
+    const saved = JSON.parse(fs.readFileSync(mapFile, 'utf8'))
+    const notice = (await inboxOfSeat(c, PEER)).context.updates[0]
+    assert.equal(notice.body.goal, 'goal-3c9e41')
+    assert.equal(saved.modules.core.hash, notice.body.new_hash)
+    assert.equal((await inboxOfSeat(c, CODER)).context.holding.core, undefined)
+    const trail = (await c.call('goal_trail', { goal: 'goal-3c9e41' })).json()
+    assert.equal(trail.final, true)
+    assert.equal(trail.finalized.modules.core, saved.modules.core.hash)
+    const again = (await c.call('catalog_finalize', { goal: 'goal-3c9e41' })).json()
+    assert.equal(again.alreadyFinal, true)
+  } finally {
+    c.close()
+  }
+})
+
+const AUTOPILOT_BA = 'agent-0d0d0d'
+
+test('autopilot: draft from tasks, the BA steers, then one call allocates every seat', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  try {
+    const drafted = (await c.call('autopilot_draft', {
+      ba: AUTOPILOT_BA, title: 'Sprint 1',
+      tasks: [
+        { title: 'Make slugify safe' },
+        { title: 'Routes and pages', scope: { modules: ['api', 'web'] } },
+      ],
+    })).json()
+    assert.equal(drafted.state, 'steering')
+    const spanning = drafted.questions.find(q => q.ask === 'owner')
+    assert.ok(spanning, 'the task that spans modules waits for the BA')
+    const early = await c.call('autopilot_allocate', { caller: AUTOPILOT_BA })
+    assert.equal(early.isError, true)
+    const notBa = await c.call('autopilot_steer', {
+      caller: CODER, decisions: [{ task: spanning.task, owner: 'api' }],
+    })
+    assert.equal(notBa.isError, true)
+    const steered = (await c.call('autopilot_steer', {
+      caller: AUTOPILOT_BA,
+      decisions: [{
+        task: spanning.task, owner: 'api', objective: 'Routes have slugs', priority: 1,
+      }],
+    })).json()
+    assert.deepEqual(steered.questions, [])
+    const allocated = await c.call('autopilot_allocate', { caller: AUTOPILOT_BA })
+    assert.notEqual(allocated.isError, true, allocated.text)
+    const { launch, catalogs } = allocated.json()
+    assert.equal(catalogs, 2, 'each piece of work gets its catalog')
+    const leads = launch.seats.filter(seat => seat.roles.includes('manager'))
+    const apiLead = leads.find(seat => seat.module === 'api')
+    const inbox = await inboxOfSeat(c, apiLead.agent)
+    assert.equal(inbox.work.length, 1)
+    assert.equal(inbox.context.catalogs.length, 1)
+    const brief = launch.briefs.find(b => b.lead === apiLead.agent)
+    assert.match(brief.goals[0].spec, /Routes have slugs/)
+    const team = path.join(root, '.devops', 'teams', `${apiLead.team}.json`)
+    assert.ok(fs.existsSync(team), 'the team board is open')
+    const status = (await c.call('autopilot_status')).json()
+    assert.equal(status.state, 'allocated')
+    const again = await c.call('autopilot_allocate', { caller: AUTOPILOT_BA })
+    assert.equal(again.isError, true, 'a draft is allocated once')
+  } finally {
+    c.close()
+  }
+})
+
+test('autopilot: only Orchestration drafts', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root, DEVOPS_SEAT: CODER } })
+  try {
+    const refused = await c.call('autopilot_draft', { ba: AUTOPILOT_BA, tasks: [{ title: 'x' }] })
+    assert.equal(refused.isError, true)
+    assert.match(refused.text, /only Orchestration/)
+  } finally {
+    c.close()
+  }
+})
+
+const ORCHESTRATE_SCRIPT = path.resolve(
+  path.dirname(SERVER), '..', 'scripts', 'devops-orchestrate.mjs',
+)
+
+/** Closes the sprint on disk as the last retrospective does, with every planned goal unfinished. */
+function closeSprintOnDisk(root, sprint) {
+  const file = path.join(root, BOARD)
+  const board = JSON.parse(fs.readFileSync(file, 'utf8'))
+  const planned = board.allocations[sprint].teams.flatMap(team => team.goals ?? [])
+  for (const goal of planned) {
+    Object.assign(board.goals[goal], { state: 'backlog', sprint: '' })
+    board.goals[goal].history.push({ at: '2026-11-28T00:00:00Z', event: 'returned', from: sprint })
+  }
+  const closed = { goals: [], status: 'closed', closed: '2026-11-28T00:00:00Z' }
+  Object.assign(board.sprints[sprint], closed)
+  fs.writeFileSync(file, JSON.stringify(board))
+}
+
+test('sprint loop: a closed sprint is reported, the BA signs, the next sprint runs', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  try {
+    await c.call('autopilot_draft', {
+      ba: AUTOPILOT_BA, tasks: [{ title: 'Make slugify safe' }, { title: 'Use pageTitle' }],
+    })
+    const first = (await c.call('autopilot_allocate', { caller: AUTOPILOT_BA })).json()
+    const leads = first.launch.seats.filter(seat => seat.roles.includes('manager'))
+    const coreLead = leads.find(seat => seat.module === 'core')
+    assert.equal((await c.call('loop_status')).json().state, 'running')
+    closeSprintOnDisk(root, first.sprint)
+    const waiting = (await c.call('loop_advance')).json()
+    assert.equal(waiting.reason, 'ba-signature', 'the report waits for the BA')
+    const report = (await c.call('loop_status')).json().reports[first.sprint]
+    assert.equal(report.unfinished.length, 2)
+    const signed = (await c.call('loop_report_sign', {
+      caller: AUTOPILOT_BA, sprint: first.sprint, notes: 'vision on track',
+    })).json()
+    assert.equal(signed.next.action, 'allocated', 'the next sprint starts on its own')
+    const second = signed.next
+    assert.notEqual(second.sprint, first.sprint)
+    const carried = second.launch.seats.find(seat => seat.agent === coreLead.agent)
+    assert.ok(carried?.carried, 'the core team keeps its lead')
+    const inbox = await inboxOfSeat(c, coreLead.agent)
+    assert.equal(inbox.work.length, 1, 'the old work is carried, not doubled')
+    const status = (await c.call('loop_status')).json()
+    assert.equal(status.sprints.length, 2)
+    const { spawnSync } = await import('node:child_process')
+    const words = ['satisfied', 'ship', 'it', '--dest', root]
+    const ran = spawnSync('node', [ORCHESTRATE_SCRIPT, ...words])
+    assert.equal(ran.status, 0, String(ran.stderr))
+    assert.equal((await c.call('loop_status')).json().state, 'satisfied')
+    assert.equal((await c.call('loop_advance')).json().action, 'none')
+  } finally {
+    c.close()
+  }
+})
+
+const THOUGHTS = path.join('devops-skill', 'thoughts', 'non-final')
+const readThought = (root, name) => fs.readFileSync(path.join(root, THOUGHTS, name), 'utf8')
+
+test('dashboard: files and hashes, vision, and a deadlock raised and forwarded', async () => {
+  const root = tmp(CATALOG_PROJECT)
+  const c = await client({ env: { DEVOPS_MCP_ROOTS: root } })
+  try {
+    const tasks = [{ title: 'Make slugify safe' }]
+    await c.call('autopilot_draft', { ba: AUTOPILOT_BA, tasks })
+    const allocated = (await c.call('autopilot_allocate', { caller: AUTOPILOT_BA })).json()
+    const dashboard = readThought(root, 'DASHBOARD.md')
+    assert.match(dashboard, /## Work items and files/)
+    assert.match(dashboard, /\| core\/util\.ts \| [0-9a-f]{12} \|/)
+    const leads = allocated.launch.seats.filter(seat => seat.roles.includes('manager'))
+    const coreLead = leads.find(seat => seat.module === 'core')
+    const saved = JSON.parse(readThought(root, 'board.json'))
+    const goal = saved.allocations[allocated.sprint].teams.flatMap(t => t.goals ?? [])[0]
+    assert.ok(goal, 'the team has a goal')
+    const note = { caller: AUTOPILOT_BA, goal, text: 'Slugs keep unicode', source: 'client' }
+    assert.equal((await c.call('goal_vision', note)).json().notes, 1)
+    assert.match(readThought(root, 'DASHBOARD.md'), /Slugs keep unicode/)
+    assert.ok(Array.isArray((await c.call('deadlock_scan')).json().stalled))
+    const asBa = { caller: AUTOPILOT_BA, goal, reason: 'stuck' }
+    assert.equal((await c.call('deadlock_raise', asBa)).isError, true)
+    const asLead = { caller: coreLead.agent, goal, reason: 'stuck on tests' }
+    const raised = await c.call('deadlock_raise', asLead)
+    assert.notEqual(raised.isError, true, raised.text)
+    const boardNow = () => JSON.parse(readThought(root, 'board.json'))
+    const id = Object.keys(boardNow().deadlocks)[0]
+    const vision = 'Unicode and ASCII both kept'
+    const feedback = await c.call('deadlock_resolve', { caller: AUTOPILOT_BA, id, vision })
+    assert.notEqual(feedback.isError, true, feedback.text)
+    const forwarded = await c.call('deadlock_forward', { caller: coreLead.agent, id })
+    assert.notEqual(forwarded.isError, true, forwarded.text)
+    assert.equal(boardNow().deadlocks[id].state, 'forwarded')
+    assert.match(readThought(root, 'DASHBOARD.md'), /forwarded/)
+  } finally {
+    c.close()
+  }
+})
+

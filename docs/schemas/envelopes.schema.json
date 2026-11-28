@@ -74,6 +74,18 @@
     },
     {
       "$ref": "#/$defs/BugReport"
+    },
+    {
+      "$ref": "#/$defs/ContextCatalog"
+    },
+    {
+      "$ref": "#/$defs/ContextUpdate"
+    },
+    {
+      "$ref": "#/$defs/ContextRelease"
+    },
+    {
+      "$ref": "#/$defs/ContextRequest"
     }
   ],
   "$defs": {
@@ -2264,6 +2276,257 @@
           }
         }
       }
+    },
+    "moduleHash": {
+      "description": "A module's record hash in the mind map (12 lowercase hex).",
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$"
+    },
+    "workId": {
+      "type": "string",
+      "pattern": "^work-[0-9a-f]{6}$"
+    },
+    "CatalogEntry": {
+      "description": "One module of a context catalog, shaped for the seat's job by a transformer. detail is full for a module the work names and reference for a neighbour.",
+      "type": "object",
+      "required": [
+        "module",
+        "hash",
+        "detail",
+        "distance",
+        "files"
+      ],
+      "properties": {
+        "module": {
+          "type": "string"
+        },
+        "hash": {
+          "$ref": "#/$defs/moduleHash"
+        },
+        "detail": {
+          "enum": [
+            "full",
+            "reference"
+          ]
+        },
+        "distance": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ContextCatalog": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "context.catalog"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "work",
+                "seat",
+                "goal",
+                "job",
+                "entries"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "work": {
+                  "$ref": "#/$defs/workId"
+                },
+                "seat": {
+                  "$ref": "#/$defs/agentHash"
+                },
+                "goal": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "title"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "$ref": "#/$defs/goalHash"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "job": {
+                  "$ref": "#/$defs/job"
+                },
+                "entries": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/CatalogEntry"
+                  }
+                },
+                "batch": {
+                  "description": "Where this message sits when a long catalog is sent in batches: its index from 0 and the count of messages.",
+                  "type": "object",
+                  "required": [
+                    "index",
+                    "of"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "index": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "of": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "ContextUpdate": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "context.update"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "module",
+                "old_hash",
+                "new_hash",
+                "changed_by",
+                "recommended"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "module": {
+                  "type": "string"
+                },
+                "old_hash": {
+                  "$ref": "#/$defs/moduleHash"
+                },
+                "new_hash": {
+                  "$ref": "#/$defs/moduleHash"
+                },
+                "changed_by": {
+                  "$ref": "#/$defs/agentHash"
+                },
+                "recommended": {
+                  "const": true
+                },
+                "goal": {
+                  "$ref": "#/$defs/goalHash",
+                  "description": "The item whose final signature made this update, when a finished item sent it."
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "ContextRelease": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "context.release"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "work",
+                "module"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "work": {
+                  "$ref": "#/$defs/workId"
+                },
+                "module": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
+    },
+    "ContextRequest": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/header"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "context.request"
+            },
+            "body": {
+              "type": "object",
+              "required": [
+                "work",
+                "module"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "work": {
+                  "$ref": "#/$defs/workId"
+                },
+                "module": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": [
+            "body"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false,
+      "type": "object"
     }
   }
 }

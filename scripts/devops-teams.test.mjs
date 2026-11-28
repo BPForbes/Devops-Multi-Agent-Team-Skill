@@ -58,3 +58,42 @@ test('needs-attention lists items awaiting security or the human, not finished w
   const kinds = needsAttention(board, 'agent-lead').attention.map(a => a.kind)
   assert.deepEqual(kinds, ['awaiting_signoff'])
 })
+
+test('a lead may hold several roles, and each role acts where its rules allow', () => {
+  const members = [
+    { agent: 'agent-lead', roles: ['manager', 'coder', 'researcher'] },
+    { agent: 'agent-rev', roles: ['reviewer'] },
+    { agent: 'agent-sec', roles: ['security'] },
+  ]
+  const opened = openBoard({ team: TEAM, members })
+  assert.equal(opened.ok, true)
+  assert.deepEqual(opened.board.members[0].roles, ['manager', 'coder', 'researcher'])
+  let board = teamIntake(opened.board, 'agent-lead', body('item-0000b1')).board
+  board.items[0] = { ...board.items[0], state: 'assigned' }
+  const started = teamMove(board, 'agent-lead', { item: 'item-0000b1', to: 'in_progress' })
+  assert.equal(started.ok, true, 'a coder moves items as the assignee')
+})
+
+test('a role that is not known is refused, and a member needs at least one role', () => {
+  const wizard = [{ agent: 'a', roles: ['manager', 'wizard'] }]
+  assert.equal(openBoard({ team: TEAM, members: wizard }).ok, false)
+  assert.equal(openBoard({ team: TEAM, members: [{ agent: 'a', roles: [] }] }).ok, false)
+  assert.equal(openBoard({ team: TEAM, members: [{ agent: 'a', roles: ['manager'] }] }).ok, true)
+})
+
+test('a board written with one role string still acts as before', () => {
+  const legacy = {
+    team: TEAM, members: [{ agent: 'agent-lead', role: 'manager' }], items: [], refusals: [],
+  }
+  assert.equal(teamIntake(legacy, 'agent-lead', body('item-0000c1')).ok, true)
+  assert.equal(needsAttention(legacy, 'agent-lead').ok, true)
+})
+
+test('a member without the manager role cannot read the lead view', () => {
+  const opened = openBoard({ team: TEAM, members: [
+    { agent: 'agent-lead', roles: ['manager'] },
+    { agent: 'agent-coder', roles: ['coder'] },
+  ] }).board
+  assert.equal(needsAttention(opened, 'agent-coder').ok, false)
+  assert.equal(needsAttention(opened, 'agent-lead').ok, true)
+})

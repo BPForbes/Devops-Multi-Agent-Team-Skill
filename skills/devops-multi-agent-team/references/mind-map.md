@@ -15,14 +15,26 @@ to find out, and does not write a second `slugify`.
 |------|------|--------------|
 | `.devops/mindmap/OVERVIEW.md` | The quick scan, about forty lines: what the project is (README), size and languages, where it starts, how it is run (scripts, make targets), its parts and what each is for, docs to read first, most depended-on files, main libraries, what to watch out for | plain chat first; the Researcher first in a team run; the Claude mod puts it in the session prompt |
 | `.devops/mindmap/MINDMAP.md` | The overview, then the **tree** (a Mermaid mindmap, and the code tree with each module's, file's and function's documentation on its line), **docs to code** (which doc sections describe which functions and files), then the detail: counts, a Mermaid module graph, a module table (dependencies both ways, libraries, key exports), a docs table (title and what each doc says), the most imported files, the most called functions, libraries, possible duplicates | the Researcher; anyone who needs more than the overview |
-| `.devops/mindmap/graph.json` | The tree and its cross links as nodes and edges, for any graph tool | `mindmap_tree`, other tools |
-| `.devops/mindmap/mindmap.json` | The full map behind it | `mindmap_query`, not people |
+| `.devops/mindmap/graph.json` | The tree and its cross links as nodes and edges, for an outside graph tool. Written only on request (`graph: true`, `--graph`): the mind map tools build the graph from the map themselves | outside tools |
+| `.devops/mindmap/mindmap.json` | The full map behind it, **packed**: each path once in a `paths` table that other fields point into, symbols and call links as rows, and nothing loading can derive again (importers, tests, each file's module and test flag). Read it through the tools, which unpack it | `mindmap_query`, `mindmap_tree`, the catalogs; not people |
 | `.devops/mindmap/text.json` | **Optional, yours**: the project's own wording for any sentence, label, heading or word list (see below) | read by every mind map tool and the Claude mod |
 | `.devops/mindmap/NOTES.md` | **Hand-written**: how a module, file, function or doc works, one `## <node>` section each. Never generated, so rebuilding keeps it | written with `mindmap_note` or by hand; shown with its node everywhere |
 
 Built by `mindmap_build` (MCP) or `devops-mindmap build --save`. It runs no
 program and writes only `.devops/mindmap/`. Building takes well under a second
 on a few thousand files.
+
+A build reuses the saved map. Every file is still read and hashed, but a code
+file whose content hash is unchanged keeps its saved entry (symbols, imports,
+libraries, file doc), so only changed files are parsed again. Call links are
+scanned again only for the changed files and for files whose text names a
+definition that changed; every other file keeps its saved links. Docs, the
+module records, importers, tests and duplicates are recomputed, because they
+are cheap and depend on every file. The result is the map a full build gives.
+When the set of files, a manifest or a top-level name changed, the build parses
+everything. `fresh: true` (`--fresh` on the command line) forces that. The
+build's reply says how much was reused (`reuse`: reused, parsed,
+callsRescanned).
 
 ## The tree and the graph
 
@@ -177,7 +189,9 @@ unless asked to save.
 
 The Researcher is the primary user. The other seats work from the brief and use
 the map only for narrow lookups, so the team does not pay for the same scan
-several times.
+several times. Assigned work can also carry a **context catalog**: the slice of
+the map that work needs, delivered to the seat's inbox and given back when done
+([context-catalogs.md](context-catalogs.md)).
 
 | Seat | Uses the map for |
 |------|------------------|

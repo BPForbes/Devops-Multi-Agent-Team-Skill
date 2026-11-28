@@ -807,3 +807,80 @@ test('the person decides held work on a load report; a seat may not', async ($, 
     ['load', REPORT, 'approve'], ['load', REPORT, 'decline', '--reason', 'parser first'],
   ])
 })
+
+/** Git output for a session opened above its repository: /work is not one, /work/repo is. */
+const ABOVE_REPO = {
+  '-C /work rev-parse --show-toplevel': undefined,
+  '-C /work/repo rev-parse --show-toplevel': '/work/repo',
+}
+
+test('a session above its repo grants and pushes from the shell\'s checkout', async ($, on) => {
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, git: ABOVE_REPO, cwd: '/work/repo' })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const granted = await $.command.run({ ...PERSON, args: 'push-ok' })
+  expect(granted.text).not.toContain('cannot be read')
+  expect(state.get('pushAuthorized')).toBe(TREE)
+  const pushed = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(pushed.deny).toBeUndefined()
+  expect(state.get('pushAuthorized')).toBe(false)
+})
+
+test('with no checkout under the root, the refusal says to cd into it', async ($, on) => {
+  const git = { ...ABOVE_REPO, '-C /elsewhere rev-parse --show-toplevel': '/elsewhere' }
+  const state = engine(on, PASS_NOTE, { security: CLEAR_NOTE, git, cwd: '/elsewhere' })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const granted = await $.command.run({ ...PERSON, args: 'push-ok' })
+  expect(granted.text).toContain('cd into the repository')
+  state.set('pushAuthorized', TREE)
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git push origin HEAD' })
+  expect(refused.deny).toContain('cd into the repository')
+})
+
+test('a $ expansion near git is refused for the expansion, not as a push', async ($, on) => {
+  engine(on, PASS_NOTE, { security: CLEAR_NOTE })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const refused = await $.tool.call({ tool: 'Bash', command: 'git status; echo "exit=$?"' })
+  expect(refused.deny).toContain('expansion')
+  expect(refused.deny).not.toContain('run the push as a command of its own')
+})
+
+/** The devops-loop.mjs runs among the fake session's process calls, without --dest. */
+const loopRuns = (runs: string[][]) => runs
+  .filter(argv => argv.some(a => a.endsWith('devops-orchestrate.mjs')))
+  .map(argv => argv.slice(2, -2))
+
+test('the person signs off the sprint loop; a seat may not', async ($, on) => {
+  const runs: string[][] = []
+  engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const seatTyped = { command: 'devops', origin: { kind: 'agent' }, args: 'satisfied' }
+  const seat = await $.command.run(seatTyped)
+  expect(seat.text).toContain('only the person can run it')
+  await $.command.run({ ...PERSON, args: 'satisfied looks right' })
+  await $.command.run({ ...PERSON, args: 'continue keep the old API --more 3' })
+  expect(loopRuns(runs)).toEqual([
+    ['satisfied', 'looks', 'right'],
+    ['continue', 'keep', 'the', 'old', 'API', '--more', '3'],
+  ])
+})
+
+const visionRuns = (runs: string[][]) => runs
+  .filter(argv => argv.some(a => a.endsWith('devops-orchestrate.mjs')))
+  .map(argv => argv.slice(2, -2))
+
+test('the person adds the client\'s vision and answers the BA; a seat may not', async ($, on) => {
+  const runs: string[][] = []
+  engine(on, PASS_NOTE, { security: CLEAR_NOTE, runs })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const seatAsks = {
+    command: 'devops', origin: { kind: 'agent' }, args: 'vision goal-3c9e41 keep it',
+  }
+  const seat = await $.command.run(seatAsks)
+  expect(seat.text).toContain('only the person can run it')
+  await $.command.run({ ...PERSON, args: 'vision goal-3c9e41 Slugs keep unicode' })
+  await $.command.run({ ...PERSON, args: 'answer deadlock-0a1b2c yes keep it' })
+  expect(visionRuns(runs)).toEqual([
+    ['vision', 'goal-3c9e41', 'Slugs', 'keep', 'unicode'],
+    ['answer', 'deadlock-0a1b2c', 'yes', 'keep', 'it'],
+  ])
+})

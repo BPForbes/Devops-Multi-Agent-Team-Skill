@@ -63,8 +63,9 @@ section, libraries; linked by imports, calls, uses, documents, links, tests).
 docstring, file header or README, the doc sections that name it, and a
 hand-written note from `NOTES.md`. Files: `OVERVIEW.md` (a quick scan),
 `MINDMAP.md` (the tree with documentation, docs to code, modules, libraries,
-possible duplicates), `graph.json` (nodes and edges), `mindmap.json` (behind
-`mindmap_query`) and `NOTES.md` (yours, never overwritten). No sentence is
+possible duplicates), `mindmap.json` (packed, behind `mindmap_query`; read it
+through the tools), `graph.json` (nodes and edges, only on request with
+`graph: true`) and `NOTES.md` (yours, never overwritten). No sentence is
 written in the code: all wording and English word lists are in
 [`mindmap-text.json`](mindmap-text.json), and a project can change any of them
 in `.devops/mindmap/text.json`. "How does X work?"
@@ -178,7 +179,11 @@ prompts) walks the same steps.
 | `thread_open`, `thread_reply`, `thread_mark_read`, `thread_resolve` | virtual PR threads on a goal's item: open one, reply, mark it read, and resolve it (only the opener) |
 | `work_assign`, `work_accept`, `work_complete` | assigned work: Orchestration only assigns it (the server records `assigned_by: "orchestration"`); the assigned seat accepts, then completes it |
 | `team_board_open`, `team_item_add`, `team_item_move`, `team_item_signoff` | per-team boards: open a team's own board (its lead is the manager), add a work item (members only), move it as the caller's role under the item rules, and record a security member's sign-off; the lead makes the last move to done |
-| `needs_attention` | the team lead's view of what needs a decision: blocked or failed items, and items waiting on security or the person |
+| `needs_attention` | the team lead's view of what needs a decision: blocked or failed items, items waiting on security or the person, and held catalog requests |
+| `catalog_index`, `catalog_release`, `catalog_pull`, `catalog_request`, `catalog_decide`, `catalog_finalize`, `goal_trail` | context catalogs: each module's record hash; work assigned with a `scope` delivers the seat only the slice of the mind map it needs; a release rehashes the module, saves the map and tells other holders an update is available; a module outside the work waits for the team lead; the BA's second signature finalizes an item, updating the map before telling other holders; `goal_trail` shows each hand-off's signer and side-branch files and each chain signature ([context-catalogs.md](skills/devops-multi-agent-team/references/context-catalogs.md)) |
+| `autopilot_draft`, `autopilot_steer`, `autopilot_allocate`, `autopilot_status` | autopilot for the first sprint ([`references/autopilot.md`](skills/devops-multi-agent-team/references/autopilot.md)): tasks are measured against the mind map and planned one team per module (the lead also codes; one coder per task up to a cap); the Business Analyst answers the draft's questions (owners of tasks that span modules, unplaced tasks) and steers it (priority, objective, acceptance, risks, deferral, coder caps); allocation mints every seat, opens the sprint and team boards, hands out work within each seat's limit with its mind-map catalog, and returns a launch list of subagents, settings and each lead's brief |
+| `goal_vision`, `deadlock_scan`, `deadlock_raise`, `deadlock_resolve`, `deadlock_forward` | the client's vision and deadlocks ([`references/deadlock.md`](skills/devops-multi-agent-team/references/deadlock.md)): a goal stalled across two standups or two send-backs is raised by its team lead, the BA reads the vision or asks the client, the person answers with `/devops answer`, the BA gives feedback to the lead, and the lead forwards it at standup or refinement; vision notes show on the dashboard ([`dashboard.md`](skills/devops-multi-agent-team/references/dashboard.md)); `/devops messages` sends long catalogs as batches ([`messages.md`](skills/devops-multi-agent-team/references/messages.md)) |
+| `loop_status`, `loop_report_sign`, `loop_advance` | the sprint loop ([`references/sprint-loop.md`](skills/devops-multi-agent-team/references/sprint-loop.md)): after the first sprint, sprints follow on their own until the client is satisfied; each closed sprint gets the Orchestrator's report, the BA signs it (asking the client when the vision is unclear), and the next sprint is drafted from the backlog and allocated with each module's team carried over; it pauses at the sprint limit or when nothing is left. You sign off with `/devops satisfied` or `/devops continue` |
 | `allocation_plan`, `board_spin_up` | allocation research (`references/allocation-research.md`): plan the teams and seats from the task's streams, each count with its reason, every team judged by one that authored none of its work; then Orchestration opens the sprint, backlogs each stream, and hands each team lead its Sprint Planning and a `seat.setup` payload (recommended `DEVOPS_SEAT`/`DEVOPS_TEAM`, system versions, setup steps; the seat sets itself up) |
 | `bug_report`, `bug_issue`, `bug_filed`, `work_decide` | the bug flow (`references/scrum-meetings.md`): a bug raised at the Daily Scrum goes to you as the BA's bug report (issue, reason, proposals, files, lines, snippets, explanation, plan of attack); you answer `/devops bug REPORT fine\|fix N\|fix TEXT`; the team lead puts the issue on the board as a backlog bug goal and assigns it; filing the drafted issue on GitHub is the team lead's job, and `bug_filed` then titles the goal `#<number> <description>` (the draft names the work item hash, kind bug) and lists the number on the goal the bug touches. Work past a seat's limit of three open pieces is held for the BA, who approves or declines it against your objectives or asks you (`/devops load REPORT approve\|decline`) |
 | `meeting_schedule`, `meeting_hold` | Scrum meetings (`references/scrum-meetings.md`, `client-and-agile.md`): per-team Planning, Daily (stress/strain + lead reallocations; no repro by default), Refinement; one **joint** Sprint Review (BA roster, live feature demos); per-team Retro. AI↔AI talk about a feature/bug uses **reproduction** (GUI/browser/terminal). Business Analyst attends Planning, Daily, Refinement and Review. Read at `devops://meetings/<sprint>` |
@@ -371,7 +376,11 @@ Limits, stated plainly:
   session's checkout. A chain (`git commit && git push`, `&`, `{ }`), a wrapper
   (`timeout`, `sudo`, `bash -c`), a prefix, quoting, `-C`, `--git-dir`, `-c`, an
   alias, or a shell left in another checkout by an earlier `cd` is refused,
-  because the check reads `HEAD` before the command runs. A git alias whose
+  because the check reads `HEAD` before the command runs. The session's
+  checkout is the repository holding the session root; when the session was
+  opened above its repositories (the root is not in one), it is the repository
+  the shell is in, if that lies under the root. `/devops push-ok` reads the
+  tree there too, so `cd` into the repository before granting. A git alias whose
   body pushes or starts with `!`, directly or through another alias, is
   refused in any command, and so are `push.followTags`,
   `push.recurseSubmodules` and `remote.<name>.mirror`. A git command with a

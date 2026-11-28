@@ -22,6 +22,13 @@ const GATES_REF = { plugin: 'devops-multi-agent-team', key: 'gates' } as const
 const HUMAN_ONLY_WORDS = new Set([
   'on', 'off', 'enable', 'disable', 'skill', 'skills',
   'push-ok', 'push-reset', 'gates', 'allow-branch', 'comments', 'monitor', 'bug', 'load',
+  'satisfied', 'continue', 'answer', 'vision', 'messages',
+])
+/** Words only the person types: the client's own voice and the sign-offs. */
+const PERSON_WORDS = new Set(['vision', 'answer', 'satisfied', 'continue', 'messages'])
+/** Orchestration words: anyone may type them; the BA and lead checks are in the word itself. */
+const ORCHESTRATION_WORDS = new Set([
+  'draft', 'steer', 'allocate', 'advance', 'sign', 'raise', 'resolve', 'forward', 'scan',
 ])
 const ACTIVE_REF = { plugin: 'devops-multi-agent-team', key: 'active' } as const
 const SETTINGS_SCRIPT = 'scripts/devops-claude-settings.mjs'
@@ -128,7 +135,7 @@ async function grantPush(
   goals: string[] = [],
 ): Promise<string> {
   const tree = await headTree($)
-  if (tree === undefined) return 'The tree cannot be read; no push is allowed.'
+  if (tree === undefined) return `The tree cannot be read; no push is allowed. ${NO_CHECKOUT_HINT}`
   const boardCall = ids.length > 0 || goals.length > 0
   const ran = boardCall
     ? await runPluginScript($, CHAIN_SCRIPT, approveArgs(ids, goals, risk))
@@ -201,6 +208,17 @@ async function bugAnswer($: EngineInterface, rest: string): Promise<string> {
   const args = ['bug', ids[0], decision, ...(decision === 'fix' ? picked : [])]
   const ran = await runPluginScript($, CHAIN_SCRIPT, args)
   return ran.out ?? 'the board could not be updated'
+}
+
+const ORCHESTRATE_SCRIPT = 'devops-orchestrate.mjs'
+
+/**
+ * The person's words that change the project's state (vision, answer,
+ * satisfied, continue, messages). One script applies them all.
+ */
+async function wordRun($: EngineInterface, word: string, rest: string): Promise<string> {
+  const ran = await runPluginScript($, ORCHESTRATE_SCRIPT, [word, ...shellWords(rest)])
+  return ran.out ?? `/devops ${word} could not be applied`
 }
 
 const LOAD_USAGE = 'Usage: /devops load REPORT approve|decline [REASON]'
@@ -286,7 +304,9 @@ const OVERRIDES_KEY = { plugin: 'devops-multi-agent-team', key: 'overrides' } as
  */
 async function publishDenial($: EngineInterface, what: string): Promise<string | undefined> {
   const tree = await headTree($)
-  if (tree === undefined) return `${PLUGIN}: ${what} is refused: the tree cannot be read.`
+  if (tree === undefined) {
+    return `${PLUGIN}: ${what} is refused: the tree cannot be read. ${NO_CHECKOUT_HINT}`
+  }
   const granted = (await $.state.get(PUSH_KEY)).value
   if (granted !== tree) {
     return `${PLUGIN}: ${what} is refused until the person authorizes it `
@@ -358,7 +378,10 @@ async function githubTargetDenial(
 async function repoDenial(
   $: EngineInterface, what: string, target: string,
 ): Promise<string | undefined> {
-  const origin = await gitOut($, await $.session.root(), ['remote', 'get-url', 'origin'])
+  const checkout = await checkoutRoot($)
+  const origin = checkout === undefined
+    ? undefined
+    : await gitOut($, checkout, ['remote', 'get-url', 'origin'])
   const home = origin === undefined ? undefined : repoOf(origin)
   if (home !== undefined && home === target.toLowerCase()) return undefined
   return `${PLUGIN}: ${what} is refused: it names ${target}, `
@@ -417,9 +440,37 @@ async function gitOut(
   return ran?.exitCode === 0 ? ran.stdout.trim() : undefined
 }
 
+/** What to do when no checkout can be found, said with every refusal for that reason. */
+const NO_CHECKOUT_HINT = 'The session root is not in a git repository and the shell is not '
+  + 'in one under it: cd into the repository, then try again.'
+
+/** True when `dir` is `root` or lies below it. */
+const isWithin = (dir: string, root: string): boolean => {
+  const base = root.replace(/\/+$/, '')
+  return dir === base || dir.startsWith(`${base}/`)
+}
+
+/**
+ * The checkout the gate reads and pushes from: the repository holding the
+ * session root, or, when the root is not in one (a session opened above its
+ * repositories), the repository holding the shell's directory if that lies
+ * under the root. Without the fallback such a session can never push.
+ */
+async function checkoutRoot($: EngineInterface): Promise<string | undefined> {
+  const root = await $.session.root()
+  const home = await gitOut($, root, ['rev-parse', '--show-toplevel'])
+  if (home !== undefined) return home
+  const cwd = await $.session.cwd().catch(() => undefined)
+  if (cwd === undefined) return undefined
+  const shell = await gitOut($, cwd, ['rev-parse', '--show-toplevel'])
+  return shell !== undefined && isWithin(shell, root) ? shell : undefined
+}
+
 /** The tree the push would send: HEAD^{tree}, or undefined when git cannot say. */
 async function headTree($: EngineInterface): Promise<string | undefined> {
-  const hash = await gitOut($, await $.session.root(), ['rev-parse', 'HEAD^{tree}']) ?? ''
+  const checkout = await checkoutRoot($)
+  if (checkout === undefined) return undefined
+  const hash = await gitOut($, checkout, ['rev-parse', 'HEAD^{tree}']) ?? ''
   return /^[0-9a-f]{40}$/.test(hash) ? hash : undefined
 }
 
@@ -439,14 +490,14 @@ function widens(line: string): boolean {
  * a git setting would send more than HEAD.
  */
 async function pushSetupDenial($: EngineInterface, what: string): Promise<string | undefined> {
-  const root = await $.session.root()
   const cwd = await $.session.cwd()
-  const home = await gitOut($, root, ['rev-parse', '--show-toplevel'])
-  if (home === undefined || await gitOut($, cwd, ['rev-parse', '--show-toplevel']) !== home) {
-    return `${PLUGIN}: ${what} is refused: run it from the session's checkout (${home ?? root}); `
+  const home = await checkoutRoot($)
+  if (home === undefined) return `${PLUGIN}: ${what} is refused. ${NO_CHECKOUT_HINT}`
+  if (await gitOut($, cwd, ['rev-parse', '--show-toplevel']) !== home) {
+    return `${PLUGIN}: ${what} is refused: run it from the session's checkout (${home}); `
       + `the shell is in ${cwd}.`
   }
-  const settings = (await gitOut($, root, ['config', '--get-regexp', WIDENING_SETTINGS]) ?? '')
+  const settings = (await gitOut($, home, ['config', '--get-regexp', WIDENING_SETTINGS]) ?? '')
     .split('\n').filter(widens)
   if (settings.length > 0) {
     return `${PLUGIN}: ${what} is refused: ${settings.join(', ')} would send more than HEAD.`
@@ -770,6 +821,9 @@ export const register: Register = on => {
       }
     }
     if (word === 'bug') return { text: await bugAnswer($, rest) }
+    if (PERSON_WORDS.has(word) || ORCHESTRATION_WORDS.has(word)) {
+      return { text: await wordRun($, word, rest) }
+    }
     if (word === 'load') return { text: await loadAnswer($, rest) }
     if (word === 'push-reset') {
       await $.state.set(PUSH_KEY, false)
@@ -870,15 +924,18 @@ export const register: Register = on => {
     }
     const publish = actions.filter(action => action.kind === 'publish')
     if (publish.length > 0) {
+      // The specific reason goes first: a read-only command with a `$`
+      // expansion is refused for that expansion, not told to "run the push"
+      // it never had.
+      const scoped = publish.find(a => a.kind === 'publish' && a.problem !== undefined)
+      if (scoped?.kind === 'publish') {
+        return { deny: `${PLUGIN}: ${scoped.what} is refused: ${scoped.problem}.` }
+      }
       if (!isSingleCommand(e.command)) {
         return {
           deny: `${PLUGIN}: run the push as a command of its own. A step before it in the same `
             + 'command could move HEAD to a tree that QA and Security never checked.',
         }
-      }
-      const scoped = publish.find(a => a.kind === 'publish' && a.problem !== undefined)
-      if (scoped?.kind === 'publish') {
-        return { deny: `${PLUGIN}: ${scoped.what} is refused: ${scoped.problem}.` }
       }
       const first = publish[0].kind === 'publish' ? publish[0] : undefined
       const what = first?.what ?? 'push'

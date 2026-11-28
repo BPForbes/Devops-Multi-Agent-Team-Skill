@@ -99,7 +99,8 @@ function hiddenPushProblem(command: string): string | undefined {
     return 'a git alias or setting given on the command line can hide a push'
   }
   if (/[$`]/.test(withoutLiteralText(command))) {
-    return 'a $(…), ${…}, $\'…\' or backtick expansion in a git command can spell a push'
+    return 'a $(…), ${…}, $\'…\', $? or backtick expansion in a git command can spell a push; '
+      + 'run the git command on its own without the expansion'
   }
   return undefined
 }

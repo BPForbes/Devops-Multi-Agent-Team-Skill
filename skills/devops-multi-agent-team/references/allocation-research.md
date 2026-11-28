@@ -2,7 +2,8 @@
 
 Read this file. Do not paste it into agent prompts.
 
-There are no fixed team sizes. Before anyone codes, the Orchestrator
+For the first sprint, autopilot can do all of this from a list of tasks
+([autopilot.md](autopilot.md)). There are no fixed team sizes. Before anyone codes, the Orchestrator
 finds out what the task needs with a short research step, plans the
 teams and seats from what it found, spins up the board, and hands the
 work to the team leads, who start with Sprint Planning.
